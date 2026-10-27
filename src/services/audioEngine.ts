@@ -71,12 +71,16 @@ export class AudioEngine {
     this.channelMode = channelMode;
     if (onPitch) this.onPitchCallback = onPitch;
 
-    // Create 48kHz AudioContext (matching Yousician & TONE3000)
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    this.audioContext = new AudioContextClass({
-      sampleRate: 48000,
-      latencyHint: 'interactive'
-    });
+    // The AudioContext (and the TONE3000 chain bound to it) is reused across
+    // reconnections so switching device/channel doesn't rebuild the amp or click.
+    if (!this.audioContext || this.audioContext.state === 'closed') {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      this.audioContext = new AudioContextClass({
+        sampleRate: 48000,
+        latencyHint: 'interactive'
+      });
+      this.tone3000 = null;
+    }
 
     if (this.audioContext.state === 'suspended') {
       await this.audioContext.resume();
@@ -134,7 +138,7 @@ export class AudioEngine {
   }
 
   /**
-   * Stop audio capture and release resources
+   * Stop audio capture. Keeps the AudioContext and TONE3000 chain alive for the next start().
    */
   async stop(): Promise<void> {
     this.isRunning = false;
@@ -148,15 +152,26 @@ export class AudioEngine {
       this.mediaStream = null;
     }
 
-    if (this.audioContext && this.audioContext.state !== 'closed') {
-      await this.audioContext.close();
-      this.audioContext = null;
-    }
+    this.sourceNode?.disconnect();
+    this.splitterNode?.disconnect();
+    this.mergerNode?.disconnect();
+    this.analyserNode?.disconnect();
 
     this.sourceNode = null;
     this.splitterNode = null;
     this.mergerNode = null;
     this.analyserNode = null;
+  }
+
+  /**
+   * Stop capture and fully release the AudioContext and TONE3000 chain
+   */
+  async dispose(): Promise<void> {
+    await this.stop();
+    if (this.audioContext && this.audioContext.state !== 'closed') {
+      await this.audioContext.close();
+    }
+    this.audioContext = null;
     this.tone3000 = null;
   }
 

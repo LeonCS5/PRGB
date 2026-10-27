@@ -1,0 +1,254 @@
+# CLAUDE.md — Guia de Colaboração do Projeto PRGB
+
+> **Leia este arquivo inteiro antes de fazer qualquer alteração no projeto.**
+> Este é o documento raiz de contexto para Claude Code, Claude em IDEs, e qualquer agente baseado em Claude.
+
+---
+
+## 1. Visão Geral do Projeto
+
+**PRGB** (Play Real Guitar in Browser) é um aplicativo web estilo "Yousician" que permite ao usuário:
+
+1. **Conectar sua guitarra real** via interface de áudio USB (Focusrite, Behringer, Realtek, etc.)
+2. **Ouvir o som processado** em tempo real pelo motor DSP **TONE3000** (emulação de amplificador valvulado, gabinete, noise gate, reverb)
+3. **Tocar junto com tablaturas** baixadas da API do Songsterr (1M+ músicas), com detecção de pitch e gamificação no estilo Yousician (score, combo, acertos Perfect/Good/Miss)
+
+**O app é 100% client-side** — sem backend, sem login, sem banco de dados. Todo o processamento de áudio acontece via Web Audio API no navegador.
+
+---
+
+## 2. Stack Tecnológica
+
+| Camada | Tecnologia | Versão |
+|---|---|---|
+| Framework | React | 19.x |
+| Linguagem | TypeScript | 6.x |
+| Bundler | Vite | 8.x |
+| Styling | Tailwind CSS | 4.x (via `@tailwindcss/vite`) |
+| Ícones | lucide-react | 1.x |
+| Linter | oxlint | 1.x |
+| Áudio | Web Audio API (nativo do browser) | — |
+| Dados | Songsterr API (reverse-engineered, via proxy Vite) | — |
+
+### Comandos do projeto
+
+```bash
+npm run dev      # Inicia dev server (Vite, porta 5173)
+npm run build    # Build de produção (tsc + vite build)
+npm run lint     # oxlint (sem eslint)
+npm run preview  # Preview da build de produção
+```
+
+---
+
+## 3. Estrutura do Código-Fonte
+
+```
+src/
+├── main.tsx                         # Entry point React (StrictMode)
+├── App.tsx                          # Componente raiz, estado global, landing page
+├── index.css                        # Tailwind import + reset global
+├── App.css                          # CSS legado do template Vite (NÃO USADO — pode ser removido)
+│
+├── components/
+│   ├── YousicianGame.tsx            # ⭐ Canvas game principal (rails de notas, scoring, particles)
+│   ├── SongSearchModal.tsx          # Modal de busca de músicas no Songsterr
+│   ├── AudioSettingsModal.tsx       # Modal de configuração de interface de áudio + afinador
+│   └── Tone3000AmpRack.tsx          # Modal do rack completo do amp modeler TONE3000
+│
+├── services/
+│   ├── audioEngine.ts               # ⭐ Engine de captura de áudio + detecção de pitch (NSDF/MPM)
+│   ├── tone3000Amp.ts               # ⭐ DSP engine: preamp, waveshaper, tone stack, cab sim, reverb
+│   ├── songsterrApi.ts              # Client da API Songsterr: busca, meta, download de tabs, normalização
+│   └── synthAudio.ts                # Sintetizador de notas, metrônomo e efeitos sonoros do jogo
+│
+├── assets/                          # Assets estáticos legados do template Vite (hero.png, react.svg, vite.svg)
+│
+public/
+├── favicon.svg
+└── icons.svg
+```
+
+### Proxies Vite (vite.config.ts)
+
+O Vite faz proxy reverso para acessar a API do Songsterr sem CORS:
+
+- `/api/songsterr/*` → `https://www.songsterr.com/api/*`
+- `/cdn/songsterr/*` → `https://dqsljvtekg760.cloudfront.net/*` (CDN de tablaturas JSON)
+
+---
+
+## 4. Arquitetura de Áudio (Cadeia DSP)
+
+```
+Guitarra → Interface USB → getUserMedia(48kHz RAW) → ChannelSplitter
+    │                                                      │
+    │                                              ┌── Canal 1 (L)
+    │                                              ├── Canal 2 (R)
+    │                                              └── Ambos (Mono Mix)
+    │                                                      │
+    ▼                                                      ▼
+AnalyserNode ← Merger ← (Channel selecionado)      TONE3000 Input
+    │                                                      │
+    ▼                                               ┌──────┴──────┐
+ Pitch Detection (NSDF)                        Noise Gate    PreGain
+    │                                               │          │
+    ▼                                               ▼          ▼
+ Yousician Game (hit matching)              WaveShaper (Tube Saturation)
+                                                    │
+                                          Tone Stack (Bass→Mid→Treble→Presence)
+                                                    │
+                                           ┌────────┴────────┐
+                                        Cab Sim Chain      Cab Bypass
+                                      (HP→Resonance→         │
+                                       MidScoop→LP×2)        │
+                                           │                  │
+                                           └────────┬────────┘
+                                                    │
+                                              Reverb (Wet/Dry)
+                                                    │
+                                               Master Gain
+                                                    │
+                                           ctx.destination (Speakers/Headphones)
+```
+
+---
+
+## 5. Convenções de Código
+
+### TypeScript
+- **Strict mode** habilitado (noUnusedLocals, noUnusedParameters, erasableSyntaxOnly)
+- Interfaces sempre com `export interface` (não `type` para objetos com métodos)
+- Classes para services (AudioEngine, Tone3000AmpEngine, SongsterrApi)
+- Componentes React: `React.FC<Props>` com arrow functions exportadas como `export const`
+
+### Styling
+- **Tailwind CSS 4.x** via plugin Vite (sem `tailwind.config.js`, sem PostCSS)
+- Import global: `@import "tailwindcss"` em `index.css`
+- Paleta predominante: `slate-950` (bg), `cyan` (acentos primários), `rose` (acentos secundários), `emerald` (sucesso)
+- Nunca usar CSS-in-JS, styled-components, ou CSS modules
+
+### Nomenclatura
+- Componentes: PascalCase (ex: `YousicianGame.tsx`)
+- Services: camelCase (ex: `audioEngine.ts`)
+- Interfaces: PascalCase com prefixo descritivo (ex: `DetectedPitch`, `NormalizedSongTab`)
+- IDs de notas: formato `note-{counter}` (sequencial)
+
+### Linguagem da UI
+- Toda a interface é em **Português Brasileiro** (pt-BR)
+- Comentários no código podem ser em inglês ou português
+- Nomes de variáveis e funções sempre em **inglês**
+
+---
+
+## 6. Problemas Conhecidos e Prioridades de Melhoria
+
+### 🔴 Críticos
+
+1. **`App.css` é lixo** — Contém 185 linhas de CSS do template original do Vite que não são usadas. **Pode ser deletado** sem impacto.
+
+2. **Assets legados** — `src/assets/hero.png`, `react.svg`, `vite.svg` são do template Vite. **Podem ser deletados**.
+
+3. **Canvas não é responsivo** — O `YousicianGame.tsx` usa `window.innerWidth/innerHeight` hardcoded no `<canvas>`. Não reage a resize. Precisa de um `ResizeObserver` ou `useLayoutEffect` para recalcular dimensões.
+
+4. **Gerenciamento de estado monolítico** — Todo o estado do App está em `App.tsx` com muitos `useState`. Precisa ser refatorado para contextos React ou zustand.
+
+5. **TONE3000 recriado a cada reconexão** — `AudioEngine.stop()` seta `tone3000 = null` e `start()` recria tudo. Isso é caro e causa clicks/pops audíveis.
+
+### 🟡 Importantes
+
+6. **Sem tratamento de erros robusto** — Muitos `catch` com apenas `console.error`. Falta UI de erro amigável.
+
+7. **Detecção de pitch limitada** — NSDF funciona bem, mas não estima `stringEstimate` nem `fretEstimate` (os campos existem na interface mas nunca são populados).
+
+8. **Sem persistência** — Preferências do usuário (dispositivo, canal, preset do TONE3000, última música) não são salvos em localStorage.
+
+9. **Performance do canvas** — O loop de renderização cria novos objetos (gradients, paths) a cada frame. Precisa de cache/memoização.
+
+10. **Sem testes** — Zero testes unitários, de integração, ou e2e.
+
+### 🟢 Nice-to-have
+
+11. **Sem router** — É um SPA single-page sem rotas. Se crescer, precisará de react-router ou similar.
+
+12. **Sem PWA** — Não tem service worker, manifest, ou capacidade offline.
+
+13. **Metrônomo precário** — Usa `useEffect` com `currentTimeMs` como dependência, o que causa timing impreciso. Deveria usar `AudioContext.currentTime` scheduling.
+
+14. **Tab notation parcial** — O parser do Songsterr ignora várias técnicas (bends, harmonics, tapping, ghost notes, tempo changes mid-beat).
+
+---
+
+## 7. Regras para Agentes
+
+### OBRIGATÓRIO
+- **Nunca alterar a cadeia DSP do TONE3000** sem entender o signal routing completo (seção 4)
+- **Nunca instalar ESLint** — o projeto usa oxlint exclusivamente
+- **Nunca migrar de Tailwind CSS** para outra solução de styling
+- **Nunca adicionar backend/servidor** — o app é 100% client-side
+- **Manter toda a UI em Português Brasileiro**
+- **Preservar a API de proxy do Vite** (`/api/songsterr`, `/cdn/songsterr`)
+
+### RECOMENDADO
+- Ao criar novos componentes, seguir o padrão `React.FC<Props>` existente
+- Ao mexer no áudio, testar com uma interface de áudio real (Focusrite, Behringer)
+- Ao adicionar dependências, preferir bibliotecas leves e sem dependências transitivas pesadas
+- Commits devem ser atômicos e focados (1 feature ou 1 fix por commit)
+
+### PROIBIDO
+- `any` sem justificativa explícita em comentário
+- `eslint-disable` ou equivalentes
+- CSS inline (`style={{}}`) exceto para valores dinâmicos calculados (ex: width percentual do VU meter)
+- `document.getElementById` ou manipulação direta do DOM (usar refs React)
+- `setTimeout`/`setInterval` para scheduling de áudio (usar `AudioContext.currentTime`)
+
+---
+
+## 8. Como Rodar
+
+```bash
+# Instalar dependências (já feito se node_modules existe)
+npm install
+
+# Dev server com HMR
+npm run dev
+# → http://localhost:5173
+
+# Build de produção
+npm run build
+
+# Lint
+npm run lint
+```
+
+### Requisitos
+- Node.js 20+
+- Navegador com suporte a Web Audio API (Chrome/Edge/Firefox)
+- Interface de áudio USB (para funcionalidade completa de guitarra)
+
+---
+
+## 9. Fluxo do Usuário
+
+1. **Landing Page** → Usuário vê tela inicial com opções "Tocar Metallica" ou "Buscar Música"
+2. **Conectar Áudio** → Ao clicar em qualquer botão, `getUserMedia` é chamado (permissão de mic)
+3. **TONE3000 Ativo** → Som da guitarra começa a sair pelos fones/caixas em tempo real
+4. **Carregar Música** → Tab é baixada do Songsterr CDN e parseada em `NoteEvent[]`
+5. **Jogo Yousician** → Canvas mostra rails coloridos com notas scrollando. Pitch detection compara nota tocada com nota da tab
+6. **Scoring** → Perfect (±55ms + MIDI match), Good (±130ms + MIDI match), Miss (passou da hit line)
+7. **Modais** → Usuário pode ajustar interface de áudio, trocar preset do TONE3000, buscar outra música
+
+---
+
+## 10. Glossário Rápido
+
+| Termo | Significado |
+|---|---|
+| TONE3000 | Motor DSP de emulação de amplificador de guitarra (criado neste projeto) |
+| NSDF/MPM | Normalized Square Difference Function — algoritmo de detecção de pitch |
+| Cab Sim | Cabinet Simulation — emulação de gabinete de alto-falante de guitarra |
+| Tone Stack | Equalizador de 4 bandas (Bass, Mid, Treble, Presence) |
+| WaveShaper | Nó Web Audio que aplica distorção não-linear (emulação de válvula) |
+| Songsterr | Serviço de tablaturas online (API reverse-engineered) |
+| Rails | As linhas horizontais coloridas do jogo onde as notas descem (estilo Guitar Hero/Yousician) |
+| Hit Window | Janela de tolerância temporal para acertar uma nota (±130ms) |

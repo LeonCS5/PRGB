@@ -70,6 +70,7 @@ export const YousicianGame: React.FC<YousicianGameProps> = ({
   onOpenTone3000Rack
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const canvasContainerRef = useRef<HTMLElement | null>(null);
 
   // TONE3000 Amp State
   const [toneSettings, setToneSettings] = useState<Tone3000Settings | null>(
@@ -120,6 +121,24 @@ export const YousicianGame: React.FC<YousicianGameProps> = ({
     setCurrentTimeMs(0);
     setIsPlaying(false);
   }, [tab]);
+
+  // Keep the canvas backing store in sync with its container size
+  useEffect(() => {
+    const container = canvasContainerRef.current;
+    const canvas = canvasRef.current;
+    if (!container || !canvas) return;
+
+    const syncSize = () => {
+      const { clientWidth, clientHeight } = container;
+      if (canvas.width !== clientWidth) canvas.width = clientWidth;
+      if (canvas.height !== clientHeight) canvas.height = clientHeight;
+    };
+    syncSize();
+
+    const observer = new ResizeObserver(syncSize);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
 
   // Hit calculation & Feedback
   const triggerHitFeedback = useCallback(
@@ -558,13 +577,8 @@ export const YousicianGame: React.FC<YousicianGameProps> = ({
       </header>
 
       {/* Main Yousician Rails Canvas */}
-      <main className="relative flex-1 w-full h-full overflow-hidden">
-        <canvas
-          ref={canvasRef}
-          width={window.innerWidth}
-          height={window.innerHeight - 144}
-          className="w-full h-full block"
-        />
+      <main ref={canvasContainerRef} className="relative flex-1 w-full min-h-0 overflow-hidden">
+        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block" />
       </main>
 
       {/* Bottom Playback & Audio Controls Dock */}

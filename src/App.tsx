@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import {
   Music,
   Play,
@@ -9,55 +9,37 @@ import {
   Zap,
   Loader2
 } from 'lucide-react';
-import { AudioEngine, type DetectedPitch, type InputChannelMode } from './services/audioEngine';
 import { SongsterrApi, type NormalizedSongTab } from './services/songsterrApi';
 import { YousicianGame } from './components/YousicianGame';
 import { SongSearchModal } from './components/SongSearchModal';
 import { AudioSettingsModal } from './components/AudioSettingsModal';
 import { Tone3000AmpRack } from './components/Tone3000AmpRack';
+import { AudioSessionProvider, useAudioSession } from './context/AudioSessionContext';
+import { ModalsProvider, useModals } from './context/ModalsContext';
 
-export const App: React.FC = () => {
-  const audioEngineRef = useRef<AudioEngine>(new AudioEngine());
-  const [isAudioRunning, setIsAudioRunning] = useState(false);
-  const [latestPitch, setLatestPitch] = useState<DetectedPitch | null>(null);
-
-  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
-  const [channelMode, setChannelMode] = useState<InputChannelMode>('ch1');
+const AppContent: React.FC = () => {
+  const {
+    audioEngine,
+    tone3000,
+    isAudioRunning,
+    latestPitch,
+    selectedDeviceId,
+    channelMode,
+    startAudio: handleStartAudio,
+    changeDevice: handleDeviceChange,
+    changeChannelMode: handleChannelModeChange
+  } = useAudioSession();
+  const {
+    isSearchOpen,
+    isSettingsOpen,
+    isTone3000RackOpen,
+    setSearchOpen: setIsSearchOpen,
+    setSettingsOpen: setIsSettingsOpen,
+    setTone3000RackOpen: setIsTone3000RackOpen
+  } = useModals();
 
   const [activeTab, setActiveTab] = useState<NormalizedSongTab | null>(null);
   const [isLoadingDefault, setIsLoadingDefault] = useState(false);
-
-  // Modals
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isTone3000RackOpen, setIsTone3000RackOpen] = useState(false);
-
-  // Initialize audio capture & TONE3000 monitoring
-  const handleStartAudio = async (deviceId = selectedDeviceId, mode = channelMode) => {
-    try {
-      await audioEngineRef.current.start(deviceId, mode, (pitch) => {
-        setLatestPitch(pitch);
-      });
-      setIsAudioRunning(true);
-    } catch (err) {
-      console.error('Failed to start audio engine:', err);
-      alert('Permissão de microfone/áudio necessária para escutar a interface.');
-    }
-  };
-
-  const handleDeviceChange = async (newDeviceId: string) => {
-    setSelectedDeviceId(newDeviceId);
-    if (isAudioRunning) {
-      await handleStartAudio(newDeviceId, channelMode);
-    }
-  };
-
-  const handleChannelModeChange = async (newMode: InputChannelMode) => {
-    setChannelMode(newMode);
-    if (isAudioRunning) {
-      await handleStartAudio(selectedDeviceId, newMode);
-    }
-  };
 
   // Load default song (Metallica - Creeping Death)
   const handleLoadDefaultSong = async () => {
@@ -91,8 +73,6 @@ export const App: React.FC = () => {
       setIsLoadingDefault(false);
     }
   };
-
-  const tone3000 = audioEngineRef.current.getTone3000();
 
   return (
     <div className="h-screen w-screen bg-slate-950 text-white font-sans overflow-hidden">
@@ -222,7 +202,7 @@ export const App: React.FC = () => {
       <AudioSettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
-        audioEngine={audioEngineRef.current}
+        audioEngine={audioEngine}
         currentDeviceId={selectedDeviceId}
         currentChannelMode={channelMode}
         onDeviceChange={handleDeviceChange}
@@ -235,10 +215,18 @@ export const App: React.FC = () => {
       <Tone3000AmpRack
         isOpen={isTone3000RackOpen}
         onClose={() => setIsTone3000RackOpen(false)}
-        tone3000={audioEngineRef.current.getTone3000()}
+        tone3000={tone3000}
       />
     </div>
   );
 };
+
+export const App: React.FC = () => (
+  <AudioSessionProvider>
+    <ModalsProvider>
+      <AppContent />
+    </ModalsProvider>
+  </AudioSessionProvider>
+);
 
 export default App;
