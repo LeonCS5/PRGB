@@ -228,9 +228,17 @@ export class SongsterrApi {
         const wholeNoteMs = (60000 / currentBpm) * 4;
         // Songsterr durations already include dots and tuplets (checked against time signatures)
         const beatDurationMs = (wholeNoteMs * num) / den;
-        // Grace notes sit just before the beat and don't shift the rest of the measure
+        // Grace notes sit just before the next real beat and don't shift the rest of the measure.
+        // A run of graces is laid out back from that beat so they keep their written order.
         const isGrace = !!beat.graceNote;
-        const noteTimeMs = isGrace ? Math.max(0, currentTimeMs - beatDurationMs) : currentTimeMs;
+        let graceLeadMs = 0;
+        if (isGrace) {
+          for (let g = bIdx; g < beats.length && beats[g].graceNote; g++) {
+            const [gNum, gDen] = beats[g].duration || [1, 4];
+            graceLeadMs += (wholeNoteMs * gNum) / gDen;
+          }
+        }
+        const noteTimeMs = isGrace ? Math.max(0, currentTimeMs - graceLeadMs) : currentTimeMs;
 
         if (beat.notes && Array.isArray(beat.notes) && !beat.rest) {
           for (const rawNote of beat.notes) {
@@ -241,9 +249,19 @@ export class SongsterrApi {
             const rawString = typeof rawNote.string === 'number' ? rawNote.string : 0;
             const stringNum = rawString + 1;
 
+            // Bend tone follows Guitar Pro units: 100 = full step (2 semitones)
+            const bendTone = typeof rawNote.bend?.tone === 'number' ? rawNote.bend.tone : 0;
+            const bendSemitones = bendTone > 0 ? bendTone / 50 : undefined;
+            const vibrato = !!(rawNote.leftHandVibrato || rawNote.vibrato || beat.vibrato);
+
             const previous = lastNoteByString.get(stringNum);
             if (rawNote.tie && previous && !isGrace) {
+              // Techniques written on the tied part (e.g. bend after sustain) still apply to the held note
               previous.durationMs = Math.round(currentTimeMs + beatDurationMs - previous.timeMs);
+              if (bendSemitones !== undefined) {
+                previous.bendSemitones = Math.max(previous.bendSemitones ?? 0, bendSemitones);
+              }
+              if (vibrato) previous.vibrato = true;
               continue;
             }
 
@@ -252,8 +270,6 @@ export class SongsterrApi {
             const midiNote = soundingMidi(openMidi, fret, harmonic, rawNote.harmonicFret);
             const freqHz = midiToFrequency(midiNote);
             const noteName = midiToNoteName(midiNote);
-            // Bend tone follows Guitar Pro units: 100 = full step (2 semitones)
-            const bendTone = typeof rawNote.bend?.tone === 'number' ? rawNote.bend.tone : 0;
 
             const note: NoteEvent = {
               id: `note-${++noteIdCounter}`,
@@ -268,13 +284,13 @@ export class SongsterrApi {
               tie: !!rawNote.tie,
               hammerOnOrPullOff: !!rawNote.hp,
               slide: rawNote.slide,
-              vibrato: !!(rawNote.leftHandVibrato || rawNote.vibrato || beat.vibrato),
+              vibrato,
               dead: !!rawNote.dead,
               ghost: !!rawNote.ghost,
               tapping: !!beat.tapping,
               grace: isGrace,
               harmonic,
-              bendSemitones: bendTone > 0 ? bendTone / 50 : undefined
+              bendSemitones
             };
             notes.push(note);
             if (!isGrace) lastNoteByString.set(stringNum, note);
