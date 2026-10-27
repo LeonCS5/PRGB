@@ -22,7 +22,7 @@ import {
   type Tone3000Settings
 } from '../services/tone3000Amp';
 
-interface YousicianGameProps {
+interface PracticeGameProps {
   tab: NormalizedSongTab;
   onOpenSearch: () => void;
   onOpenAudioSettings: () => void;
@@ -50,7 +50,7 @@ interface FloatingText {
   scale: number;
 }
 
-// Yousician standard string colors (String 1 to 6)
+// Practice standard string colors (String 1 to 6)
 const STRING_COLORS: Record<number, string> = {
   1: '#ec4899', // Pink / High E
   2: '#3b82f6', // Blue / B
@@ -60,7 +60,7 @@ const STRING_COLORS: Record<number, string> = {
   6: '#ef4444' // Red / Low E
 };
 
-export const YousicianGame: React.FC<YousicianGameProps> = ({
+export const PracticeGame: React.FC<PracticeGameProps> = ({
   tab,
   onOpenSearch,
   onOpenAudioSettings,
@@ -166,7 +166,7 @@ export const YousicianGame: React.FC<YousicianGameProps> = ({
       ctx.fillStyle = '#0f172a'; // Deep slate
       ctx.fillRect(0, 0, width, height);
 
-      const hitLineX = 140; // Yousician hit target X
+      const hitLineX = 140; // Practice hit target X
       const stringCount = tab.stringCount || 6;
       const topMargin = 70;
       const bottomMargin = 70;
@@ -203,7 +203,7 @@ export const YousicianGame: React.FC<YousicianGameProps> = ({
         ctx.fillText(`Corda ${s}`, 18, y);
       }
 
-      // 2. Draw Yousician Playhead / Target Hit Zone Bar
+      // 2. Draw Practice Playhead / Target Hit Zone Bar
       const grad = ctx.createLinearGradient(hitLineX - 4, 0, hitLineX + 4, 0);
       grad.addColorStop(0, 'rgba(56, 189, 248, 0.1)');
       grad.addColorStop(0.5, 'rgba(56, 189, 248, 0.9)');
@@ -633,7 +633,7 @@ export const YousicianGame: React.FC<YousicianGameProps> = ({
         {/* Live Tuner Widget (Listening to Realtek / Audio Interface) */}
         <LiveTuner />
 
-        {/* Yousician HUD (Score, Combo, Accuracy, Max Combo) */}
+        {/* Practice HUD (Score, Combo, Accuracy, Max Combo) */}
         <div className="flex items-center gap-6">
           {/* Combo Multiplier */}
           <div className="flex items-center gap-1.5">
@@ -663,7 +663,7 @@ export const YousicianGame: React.FC<YousicianGameProps> = ({
         </div>
       </header>
 
-      {/* Main Yousician Rails Canvas */}
+      {/* Main Practice Rails Canvas */}
       <main ref={canvasContainerRef} className="relative flex-1 w-full min-h-0 overflow-hidden">
         <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block" />
       </main>

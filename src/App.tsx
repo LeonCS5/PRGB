@@ -3,15 +3,24 @@ import {
   Music,
   Play,
   Sliders,
-  Sparkles,
+  ArrowUpRight,
+  ArrowRight,
+  AudioLines,
+  Check,
+  Guitar,
+  Heart,
+  Headphones,
+  PlugZap,
+  Target,
   Volume2,
   Zap,
   Loader2
 } from 'lucide-react';
 import type { NormalizedSongTab } from './services/songsterrApi';
 import { ErrorNotice } from './components/ErrorNotice';
+import { BrandMark } from './components/BrandMark';
 import { getSongMetadata, loadSongTrack } from './context/uiErrors';
-import { YousicianGame } from './components/YousicianGame';
+import { PracticeGame } from './components/PracticeGame';
 import { SongSearchModal } from './components/SongSearchModal';
 import { AudioSettingsModal } from './components/AudioSettingsModal';
 import { Tone3000AmpRack } from './components/Tone3000AmpRack';
@@ -19,11 +28,59 @@ import { AudioSessionProvider, useAudioSession, useLatestPitch } from './context
 import { ModalsProvider, useModals } from './context/ModalsContext';
 import { readPreferences, savePreferences } from './context/preferences';
 
+const supportUrl = import.meta.env.VITE_SUPPORT_URL?.trim();
+const supportHref = supportUrl || 'https://github.com/LeonCS5/PRGB';
+const supportLabel = supportUrl ? 'Apoie o projeto' : 'Apoie com uma estrela no GitHub';
+const currentYear = new Date().getFullYear();
+
+const PracticePreview: React.FC = () => (
+  <figure className="relative min-w-0 lg:-mr-8" aria-label="Ilustração do modo de prática: seis cordas, notas e pontuação em tempo real">
+    <div aria-hidden="true" className="absolute -inset-8 rounded-full bg-signal-500/5 blur-3xl" />
+    <div className="relative overflow-hidden rounded-2xl border border-ink-600 bg-ink-900 shadow-panel">
+      <div className="flex items-center justify-between gap-3 border-b border-ink-700 bg-ink-850 px-4 py-4 sm:px-6">
+        <div className="flex items-center gap-3">
+          <span className="flex size-10 items-center justify-center rounded-lg border border-amp-500/25 bg-amp-500/10 text-amp-400"><Guitar size={20} /></span>
+          <div><p className="text-sm font-bold text-ink-100">Creeping Death</p><p className="mt-1 text-xs text-ink-300">Metallica · Guitarra rítmica</p></div>
+        </div>
+        <span className="rounded-md border border-signal-500/25 bg-signal-500/10 px-2 py-1 font-mono text-[10px] font-bold tracking-wider text-signal-300">PRÁTICA</span>
+      </div>
+      <div className="flex items-center justify-between px-4 pt-5 font-mono text-xs sm:px-6">
+        <span className="text-ink-300">PONTUAÇÃO <span className="ml-1 text-ink-100">2.450</span></span>
+        <span className="text-amp-300">12× COMBO</span>
+      </div>
+      <svg viewBox="0 0 560 300" fill="none" className="my-2 w-full" aria-hidden="true">
+        <path d="M104 24V276" className="stroke-amp-400" strokeWidth="2" />
+        <path d="M96 24H112V276H96Z" className="fill-amp-500/10" />
+        {[65, 150, 235, 320, 405, 490].map((x) => <path key={x} d={`M${x} 40V268`} className="stroke-ink-700" strokeDasharray="3 7" />)}
+        {[60, 98, 136, 174, 212, 250].map((y, index) => (
+          <g key={y}>
+            <text x="26" y={y + 4} className="fill-ink-300 font-mono text-[12px]">{['e', 'B', 'G', 'D', 'A', 'E'][index]}</text>
+            <path d={`M52 ${y}H540`} className="stroke-signal-500/30" strokeWidth={1 + index * 0.25} />
+          </g>
+        ))}
+        {[[104, 212, '5'], [104, 250, '0'], [203, 250, '0'], [271, 250, '0'], [339, 212, '7'], [339, 174, '9'], [437, 250, '0'], [505, 212, '5']].map(([x, y, fret], index) => (
+          <g key={index}>
+            <rect x={Number(x) - 16} y={Number(y) - 13} width="32" height="26" rx="6" className={index < 2 ? 'fill-amp-400' : 'fill-signal-300'} />
+            <text x={x} y={Number(y) + 5} textAnchor="middle" className="fill-ink-950 font-mono text-[14px] font-bold">{fret}</text>
+          </g>
+        ))}
+        <text x="104" y="22" textAnchor="middle" className="fill-amp-300 font-mono text-[10px]">TOQUE AQUI</text>
+        <text x="206" y="194" className="fill-hit font-display text-[17px] font-bold">Perfeito!</text>
+      </svg>
+      <div className="flex items-center justify-between gap-3 border-t border-ink-700 px-4 py-4 text-xs text-ink-300 sm:px-6">
+        <span className="flex items-center gap-2"><AudioLines size={16} className="text-signal-400" /> Sua guitarra. Suas notas.</span>
+        <span className="font-mono text-ink-300">01:24 / 06:36</span>
+      </div>
+    </div>
+    <figcaption className="mt-4 text-center font-mono text-[10px] tracking-widest text-ink-300">UMA PRÉVIA DO SEU PRÓXIMO RIFF</figcaption>
+  </figure>
+);
+
 const LandingPitch: React.FC = () => {
   const latestPitch = useLatestPitch();
   if (!latestPitch) return null;
   return (
-    <div className="text-xs font-mono text-cyan-300 flex items-center justify-center gap-1.5">
+    <div className="text-xs font-mono text-signal-300 flex items-center justify-center gap-1.5">
       <Volume2 size={13} />
       Última nota ouvida: <strong>{latestPitch.noteName}</strong> ({latestPitch.frequency} Hz)
     </div>
@@ -114,7 +171,7 @@ const AppContent: React.FC = () => {
   };
 
   return (
-    <div className="h-screen w-screen bg-slate-950 text-white font-sans overflow-hidden">
+    <div className="h-dvh w-full overflow-hidden bg-ink-950 font-sans text-ink-100">
       <div className="fixed inset-x-4 top-4 z-[100] mx-auto max-h-[50vh] max-w-xl space-y-3 overflow-y-auto">
         {audioError && (
           <ErrorNotice message={audioError} onDismiss={dismissAudioError}
@@ -138,7 +195,7 @@ const AppContent: React.FC = () => {
         )}
       </div>
       {activeTab ? (
-        /* Yousician In-Game Interactive Mode */
+        /* Practice mode */
         <>
           {!isAudioRunning && (
             <button
@@ -148,7 +205,7 @@ const AppContent: React.FC = () => {
               Conectar guitarra
             </button>
           )}
-          <YousicianGame
+          <PracticeGame
             tab={activeTab}
             onOpenSearch={() => setIsSearchOpen(true)}
             onOpenAudioSettings={() => setIsSettingsOpen(true)}
@@ -157,99 +214,129 @@ const AppContent: React.FC = () => {
           />
         </>
       ) : (
-        /* Welcome / Landing Screen */
-        <div className="flex h-full w-full flex-col items-center justify-center p-6 text-center relative overflow-hidden">
-          {/* Background Ambient Glow */}
-          <div className="absolute -top-40 -left-40 h-96 w-96 rounded-full bg-cyan-600/15 blur-3xl" />
-          <div className="absolute -bottom-40 -right-40 h-96 w-96 rounded-full bg-rose-600/15 blur-3xl" />
-
-          {/* Header Title */}
-          <div className="relative z-10 max-w-2xl space-y-4">
-            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-500/30 bg-cyan-950/40 px-4 py-1.5 text-xs font-semibold text-cyan-300 backdrop-blur">
-              <Sparkles size={14} className="text-cyan-400" />
-              Yousician Engine + Motor TONE3000 + Songsterr
-            </div>
-
-            <h1 className="text-5xl sm:text-6xl font-black tracking-tight text-white leading-tight">
-              Toque e ouça a{' '}
-              <span className="bg-gradient-to-r from-cyan-400 via-rose-400 to-amber-400 bg-clip-text text-transparent">
-                sua guitarra real
-              </span>
-            </h1>
-
-            <p className="text-base sm:text-lg text-slate-400 max-w-xl mx-auto leading-relaxed">
-              Escute o som da sua guitarra com timbre valvulado em tempo real pelo <strong>TONE3000</strong> e
-              acerte notas com baixa latência em mais de 1 milhão de músicas.
-            </p>
-
-            {/* Quick Actions */}
-            <div className="pt-6 flex flex-col sm:flex-row items-center justify-center gap-4">
-              <button
-                onClick={handleLoadDefaultSong}
-                disabled={isLoadingDefault}
-                className="w-full sm:w-auto flex items-center justify-center gap-2.5 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 px-8 py-4 text-base font-bold text-white shadow-xl shadow-cyan-500/25 hover:from-cyan-400 hover:to-blue-500 active:scale-95 transition cursor-pointer"
-              >
-                {isLoadingDefault ? (
-                  <Loader2 size={20} className="animate-spin" />
-                ) : (
-                  <>
-                    <Play size={20} className="fill-white" />
-                    Tocar Metallica (Creeping Death)
-                  </>
-                )}
-              </button>
-
-              <button
-                onClick={() => {
-                  if (!isAudioRunning) handleStartAudio();
-                  setIsSearchOpen(true);
-                }}
-                className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-800/80 hover:bg-slate-800 px-6 py-4 text-base font-bold text-slate-200 transition cursor-pointer"
-              >
-                <Music size={20} className="text-rose-400" />
-                Buscar Outra Música no Songsterr
-              </button>
-            </div>
-
-            {/* Audio Interface & TONE3000 Status Bar */}
-            <div className="pt-8 flex flex-col items-center gap-2.5">
-              <div className="inline-flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-900/80 px-4 py-2.5 backdrop-blur text-xs flex-wrap justify-center">
-                <div
-                  className={`h-2.5 w-2.5 rounded-full ${
-                    isAudioRunning ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
-                  }`}
-                />
-                <span className="text-slate-300">
-                  {isAudioRunning
-                    ? 'Interface Conectada (48kHz RAW Ativo)'
-                    : 'Interface Pronta para Conectar'}
+        <div className="h-full overflow-y-auto overflow-x-hidden">
+          <header className="fixed inset-x-0 top-0 z-40 border-b border-ink-700/70 bg-ink-950/95 backdrop-blur-xl">
+            <div className="mx-auto flex min-h-20 max-w-7xl items-center justify-between gap-3 px-5 sm:px-8 lg:px-12">
+              <BrandMark />
+              <div className="flex items-center gap-3 sm:gap-6">
+                <span role="status" className="flex items-center gap-2 text-xs text-ink-300">
+                  <span aria-hidden="true" className={`size-2 rounded-full ${isAudioRunning ? 'bg-hit' : 'bg-ink-400'}`} />
+                  <span className="hidden sm:inline">Áudio {isAudioRunning ? 'conectado' : 'desconectado'}</span>
+                  <span className="sr-only sm:hidden">Áudio {isAudioRunning ? 'conectado' : 'desconectado'}</span>
                 </span>
+                <a href={supportHref} target="_blank" rel="noopener noreferrer" className="flex min-h-11 max-w-48 items-center gap-2 rounded-lg px-2 py-2 text-xs font-semibold text-ink-200 transition hover:bg-ink-800 hover:text-amp-300 sm:max-w-none sm:text-sm">
+                  <Heart size={16} className="shrink-0 text-amp-400" aria-hidden="true" /> {supportLabel}
+                </a>
+              </div>
+            </div>
+          </header>
 
-                <button
-                  onClick={() => setIsSettingsOpen(true)}
-                  className="ml-1 flex items-center gap-1 font-bold text-cyan-400 hover:underline cursor-pointer"
-                >
-                  <Sliders size={13} />
-                  Entrada & Afinador
-                </button>
-
-                <span className="text-slate-600">|</span>
-
-                <button
-                  onClick={() => {
-                    if (!isAudioRunning) handleStartAudio();
-                    setIsTone3000RackOpen(true);
-                  }}
-                  className="flex items-center gap-1.5 font-bold text-emerald-400 hover:underline cursor-pointer"
-                >
-                  <Zap size={13} className="fill-emerald-400" />
-                  Timbre TONE3000 (Amplificador)
-                </button>
+          <main id="main-content" className="pt-20">
+            <section aria-labelledby="hero-title" className="relative isolate mx-auto max-w-7xl px-5 pb-14 pt-14 sm:px-8 sm:pt-20 lg:px-12 lg:pb-20 lg:pt-24">
+              <div aria-hidden="true" className="pointer-events-none absolute -left-40 top-0 -z-10 size-96 rounded-full bg-amp-500/5 blur-3xl" />
+              <div className="grid items-center gap-12 lg:grid-cols-[1.05fr_1fr] lg:gap-12">
+                <div>
+                  <p className="mb-6 inline-flex items-center gap-2 rounded-full border border-amp-500/25 bg-amp-500/5 px-3 py-1.5 text-xs font-medium text-amp-300">
+                    <span className="size-1.5 rounded-full bg-amp-400" aria-hidden="true" /> Grátis. Sem instalar. Só tocar.
+                  </p>
+                  <h1 id="hero-title" className="max-w-2xl font-display text-[2.75rem] leading-[1.08] font-bold tracking-[-0.045em] sm:text-6xl lg:text-[4.25rem]">
+                    Guitarra de verdade.<br /><span className="text-amp-400">Direto no navegador.</span>
+                  </h1>
+                  <p className="mt-6 max-w-lg text-base leading-relaxed text-ink-300 sm:text-lg">
+                    Conecte sua guitarra, encontre seu timbre e toque suas músicas favoritas. Cada nota é um passo no seu próximo riff.
+                  </p>
+                  <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                    <button onClick={() => void handleLoadDefaultSong()} disabled={isLoadingDefault} aria-busy={isLoadingDefault}
+                      className="flex min-h-16 cursor-pointer items-center justify-center gap-3 rounded-xl bg-amp-400 px-6 py-3 text-ink-950 shadow-glow-amp transition hover:bg-amp-300 disabled:cursor-wait disabled:opacity-70">
+                      {isLoadingDefault ? <Loader2 size={22} className="animate-spin" aria-hidden="true" /> : <Play size={22} className="fill-current" aria-hidden="true" />}
+                      <span className="text-left"><span className="block text-base font-bold">{isLoadingDefault ? 'Carregando música…' : 'Tocar agora'}</span><span className="mt-0.5 block text-xs font-medium">Creeping Death - Metallica</span></span>
+                    </button>
+                    <button onClick={() => {
+                      if (!isAudioRunning) void handleStartAudio();
+                      setIsSearchOpen(true);
+                    }} className="flex min-h-16 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-600 bg-ink-900 px-6 py-3 text-sm font-semibold text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
+                      <Music size={18} aria-hidden="true" /> Buscar música
+                    </button>
+                  </div>
+                  <p className="mt-5 flex items-center gap-2 text-xs text-ink-300"><Check size={14} className="text-hit" aria-hidden="true" /> Sem cadastro. O palco é seu.</p>
+                </div>
+                <PracticePreview />
               </div>
 
-              <LandingPitch />
+              <div aria-label="Controles de áudio" className="mt-12 grid divide-y divide-ink-700 overflow-hidden rounded-2xl border border-ink-700 bg-ink-900 shadow-panel sm:mt-16 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+                <button onClick={() => void handleStartAudio()} disabled={isAudioRunning} className="group flex min-h-24 cursor-pointer items-center gap-3 px-5 py-4 text-left transition hover:bg-ink-800 disabled:cursor-default">
+                  <PlugZap size={23} className={isAudioRunning ? 'text-hit' : 'text-amp-400'} aria-hidden="true" />
+                  <span className="flex-1"><span className="block text-sm font-semibold">{isAudioRunning ? 'Guitarra conectada' : 'Conectar guitarra'}</span><span className="mt-1 block text-xs text-ink-300">{isAudioRunning ? 'Entrada de áudio ativa' : 'Interface não conectada'}</span></span>
+                  <span aria-hidden="true" className={`size-2 rounded-full ${isAudioRunning ? 'bg-hit' : 'bg-ink-400'}`} />
+                </button>
+                <button onClick={() => setIsSettingsOpen(true)} className="flex min-h-24 cursor-pointer items-center gap-3 px-5 py-4 text-left transition hover:bg-ink-800">
+                  <Sliders size={23} className="text-signal-400" aria-hidden="true" />
+                  <span className="flex-1"><span className="block text-sm font-semibold">Entrada & afinador</span><span className="mt-1 block text-xs text-ink-300">Tudo pronto para afinar</span></span><ArrowUpRight size={16} className="text-ink-300" aria-hidden="true" />
+                </button>
+                <button onClick={() => {
+                  if (!isAudioRunning) void handleStartAudio();
+                  setIsTone3000RackOpen(true);
+                }} className="flex min-h-24 cursor-pointer items-center gap-3 px-5 py-4 text-left transition hover:bg-ink-800">
+                  <Zap size={23} className="text-amp-400" aria-hidden="true" />
+                  <span className="flex-1"><span className="block text-sm font-semibold">Timbre do amp</span><span className="mt-1 block text-xs text-ink-300">Motor TONE3000</span></span><ArrowUpRight size={16} className="text-ink-300" aria-hidden="true" />
+                </button>
+              </div>
+              <div className="mt-4"><LandingPitch /></div>
+            </section>
+
+            <section aria-labelledby="features-title" className="border-y border-ink-700/70 bg-ink-900/50">
+              <div className="mx-auto max-w-7xl px-5 py-16 sm:px-8 lg:px-12 lg:py-20">
+                <div className="mb-9 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+                  <div><p className="mb-3 font-mono text-xs tracking-[0.16em] text-amp-300">SEU SETUP, SIMPLIFICADO</p><h2 id="features-title" className="font-display text-3xl font-bold tracking-tight sm:text-4xl">Menos ajustes. Mais música.</h2></div>
+                  <p className="max-w-xs text-sm leading-relaxed text-ink-300">Do primeiro acorde ao riff que não sai da cabeça. Tudo no mesmo lugar.</p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-3">
+                  {[
+                    { icon: Zap, label: '01 / TIMBRE', title: 'O calor das válvulas.', description: 'Amp valvulado em tempo real com TONE3000. Ajuste o ganho, o gabinete e o reverb até encontrar o seu som.', detail: 'TONE3000 · Amp + gabinete + reverb', color: 'text-amp-300', surface: 'bg-amp-500/10 border-amp-500/20' },
+                    { icon: AudioLines, label: '02 / ENTRADA', title: 'Plugue. Afine. Toque.', description: 'Escolha sua interface e use o afinador integrado. Entrada de baixa latência para acompanhar cada movimento da palheta.', detail: 'Sua guitarra no centro de tudo', color: 'text-signal-300', surface: 'bg-signal-500/10 border-signal-500/20' },
+                    { icon: Target, label: '03 / PRÁTICA', title: 'Cada nota conta.', description: 'Acompanhe as tablaturas, acerte as notas e construa seu combo. Perfeito, Bom ou Errou: veja seu progresso enquanto toca.', detail: 'Tablaturas e metadados via Songsterr', color: 'text-hit', surface: 'bg-hit/10 border-hit/20' }
+                  ].map(({ icon: Icon, label, title, description, detail, color, surface }) => (
+                    <article key={label} className="flex flex-col rounded-2xl border border-ink-700 bg-ink-850 p-6 sm:p-7">
+                      <span className={`mb-7 flex size-12 items-center justify-center rounded-xl border ${color} ${surface}`}><Icon size={24} aria-hidden="true" /></span>
+                      <p className={`mb-3 font-mono text-[10px] tracking-widest ${color}`}>{label}</p>
+                      <h3 className="font-display text-xl font-bold tracking-tight">{title}</h3>
+                      <p className="mt-3 mb-6 flex-1 text-sm leading-7 text-ink-300">{description}</p>
+                      <p className="border-t border-ink-700 pt-4 text-xs text-ink-300">{detail}</p>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            <section aria-labelledby="steps-title" className="mx-auto max-w-7xl px-5 py-16 sm:px-8 lg:px-12 lg:py-20">
+              <p className="mb-3 font-mono text-xs tracking-[0.16em] text-amp-300">COMO FUNCIONA</p>
+              <h2 id="steps-title" className="font-display text-3xl font-bold tracking-tight sm:text-4xl">Do cabo ao primeiro riff.</h2>
+              <ol className="mt-10 grid gap-8 md:grid-cols-3 md:gap-10">
+                {[
+                  { icon: PlugZap, title: 'Plugue a interface', description: 'Conecte a guitarra à sua interface USB e permita o acesso ao áudio no navegador.' },
+                  { icon: Music, title: 'Escolha a música', description: 'Comece com Metallica ou busque sua próxima música nas tablaturas do Songsterr.' },
+                  { icon: Headphones, title: 'Dê o play. Toque.', description: 'Coloque os fones, ajuste seu timbre e siga as notas. Repita aquele trecho até sair.' }
+                ].map(({ icon: Icon, title, description }, index) => (
+                  <li key={title} className="relative border-t border-ink-600 pt-6">
+                    <div className="mb-5 flex items-center justify-between"><span className="font-display text-4xl font-medium text-amp-300">0{index + 1}</span><Icon size={22} className="text-ink-300" aria-hidden="true" /></div>
+                    <h3 className="font-display text-lg font-bold">{title}</h3><p className="mt-2 max-w-sm text-sm leading-7 text-ink-300">{description}</p>
+                  </li>
+                ))}
+              </ol>
+              <div className="mt-14 flex flex-col items-start justify-between gap-5 rounded-2xl border border-amp-500/20 bg-amp-500/5 p-6 sm:flex-row sm:items-center sm:p-8">
+                <div><p className="font-display text-xl font-bold">Feito para quem quer tocar.</p><p className="mt-2 text-sm text-ink-300">PRGB é grátis. Seu apoio ajuda o projeto a seguir em frente.</p></div>
+                <a href={supportHref} target="_blank" rel="noopener noreferrer" className="flex min-h-11 items-center gap-2 rounded-lg py-2 text-sm font-semibold text-amp-300 hover:text-amp-200"><Heart size={17} className="shrink-0" aria-hidden="true" /><span>{supportLabel}</span><ArrowRight size={16} className="shrink-0" aria-hidden="true" /></a>
+              </div>
+            </section>
+          </main>
+
+          <footer className="border-t border-ink-700 bg-ink-900">
+            <div className="mx-auto flex max-w-7xl flex-col gap-6 px-5 py-9 sm:px-8 lg:px-12">
+              <div className="flex flex-wrap items-center justify-between gap-4"><BrandMark size={28} /><span className="font-mono text-[10px] tracking-widest text-ink-300">PLAY REAL GUITAR IN BROWSER</span></div>
+              <p className="max-w-3xl text-xs leading-6 text-ink-300">Tablaturas e metadados via Songsterr. PRGB não é afiliado ao Songsterr, Metallica ou outros artistas; todas as marcas pertencem aos seus donos.</p>
+              <div className="flex flex-wrap items-center justify-between gap-4 border-t border-ink-700 pt-5 text-xs text-ink-300"><span>© {currentYear} PRGB</span><a href={supportHref} target="_blank" rel="noopener noreferrer" className="rounded py-2 hover:text-amp-300">{supportLabel} ↗</a></div>
             </div>
-          </div>
+          </footer>
         </div>
       )}
 
