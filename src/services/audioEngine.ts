@@ -1,5 +1,5 @@
 // Professional Guitar/Bass Audio Engine for Real-Time Pitch Detection
-// Modeled after Yousician & TONE3000 low-latency WASAPI/ASIO configurations
+// Raw 48 kHz capture (no OS processing) feeding the TONE3000 monitor and the PRGB game
 
 export interface DetectedPitch {
   frequency: number; // Hz

@@ -189,7 +189,7 @@ export class SongsterrApi {
   }
 
   /**
-   * Convert Songsterr raw measure/beat hierarchy into a clean linear note timeline for Yousician gaming
+   * Convert Songsterr raw measure/beat hierarchy into a clean linear note timeline for the game
    */
   static normalizeTab(rawTab: any, songMeta: SongsterrMeta, trackIndex: number): NormalizedSongTab {
     const track = songMeta.tracks[trackIndex] || songMeta.tracks[0];
