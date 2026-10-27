@@ -138,6 +138,7 @@ export const YousicianGame: React.FC<YousicianGameProps> = ({
   } | null>(null);
 
   const syncCanvasSizeRef = useRef<(() => void) | null>(null);
+  const [noteHeight, setNoteHeight] = useState(46);
 
   // Rebuild static rails/playhead only when geometry or pixel density changes.
   useEffect(() => {
@@ -171,6 +172,7 @@ export const YousicianGame: React.FC<YousicianGameProps> = ({
       const bottomMargin = 70;
       const availableHeight = height - topMargin - bottomMargin;
       const stringSpacing = availableHeight / (stringCount - 1);
+      setNoteHeight(Math.min(46, Math.max(0, stringSpacing * 0.7)));
 
       // 1. Draw horizontal string rails
       for (let s = 1; s <= stringCount; s++) {
@@ -246,25 +248,40 @@ export const YousicianGame: React.FC<YousicianGameProps> = ({
   }, []);
 
   const noteGraphics = useMemo(() => {
-    const paths = new Map<number, Path2D>();
+    const paths = new Map<string, Path2D>();
+    const scale = noteHeight / 46;
+    const fretFontSize = 23 * scale;
+    const subtitleFontSize = 13 * scale;
     return tab.notes.map((note) => {
       const technique = `${note.bendSemitones ? '↑' : ''}${note.harmonic ? 'H' : ''}${note.tapping ? 'T' : ''}`;
-      const width = Math.max(technique ? 72 : 48, note.durationMs * 0.45 * speed * 0.7);
-      let path = paths.get(width);
+      const fret = note.dead ? 'x' : note.ghost ? `(${note.fret})` : `${note.fret}`;
+      const subtitle = note.dead ? '' : technique || note.noteName;
+      const fretWidth = fret.length * fretFontSize * 0.75;
+      const left = -(10 * scale + fretWidth / 2);
+      const fretX = 0;
+      const subtitleX = fretWidth / 2 + 8 * scale;
+      const labelWidth = 20 * scale + fretWidth + (subtitle ? 8 * scale + subtitle.length * subtitleFontSize * 0.65 : 0);
+      const width = Math.max((technique ? 104 : 70) * scale, labelWidth, note.durationMs * 0.45 * speed * 0.7);
+      const key = `${width}:${noteHeight}`;
+      let path = paths.get(key);
       if (!path) {
         path = new Path2D();
-        path.roundRect(-24, -16, width, 32, 16);
-        paths.set(width, path);
+        path.roundRect(left, -noteHeight / 2, width, noteHeight, noteHeight / 2);
+        paths.set(key, path);
       }
       return {
         note,
         path,
-        fret: note.dead ? 'x' : note.ghost ? `(${note.fret})` : `${note.fret}`,
-        subtitle: note.dead ? '' : technique || note.noteName,
+        fret,
+        subtitle,
+        fretX,
+        subtitleX,
+        fretFont: `900 ${fretFontSize}px Inter, sans-serif`,
+        subtitleFont: `bold ${subtitleFontSize}px monospace`,
         bendTarget: note.midiNote + Math.round(note.bendSemitones ?? 0)
       };
     });
-  }, [tab.notes, speed]);
+  }, [tab.notes, speed, noteHeight]);
 
   // Hit calculation & Feedback
   const triggerHitFeedback = useCallback(
@@ -404,7 +421,7 @@ export const YousicianGame: React.FC<YousicianGameProps> = ({
     // 3. Process & Draw Notes
     const HIT_WINDOW_MS = 130; // Tolerance window for playing guitar note
 
-    for (const { note, path, fret, subtitle, bendTarget } of noteGraphics) {
+    for (const { note, path, fret, subtitle, fretX, subtitleX, fretFont, subtitleFont, bendTarget } of noteGraphics) {
       const timeDiff = note.timeMs - currentTimeMs;
       const noteX = hitLineX + timeDiff * pixelsPerMs;
 
@@ -451,6 +468,7 @@ export const YousicianGame: React.FC<YousicianGameProps> = ({
       }
 
       // Draw Note Pill
+      if (!noteHeight) continue;
       ctx.save();
       ctx.translate(noteX, noteY);
       if (note.grace) ctx.scale(0.75, 0.75);
@@ -481,21 +499,22 @@ export const YousicianGame: React.FC<YousicianGameProps> = ({
       ctx.fill(path);
 
       // Note border
-      ctx.lineWidth = 2.5;
+      ctx.lineWidth = 2.5 * noteHeight / 46;
       ctx.strokeStyle = state === 'perfect' ? '#a7f3d0' : '#ffffff';
       ctx.stroke(path);
 
       // Draw Fret Number inside the note block
       ctx.fillStyle = '#ffffff';
-      ctx.font = '900 16px Inter, sans-serif';
+      ctx.font = fretFont;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(fret, -4, 0);
+      ctx.fillText(fret, fretX, 0);
 
       // Note name subtitle (e.g. A2, D3)
       ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-      ctx.font = 'bold 10px monospace';
-      ctx.fillText(subtitle, 14, 0);
+      ctx.font = subtitleFont;
+      ctx.textAlign = 'left';
+      ctx.fillText(subtitle, subtitleX, 0);
 
       ctx.restore();
     }
