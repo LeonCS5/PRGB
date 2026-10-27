@@ -138,6 +138,7 @@ export class SoundFX {
 export class MetronomeScheduler {
   private static readonly LOOKAHEAD_SEC = 0.12;
   private static readonly RESYNC_MS = 30;
+  private static readonly LATE_TOLERANCE_SEC = 0.03;
 
   private beats: BeatMark[] = [];
   private rate = 1;
@@ -157,6 +158,8 @@ export class MetronomeScheduler {
     this.rate = rate > 0 ? rate : 1;
     this.running = true;
     this.resync(songMs);
+    // Schedule right away: waiting for the next frame would drop a beat sitting exactly at songMs
+    this.schedule();
   }
 
   stop(): void {
@@ -167,17 +170,28 @@ export class MetronomeScheduler {
   update(songMs: number): void {
     if (!this.running) return;
     const ctx = this.getContext();
+    // A suspended context's clock is frozen: anything queued would pile up and fire at once on resume
+    if (ctx.state !== 'running') {
+      this.cancelPending();
+      return;
+    }
     if (Math.abs(this.songMsAt(ctx.currentTime) - songMs) > MetronomeScheduler.RESYNC_MS) {
       this.resync(songMs);
     }
+    this.schedule();
+  }
 
+  private schedule(): void {
+    const ctx = this.getContext();
+    if (ctx.state !== 'running') return;
     const horizonMs = this.songMsAt(ctx.currentTime + MetronomeScheduler.LOOKAHEAD_SEC);
     while (this.nextBeat < this.beats.length && this.beats[this.nextBeat].timeMs <= horizonMs) {
       const beat = this.beats[this.nextBeat++];
       const at = this.audioTimeAt(beat.timeMs);
-      if (at < ctx.currentTime) continue;
+      // Slightly late beats (one frame) still sound now; older ones were skipped by a seek or stall
+      if (at < ctx.currentTime - MetronomeScheduler.LATE_TOLERANCE_SEC) continue;
       const osc = SoundFX.playClick(beat.accent, at);
-      if (osc) this.scheduled.push({ osc, at });
+      if (osc) this.scheduled.push({ osc, at: Math.max(at, ctx.currentTime) });
     }
     this.scheduled = this.scheduled.filter((click) => click.at >= ctx.currentTime);
   }
@@ -195,7 +209,7 @@ export class MetronomeScheduler {
     if (this.scheduled.length === 0) return;
     const now = this.getContext().currentTime;
     for (const click of this.scheduled) {
-      if (click.at > now) click.osc.stop();
+      if (click.at >= now) click.osc.stop();
     }
     this.scheduled = [];
   }

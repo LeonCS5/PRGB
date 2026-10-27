@@ -231,10 +231,8 @@ export class SongsterrApi {
       const primaryVoice = voices[0];
       if (!primaryVoice) continue;
 
+      const measureStartMs = currentTimeMs;
       const pulseMs = ((60000 / currentBpm) * 4) / signature[1];
-      for (let pulse = 0; pulse < signature[0]; pulse++) {
-        beatGrid.push({ timeMs: Math.round(currentTimeMs + pulse * pulseMs), accent: pulse === 0 });
-      }
 
       const beats = primaryVoice.beats || [];
       for (let bIdx = 0; bIdx < beats.length; bIdx++) {
@@ -316,6 +314,16 @@ export class SongsterrApi {
         }
 
         if (!isGrace) currentTimeMs += beatDurationMs;
+      }
+
+      // A short measure (pickup/anacrusis) holds only the last pulses of the bar, so align the
+      // pulses to its end; this keeps the grid ordered and the next downbeat accented.
+      const fullMeasureMs = signature[0] * pulseMs;
+      const shiftMs = Math.min(0, currentTimeMs - measureStartMs - fullMeasureMs);
+      for (let pulse = 0; pulse < signature[0]; pulse++) {
+        const timeMs = measureStartMs + shiftMs + pulse * pulseMs;
+        if (timeMs < measureStartMs - 1) continue;
+        beatGrid.push({ timeMs: Math.round(timeMs), accent: pulse === 0 });
       }
     }
 

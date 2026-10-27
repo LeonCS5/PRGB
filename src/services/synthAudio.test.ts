@@ -63,6 +63,33 @@ describe('MetronomeScheduler', () => {
     expect(live()[1].accentHz).toBe(800);
   });
 
+  it('plays the beat at the start position immediately, even if the first update is a frame late', () => {
+    const metronome = new MetronomeScheduler();
+    metronome.start(grid(8, 500), 0, 1);
+    expect(live().map((o) => o.startAt)).toEqual([10]);
+
+    const resumed = new MetronomeScheduler();
+    ctx.oscillators = [];
+    resumed.start(grid(8, 500), 1000, 1);
+    ctx.currentTime = 10.016;
+    resumed.update(1016);
+    expect(live()).toHaveLength(1);
+  });
+
+  it('queues nothing while the context is suspended and does not pile clicks up for resume', () => {
+    const metronome = new MetronomeScheduler();
+    metronome.start(grid(40, 100), 0, 1);
+    ctx.state = 'suspended';
+    for (let songMs = 16; songMs < 1000; songMs += 16) metronome.update(songMs);
+    expect(live().filter((o) => o.startAt >= ctx.currentTime)).toHaveLength(0);
+
+    ctx.state = 'running';
+    ctx.currentTime = 11;
+    metronome.update(1000);
+    const upcoming = live().filter((o) => o.startAt >= 11);
+    expect(new Set(upcoming.map((o) => o.startAt)).size).toBe(upcoming.length);
+  });
+
   it('maps song time through the playback speed', () => {
     const metronome = new MetronomeScheduler();
     metronome.start(grid(8, 500), 0, 0.5);

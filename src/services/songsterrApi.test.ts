@@ -131,6 +131,18 @@ describe('SongsterrApi.normalizeTab', () => {
     expect(result.initialBpm).toBe(120);
   });
 
+  it('aligns a pickup measure to the end of the bar so the grid stays ordered', () => {
+    const quarter = (fret: number) => ({ duration: [1, 4], notes: [{ string: 0, fret }] });
+    const result = SoundsterrTabWithMeasures([
+      { signature: [4, 4], voices: [{ beats: [quarter(0)] }] },
+      { voices: [{ beats: [quarter(1), quarter(2), quarter(3), quarter(4)] }] }
+    ], [{ measure: 0, position: 0, bpm: 120, type: 4 }]);
+    expect(result.beatGrid.map((b) => [b.timeMs, b.accent])).toEqual([
+      [0, false],
+      [500, true], [1000, false], [1500, false], [2000, false]
+    ]);
+  });
+
   it('returns notes sorted by time', () => {
     const notes = parse([
       { duration: [1, 8], notes: [{ string: 0, fret: 0 }] },
