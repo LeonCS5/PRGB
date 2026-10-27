@@ -90,6 +90,17 @@ describe('MetronomeScheduler', () => {
     expect(new Set(upcoming.map((o) => o.startAt)).size).toBe(upcoming.length);
   });
 
+  it('reschedules beats cancelled by a short suspension when the context resumes', () => {
+    const metronome = new MetronomeScheduler();
+    metronome.start(grid(10, 100), 0, 1); // queues 0 and 100 ms
+    ctx.state = 'suspended';
+    metronome.update(10); // cancels them
+    ctx.state = 'running';
+    ctx.currentTime = 10.016;
+    metronome.update(16); // no drift beyond 30 ms, but the 100 ms beat must come back
+    expect(live().some((o) => Math.abs(o.startAt - 10.1) < 1e-9)).toBe(true);
+  });
+
   it('maps song time through the playback speed', () => {
     const metronome = new MetronomeScheduler();
     metronome.start(grid(8, 500), 0, 0.5);

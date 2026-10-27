@@ -146,6 +146,7 @@ export class MetronomeScheduler {
   private anchorAudioTime = 0;
   private anchorSongMs = 0;
   private nextBeat = 0;
+  private resyncOnResume = false;
   private scheduled: { osc: OscillatorNode; at: number }[] = [];
   private readonly getContext: () => AudioContext;
 
@@ -173,9 +174,12 @@ export class MetronomeScheduler {
     // A suspended context's clock is frozen: anything queued would pile up and fire at once on resume
     if (ctx.state !== 'running') {
       this.cancelPending();
+      // The cancelled beats are behind the cursor; rewind on resume even if no drift built up
+      this.resyncOnResume = true;
       return;
     }
-    if (Math.abs(this.songMsAt(ctx.currentTime) - songMs) > MetronomeScheduler.RESYNC_MS) {
+    if (this.resyncOnResume || Math.abs(this.songMsAt(ctx.currentTime) - songMs) > MetronomeScheduler.RESYNC_MS) {
+      this.resyncOnResume = false;
       this.resync(songMs);
     }
     this.schedule();
