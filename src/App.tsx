@@ -55,6 +55,10 @@ const AppContent: React.FC = () => {
   const songSelectionVersion = useRef(0);
 
   useEffect(() => {
+    if (activeTab) audioEngine.setTuning(activeTab.tuning);
+  }, [activeTab, audioEngine]);
+
+  useEffect(() => {
     if (!savedSong) return;
     let cancelled = false;
     const version = songSelectionVersion.current;

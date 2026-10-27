@@ -103,7 +103,7 @@ export const YousicianGame: React.FC<YousicianGameProps> = ({
   const [missCount, setMissCount] = useState(0);
 
   // Note hit tracking
-  const noteStatesRef = useRef<Map<string, 'pending' | 'perfect' | 'good' | 'miss'>>(new Map());
+  const noteStatesRef = useRef<Map<string, 'pending' | 'perfect' | 'good' | 'miss' | 'skipped'>>(new Map());
   const particlesRef = useRef<Particle[]>([]);
   const floatingTextsRef = useRef<FloatingText[]>([]);
   const lastFrameTimeRef = useRef<number>(0);
@@ -248,14 +248,21 @@ export const YousicianGame: React.FC<YousicianGameProps> = ({
   const noteGraphics = useMemo(() => {
     const paths = new Map<number, Path2D>();
     return tab.notes.map((note) => {
-      const width = Math.max(48, note.durationMs * 0.45 * speed * 0.7);
+      const technique = `${note.bendSemitones ? '↑' : ''}${note.harmonic ? 'H' : ''}${note.tapping ? 'T' : ''}`;
+      const width = Math.max(technique ? 72 : 48, note.durationMs * 0.45 * speed * 0.7);
       let path = paths.get(width);
       if (!path) {
         path = new Path2D();
         path.roundRect(-24, -16, width, 32, 16);
         paths.set(width, path);
       }
-      return { note, path, fret: `${note.fret}` };
+      return {
+        note,
+        path,
+        fret: note.dead ? 'x' : note.ghost ? `(${note.fret})` : `${note.fret}`,
+        subtitle: note.dead ? '' : technique || note.noteName,
+        bendTarget: note.midiNote + Math.round(note.bendSemitones ?? 0)
+      };
     });
   }, [tab.notes, speed]);
 
@@ -366,6 +373,7 @@ export const YousicianGame: React.FC<YousicianGameProps> = ({
   useEffect(() => {
     if (!isPlaying || !synthAudioEnabled) return;
     for (const note of tab.notes) {
+      if (note.dead) continue;
       if (
         note.timeMs >= currentTimeMs - 40 &&
         note.timeMs <= currentTimeMs + 40 &&
@@ -396,7 +404,7 @@ export const YousicianGame: React.FC<YousicianGameProps> = ({
     // 3. Process & Draw Notes
     const HIT_WINDOW_MS = 130; // Tolerance window for playing guitar note
 
-    for (const { note, path, fret } of noteGraphics) {
+    for (const { note, path, fret, subtitle, bendTarget } of noteGraphics) {
       const timeDiff = note.timeMs - currentTimeMs;
       const noteX = hitLineX + timeDiff * pixelsPerMs;
 
@@ -411,10 +419,18 @@ export const YousicianGame: React.FC<YousicianGameProps> = ({
 
       // Check if note is inside the active hit window and matches audio engine pitch
       if (state === 'pending' && isPlaying) {
-        if (Math.abs(timeDiff) <= HIT_WINDOW_MS) {
+        if (note.dead || note.grace) {
+          if (timeDiff < -HIT_WINDOW_MS) {
+            noteStatesRef.current.set(note.id, 'skipped');
+            state = 'skipped';
+          }
+        } else if (Math.abs(timeDiff) <= HIT_WINDOW_MS) {
           if (latestPitch && latestPitch.volume > 0.02) {
-            // Check if played note matches target note's MIDI note
-            const midiDiff = Math.abs(latestPitch.midiNote - note.midiNote);
+            // Bends accept either the written pitch or the bend target.
+            const midiDiff = Math.min(
+              Math.abs(latestPitch.midiNote - note.midiNote),
+              Math.abs(latestPitch.midiNote - bendTarget)
+            );
             if (midiDiff <= 1) {
               const absDiff = Math.abs(timeDiff);
               if (absDiff <= 55) {
@@ -428,16 +444,16 @@ export const YousicianGame: React.FC<YousicianGameProps> = ({
             }
           }
         } else if (timeDiff < -HIT_WINDOW_MS) {
-          // Missed note passed the hit line
-          noteStatesRef.current.set(note.id, 'miss');
-          triggerHitFeedback('miss', note, noteY);
-          state = 'miss';
+          state = note.ghost ? 'skipped' : 'miss';
+          noteStatesRef.current.set(note.id, state);
+          if (state === 'miss') triggerHitFeedback('miss', note, noteY);
         }
       }
 
       // Draw Note Pill
       ctx.save();
       ctx.translate(noteX, noteY);
+      if (note.grace) ctx.scale(0.75, 0.75);
 
       // Shadow / Glow
       if (state === 'perfect') {
@@ -448,6 +464,8 @@ export const YousicianGame: React.FC<YousicianGameProps> = ({
         ctx.shadowBlur = 12;
       } else if (state === 'miss') {
         ctx.globalAlpha = 0.35;
+      } else if (state === 'skipped' || note.ghost) {
+        ctx.globalAlpha = 0.55;
       }
 
       // Note background fill
@@ -477,7 +495,7 @@ export const YousicianGame: React.FC<YousicianGameProps> = ({
       // Note name subtitle (e.g. A2, D3)
       ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
       ctx.font = 'bold 10px monospace';
-      ctx.fillText(note.noteName, 14, 0);
+      ctx.fillText(subtitle, 14, 0);
 
       ctx.restore();
     }

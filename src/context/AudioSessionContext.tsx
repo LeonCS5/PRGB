@@ -82,7 +82,7 @@ export const AudioSessionProvider: React.FC<{ children: React.ReactNode }> = ({ 
           }
           initializedAmp.current = amp;
         }
-        setSelectedDeviceId(deviceId);
+        setSelectedDeviceId(audioEngine.getSelectedDeviceId());
         setChannelMode(mode);
         setTone3000(amp);
         setIsAudioRunning(true);
