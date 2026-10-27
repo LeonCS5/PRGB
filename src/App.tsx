@@ -5,7 +5,6 @@ import {
   Sliders,
   Sparkles,
   Volume2,
-  VolumeX,
   Zap,
   Loader2
 } from 'lucide-react';

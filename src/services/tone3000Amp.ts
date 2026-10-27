@@ -509,7 +509,7 @@ export class Tone3000AmpEngine {
   /**
    * Generates tube saturation transfer curves with realistic asymmetric harmonics
    */
-  private createDistortionCurve(gain: number, preset: AmpPresetId, samples = 2048): Float32Array {
+  private createDistortionCurve(gain: number, preset: AmpPresetId, samples = 2048): Float32Array<ArrayBuffer> {
     const curve = new Float32Array(samples);
     const amount = (gain / 100) * 15;
 

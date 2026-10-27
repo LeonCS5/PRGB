@@ -6,7 +6,6 @@ import {
   CheckCircle2,
   Sliders,
   Zap,
-  Radio,
   X
 } from 'lucide-react';
 import { AudioEngine, type DetectedPitch, type InputChannelMode } from '../services/audioEngine';
