@@ -40,6 +40,7 @@
 npm run dev      # Inicia dev server (Vite, porta 5173)
 npm run build    # Build de produção (tsc + vite build)
 npm run lint     # oxlint (sem eslint)
+npm test         # Vitest (testes dos services)
 npm run preview  # Preview da build de produção
 ```
 
@@ -54,20 +55,24 @@ src/
 ├── index.css                        # Tailwind import + reset global
 │
 ├── context/
-│   ├── AudioSessionContext.tsx      # AudioEngine, TONE3000, device/canal, pitch
-│   └── ModalsContext.tsx            # Estado aberto/fechado dos modais
+│   ├── AudioSessionContext.tsx      # AudioEngine, TONE3000, device/canal, erros; pitch via useLatestPitch
+│   ├── ModalsContext.tsx            # Estado aberto/fechado dos modais
+│   ├── preferences.ts               # Persistência em localStorage (prgb:prefs:v1)
+│   └── uiErrors.ts                  # Mensagens de erro pt-BR + carga/validação de tabs
 │
 ├── components/
-│   ├── YousicianGame.tsx            # ⭐ Canvas game principal (rails de notas, scoring, particles)
+│   ├── YousicianGame.tsx            # ⭐ Canvas game principal (rails de notas, scoring, particles, metrônomo)
 │   ├── SongSearchModal.tsx          # Modal de busca de músicas no Songsterr
 │   ├── AudioSettingsModal.tsx       # Modal de configuração de interface de áudio + afinador
-│   └── Tone3000AmpRack.tsx          # Modal do rack completo do amp modeler TONE3000
+│   ├── Tone3000AmpRack.tsx          # Modal do rack completo do amp modeler TONE3000
+│   └── ErrorNotice.tsx              # Aviso de erro dispensável com ação
 │
 ├── services/
 │   ├── audioEngine.ts               # ⭐ Engine de captura de áudio + detecção de pitch (NSDF/MPM)
 │   ├── tone3000Amp.ts               # ⭐ DSP engine: preamp, waveshaper, tone stack, cab sim, reverb
 │   ├── songsterrApi.ts              # Client da API Songsterr: busca, meta, download de tabs, normalização
-│   └── synthAudio.ts                # Sintetizador de notas, metrônomo e efeitos sonoros do jogo
+│   ├── synthAudio.ts                # Sintetizador de notas, MetronomeScheduler e efeitos sonoros do jogo
+│   └── *.test.ts                    # Testes Vitest de cada service
 │
 public/
 ├── favicon.svg
