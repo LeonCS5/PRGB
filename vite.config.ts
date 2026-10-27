@@ -11,7 +11,7 @@ export default defineConfig({
     apply: 'build',
     enforce: 'post',
     generateBundle(_, bundle) {
-      const publicFiles = ['favicon.svg', 'icons.svg', 'manifest.webmanifest']
+      const publicFiles = ['favicon.svg', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png']
       const shellFiles = ['index.html', ...Object.keys(bundle).filter((file) => file.startsWith('assets/')), ...publicFiles]
       const template = readFileSync(new URL('./public/sw.js', import.meta.url), 'utf8')
       const hash = createHash('sha256').update(template)
