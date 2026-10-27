@@ -2,11 +2,14 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { AudioEngine, type DetectedPitch, type InputChannelMode } from '../services/audioEngine';
 import type { Tone3000AmpEngine } from '../services/tone3000Amp';
 import { readPreferences, savePreferences } from './preferences';
+import { getAudioErrorMessage } from './uiErrors';
 
 export interface AudioSessionValue {
   audioEngine: AudioEngine;
   tone3000: Tone3000AmpEngine | null;
   isAudioRunning: boolean;
+  audioError: string | null;
+  dismissAudioError: () => void;
   getLatestPitch: () => DetectedPitch | null;
   selectedDeviceId: string;
   channelMode: InputChannelMode;
@@ -54,6 +57,8 @@ export const AudioSessionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const initializedAmp = useRef<Tone3000AmpEngine | null>(null);
 
   const [isAudioRunning, setIsAudioRunning] = useState(false);
+  const [audioError, setAudioError] = useState<string | null>(null);
+  const dismissAudioError = useCallback(() => setAudioError(null), []);
   const [pitchStore] = useState(createPitchStore);
   const [selectedDeviceId, setSelectedDeviceId] = useState(preferences.deviceId);
   const [channelMode, setChannelMode] = useState<InputChannelMode>(preferences.channelMode);
@@ -61,6 +66,7 @@ export const AudioSessionProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const startAudio = useCallback(
     async (deviceId = selectedDeviceId, mode = channelMode) => {
+      setAudioError(null);
       try {
         await audioEngine.start(deviceId, mode, pitchStore.publish);
         const amp = audioEngine.getTone3000();
@@ -87,8 +93,9 @@ export const AudioSessionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         setTone3000(amp);
         setIsAudioRunning(true);
       } catch (err) {
-        console.error('Failed to start audio engine:', err);
-        alert('Permissão de microfone/áudio necessária para escutar a interface.');
+        setIsAudioRunning(false);
+        pitchStore.publish(null);
+        setAudioError(getAudioErrorMessage(err));
       }
     },
     [audioEngine, selectedDeviceId, channelMode, preferences, pitchStore]
@@ -127,6 +134,8 @@ export const AudioSessionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       audioEngine,
       tone3000,
       isAudioRunning,
+      audioError,
+      dismissAudioError,
       getLatestPitch: pitchStore.getSnapshot,
       selectedDeviceId,
       channelMode,
@@ -134,7 +143,7 @@ export const AudioSessionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       changeDevice,
       changeChannelMode
     }),
-    [audioEngine, tone3000, isAudioRunning, pitchStore, selectedDeviceId, channelMode, startAudio, changeDevice, changeChannelMode]
+    [audioEngine, tone3000, isAudioRunning, audioError, dismissAudioError, pitchStore, selectedDeviceId, channelMode, startAudio, changeDevice, changeChannelMode]
   );
 
   return (
