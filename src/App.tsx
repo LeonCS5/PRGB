@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Music,
   Play,
@@ -15,6 +15,7 @@ import { AudioSettingsModal } from './components/AudioSettingsModal';
 import { Tone3000AmpRack } from './components/Tone3000AmpRack';
 import { AudioSessionProvider, useAudioSession } from './context/AudioSessionContext';
 import { ModalsProvider, useModals } from './context/ModalsContext';
+import { readPreferences, savePreferences } from './context/preferences';
 
 const AppContent: React.FC = () => {
   const {
@@ -39,9 +40,39 @@ const AppContent: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<NormalizedSongTab | null>(null);
   const [isLoadingDefault, setIsLoadingDefault] = useState(false);
+  const [savedSong] = useState(() => readPreferences().lastSong);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+  const songSelectionVersion = useRef(0);
+
+  useEffect(() => {
+    if (!savedSong) return;
+    let cancelled = false;
+    const version = songSelectionVersion.current;
+    const restoreSong = async () => {
+      try {
+        const meta = await SongsterrApi.getSongMeta(savedSong.songId);
+        const trackIndex = meta.tracks.findIndex((track) => track.partId === savedSong.partId);
+        if (trackIndex < 0) throw new Error('A faixa salva não está mais disponível.');
+        const rawTab = await SongsterrApi.getTrackTabJson(
+          meta.songId, meta.revisionId, meta.image, savedSong.partId
+        );
+        const normalized = SongsterrApi.normalizeTab(rawTab, meta, trackIndex);
+        if (!cancelled && version === songSelectionVersion.current) setActiveTab(normalized);
+      } catch (err) {
+        console.error('Failed to restore last song:', err);
+        if (!cancelled && version === songSelectionVersion.current) {
+          setRestoreError('Não foi possível restaurar a última música. Busque uma música para continuar.');
+        }
+      }
+    };
+    void restoreSong();
+    return () => { cancelled = true; };
+  }, [savedSong]);
 
   // Load default song (Metallica - Creeping Death)
   const handleLoadDefaultSong = async () => {
+    songSelectionVersion.current += 1;
+    setRestoreError(null);
     setIsLoadingDefault(true);
     try {
       // Connect audio if not running
@@ -64,7 +95,8 @@ const AppContent: React.FC = () => {
 
       const normalized = SongsterrApi.normalizeTab(rawTab, meta, trackIndex);
       setActiveTab(normalized);
-    } catch (err: any) {
+      savePreferences({ lastSong: { songId: meta.songId, partId: track.partId } });
+    } catch (err) {
       console.error('Failed to load default song:', err);
       // Open search modal on failure
       setIsSearchOpen(true);
@@ -77,14 +109,24 @@ const AppContent: React.FC = () => {
     <div className="h-screen w-screen bg-slate-950 text-white font-sans overflow-hidden">
       {activeTab ? (
         /* Yousician In-Game Interactive Mode */
-        <YousicianGame
-          tab={activeTab}
-          latestPitch={latestPitch}
-          onOpenSearch={() => setIsSearchOpen(true)}
-          onOpenAudioSettings={() => setIsSettingsOpen(true)}
-          tone3000={tone3000}
-          onOpenTone3000Rack={() => setIsTone3000RackOpen(true)}
-        />
+        <>
+          {!isAudioRunning && (
+            <button
+              onClick={() => void handleStartAudio()}
+              className="absolute left-1/2 top-20 z-30 -translate-x-1/2 rounded-xl bg-cyan-600 px-4 py-2 text-sm font-bold text-white hover:bg-cyan-500 cursor-pointer"
+            >
+              Conectar guitarra
+            </button>
+          )}
+          <YousicianGame
+            tab={activeTab}
+            latestPitch={latestPitch}
+            onOpenSearch={() => setIsSearchOpen(true)}
+            onOpenAudioSettings={() => setIsSettingsOpen(true)}
+            tone3000={tone3000}
+            onOpenTone3000Rack={() => setIsTone3000RackOpen(true)}
+          />
+        </>
       ) : (
         /* Welcome / Landing Screen */
         <div className="flex h-full w-full flex-col items-center justify-center p-6 text-center relative overflow-hidden">
@@ -112,6 +154,7 @@ const AppContent: React.FC = () => {
             </p>
 
             {/* Quick Actions */}
+            {restoreError && <p role="alert" className="text-sm text-amber-300">{restoreError}</p>}
             <div className="pt-6 flex flex-col sm:flex-row items-center justify-center gap-4">
               <button
                 onClick={handleLoadDefaultSong}
@@ -191,9 +234,12 @@ const AppContent: React.FC = () => {
       <SongSearchModal
         isOpen={isSearchOpen}
         onClose={() => setIsSearchOpen(false)}
-        onSelectSong={(tab) => {
+        onSelectSong={(tab, song) => {
+          songSelectionVersion.current += 1;
+          setRestoreError(null);
           if (!isAudioRunning) handleStartAudio();
           setActiveTab(tab);
+          savePreferences({ lastSong: song });
         }}
       />
 

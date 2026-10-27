@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { Search, Music, Disc, Loader2, Sparkles, X, ChevronRight } from 'lucide-react';
 import { SongsterrApi, type SongsterrSearchResult, type SongsterrMeta, type NormalizedSongTab } from '../services/songsterrApi';
+import type { SavedSong } from '../context/preferences';
 
 interface SongSearchModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelectSong: (tab: NormalizedSongTab) => void;
+  onSelectSong: (tab: NormalizedSongTab, song: SavedSong) => void;
 }
 
 const FEATURED_SONGS = [
@@ -81,7 +82,7 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
       );
 
       const normalized = SongsterrApi.normalizeTab(rawTab, selectedSongMeta, trackIndex);
-      onSelectSong(normalized);
+      onSelectSong(normalized, { songId: selectedSongMeta.songId, partId: track.partId });
       onClose();
     } catch (err: any) {
       setError(`Falha ao carregar a tablatura do CDN: ${err.message}`);
