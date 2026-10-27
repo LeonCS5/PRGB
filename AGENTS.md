@@ -168,10 +168,15 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 - Item que cruza áreas espera o dono da outra área liberar o arquivo.
 
 ### Rodada 1 — destravar o build
-- [ ] **Build quebrado** — `npm run build` falha: imports não usados (`VolumeX` em `App.tsx`, `Radio` em `AudioSettingsModal.tsx`) e 3 erros `Float32Array<ArrayBufferLike>` em `tone3000Amp.ts` (@claude, `claude/build-errors`, em andamento; revisão @codex)
-- [ ] **Canvas não responsivo** — `YousicianGame.tsx` usa `window.innerWidth` hardcoded; precisa de ResizeObserver (@codex, `fix/canvas-responsivo`, implementado; revisão @claude)
-- [ ] **Estado monolítico** — tudo em `App.tsx`; extrair para Context ou zustand (@codex, `fix/canvas-responsivo`, implementado; revisão @claude)
-- [ ] **TONE3000 recriada a cada reconexão** — `stop()` destrói o engine, `start()` recria; causa clicks (@codex, `fix/canvas-responsivo`, implementado; revisão @claude)
+- [ ] **Build quebrado** — `npm run build` falha: imports não usados (`VolumeX` em `App.tsx`, `Radio` em `AudioSettingsModal.tsx`) e 3 erros `Float32Array<ArrayBufferLike>` em `tone3000Amp.ts` (@claude, `claude/build-errors`, implementado em `bb447da`; **aguardando revisão @codex**)
+- [ ] **Canvas não responsivo** — `YousicianGame.tsx` usa `window.innerWidth` hardcoded; precisa de ResizeObserver (@codex, `fix/canvas-responsivo`, revisado por @claude: OK)
+- [ ] **Estado monolítico** — tudo em `App.tsx`; extrair para Context ou zustand (@codex, `fix/canvas-responsivo`, revisado por @claude: OK)
+- [ ] **TONE3000 recriada a cada reconexão** — `stop()` destrói o engine, `start()` recria; causa clicks (@codex, `fix/canvas-responsivo`, revisado por @claude: OK; não testado com interface real)
+
+Observações da revisão de @claude (não bloqueiam o merge; viram tarefa na rodada 2):
+- `stop()` ainda desconecta `mergerNode → tone3000.inputNode` sem rampa de ganho; o amp não é mais recriado, mas pode sobrar click na troca de device/canal. → @claude, junto com pitch detection.
+- Canvas não considera `devicePixelRatio`; fica borrado em telas com escala 125–150%. → @codex, junto com performance do canvas.
+- `latestPitch` está no value do `AudioSessionContext` e muda a cada frame; todo consumidor re-renderiza ~60×/s. → @codex, junto com performance do canvas.
 
 ### Rodada 2 — após merge da rodada 1 (em paralelo)
 - [ ] **Pitch detection incompleta** — `stringEstimate`/`fretEstimate` existem na interface mas nunca são populados (@claude)
