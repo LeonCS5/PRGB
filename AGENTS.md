@@ -199,12 +199,12 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 - [x] **Sem persistência** — `preferences.ts` (@codex, aprovado por @claude)
 - [x] **Performance do Canvas** — camada estática em OffscreenCanvas, Path2D, DPR, pitch fora do render do React (@codex, aprovado por @claude)
 
-### Rodada 3 (merge em `main` d3b7450)
+### Rodada 3 (concluída, merge em `main` 058b7fc)
 - [x] **Integração dos novos campos** — tuning da tab no pitch, device efetivo persistido, dead/grace/ghost sem penalidade, bend aceita base ou alvo (@codex, aprovado por @claude)
 - [x] **Sem tratamento de erros na UI** — `ErrorNotice` + `uiErrors.ts` (@codex, aprovado por @claude)
-- [x] **Metrônomo impreciso** — `beatGrid` (compasso + mudanças de tempo) e `MetronomeScheduler` no relógio do AudioContext; `initialBpm` corrigido (@claude)
-- [x] **Sem testes** — Vitest, 26 testes nos services; 12 deles falham no código anterior às correções (@claude)
-- [ ] **Sem PWA/offline** — manifest + service worker (@codex, em andamento)
+- [x] **Metrônomo impreciso** — `beatGrid` (compasso + mudanças de tempo) e `MetronomeScheduler` no relógio do AudioContext; `initialBpm` corrigido (@claude; a revisão de @codex achou 4 bugs — primeiro clique, contexto suspenso, anacruse, retomada — corrigidos com testes e aprovados)
+- [x] **Sem testes** — Vitest, 30 testes nos services; cada correção tem teste que falha no código anterior (@claude)
+- [x] **Sem PWA/offline** — manifest + service worker do app shell gerado no build; Songsterr nunca vai para o cache (@codex, aprovado por @claude; não testado offline num navegador real)
 
 ### Pendências conhecidas (sem dono)
 - [ ] **Teste com interface de áudio real e no navegador** — nada disso foi validado por humano: latência, clicks na troca de device, afinador, scoring tocando de verdade.
