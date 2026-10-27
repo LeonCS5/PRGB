@@ -22,6 +22,9 @@ const tab = (beats: unknown[], extra: Record<string, unknown> = {}) => ({
 const parse = (beats: unknown[], extra?: Record<string, unknown>) =>
   SongsterrApi.normalizeTab(tab(beats, extra), meta, 0).notes;
 
+const SoundsterrTabWithMeasures = (measures: unknown[], tempo: unknown[]) =>
+  SongsterrApi.normalizeTab({ automations: { tempo }, measures }, meta, 0);
+
 describe('midiToNoteName', () => {
   it('names notes with scientific octave numbers', () => {
     expect(midiToNoteName(40)).toBe('E2');
@@ -111,6 +114,21 @@ describe('SongsterrApi.normalizeTab', () => {
     ]);
     expect(note).toMatchObject({ dead: true, ghost: true, tapping: true, harmonic: 'pinch', bendSemitones: 1 });
     expect(note.midiNote).toBe(55 + 9 + 12);
+  });
+
+  it('builds a beat grid from time signatures and tempo changes, accenting downbeats', () => {
+    const quarter = (fret: number) => ({ duration: [1, 4], notes: [{ string: 0, fret }] });
+    const eighths = Array.from({ length: 6 }, (_, i) => ({ duration: [1, 8], notes: [{ string: 0, fret: i }] }));
+    const result = SoundsterrTabWithMeasures([
+      { signature: [4, 4], voices: [{ beats: [quarter(0), quarter(1), quarter(2), quarter(3)] }] },
+      { signature: [6, 8], voices: [{ beats: eighths }] }
+    ], [{ measure: 0, position: 0, bpm: 120, type: 4 }, { measure: 1, position: 0, bpm: 60, type: 4 }]);
+    expect(result.beatGrid.map((b) => [b.timeMs, b.accent])).toEqual([
+      [0, true], [500, false], [1000, false], [1500, false],
+      // 6/8 at 60 BPM (quarter): eighth pulse = 500 ms
+      [2000, true], [2500, false], [3000, false], [3500, false], [4000, false], [4500, false]
+    ]);
+    expect(result.initialBpm).toBe(120);
   });
 
   it('returns notes sorted by time', () => {

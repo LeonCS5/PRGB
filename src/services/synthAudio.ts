@@ -1,10 +1,13 @@
 // Web Audio Synthesizer for Song Playback, Metronome, and Hit Sounds
 
+import type { BeatMark } from './songsterrApi';
+
 export class SoundFX {
   private static ctx: AudioContext | null = null;
 
-  private static getContext(): AudioContext {
+  static getContext(): AudioContext {
     if (!this.ctx || this.ctx.state === 'closed') {
+      // webkitAudioContext (old Safari) isn't part of the DOM lib typings
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       this.ctx = new AudioCtx();
     }
@@ -100,12 +103,12 @@ export class SoundFX {
   }
 
   /**
-   * Metronome click
+   * Metronome click, at `when` on the audio clock (now by default)
    */
-  static playClick(accent = false): void {
+  static playClick(accent = false, when?: number): OscillatorNode | null {
     try {
       const ctx = this.getContext();
-      const now = ctx.currentTime;
+      const now = Math.max(when ?? ctx.currentTime, ctx.currentTime);
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
 
@@ -120,8 +123,88 @@ export class SoundFX {
 
       osc.start(now);
       osc.stop(now + 0.05);
+      return osc;
     } catch {
-      // Ignore
+      return null;
     }
+  }
+}
+
+/**
+ * Sample-accurate metronome: clicks are scheduled slightly ahead on the AudioContext clock
+ * instead of fired from React renders. The game loop calls update() with the song position;
+ * the scheduler maps song time to audio time and re-anchors on seek, speed change or drift.
+ */
+export class MetronomeScheduler {
+  private static readonly LOOKAHEAD_SEC = 0.12;
+  private static readonly RESYNC_MS = 30;
+
+  private beats: BeatMark[] = [];
+  private rate = 1;
+  private running = false;
+  private anchorAudioTime = 0;
+  private anchorSongMs = 0;
+  private nextBeat = 0;
+  private scheduled: { osc: OscillatorNode; at: number }[] = [];
+  private readonly getContext: () => AudioContext;
+
+  constructor(getContext: () => AudioContext = () => SoundFX.getContext()) {
+    this.getContext = getContext;
+  }
+
+  start(beats: BeatMark[], songMs: number, rate: number): void {
+    this.beats = beats;
+    this.rate = rate > 0 ? rate : 1;
+    this.running = true;
+    this.resync(songMs);
+  }
+
+  stop(): void {
+    this.running = false;
+    this.cancelPending();
+  }
+
+  update(songMs: number): void {
+    if (!this.running) return;
+    const ctx = this.getContext();
+    if (Math.abs(this.songMsAt(ctx.currentTime) - songMs) > MetronomeScheduler.RESYNC_MS) {
+      this.resync(songMs);
+    }
+
+    const horizonMs = this.songMsAt(ctx.currentTime + MetronomeScheduler.LOOKAHEAD_SEC);
+    while (this.nextBeat < this.beats.length && this.beats[this.nextBeat].timeMs <= horizonMs) {
+      const beat = this.beats[this.nextBeat++];
+      const at = this.audioTimeAt(beat.timeMs);
+      if (at < ctx.currentTime) continue;
+      const osc = SoundFX.playClick(beat.accent, at);
+      if (osc) this.scheduled.push({ osc, at });
+    }
+    this.scheduled = this.scheduled.filter((click) => click.at >= ctx.currentTime);
+  }
+
+  private resync(songMs: number): void {
+    this.cancelPending();
+    this.anchorAudioTime = this.getContext().currentTime;
+    this.anchorSongMs = songMs;
+    const index = this.beats.findIndex((beat) => beat.timeMs >= songMs);
+    this.nextBeat = index < 0 ? this.beats.length : index;
+  }
+
+  // Clicks already queued would otherwise sound at the old position after a seek or pause
+  private cancelPending(): void {
+    if (this.scheduled.length === 0) return;
+    const now = this.getContext().currentTime;
+    for (const click of this.scheduled) {
+      if (click.at > now) click.osc.stop();
+    }
+    this.scheduled = [];
+  }
+
+  private songMsAt(audioTime: number): number {
+    return this.anchorSongMs + (audioTime - this.anchorAudioTime) * 1000 * this.rate;
+  }
+
+  private audioTimeAt(songMs: number): number {
+    return this.anchorAudioTime + (songMs - this.anchorSongMs) / 1000 / this.rate;
   }
 }

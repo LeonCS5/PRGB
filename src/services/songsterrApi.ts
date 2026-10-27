@@ -59,6 +59,11 @@ export interface NoteEvent {
   bendSemitones?: number; // highest bend target above midiNote
 }
 
+export interface BeatMark {
+  timeMs: number;
+  accent: boolean; // first beat of the measure
+}
+
 export interface NormalizedSongTab {
   songId: number;
   title: string;
@@ -68,6 +73,7 @@ export interface NormalizedSongTab {
   stringCount: number;
   totalDurationMs: number;
   notes: NoteEvent[];
+  beatGrid: BeatMark[]; // metronome beats, following time signature and tempo changes
   initialBpm: number;
 }
 
@@ -199,12 +205,16 @@ export class SongsterrApi {
         if (t.measure === 0) currentBpm = t.bpm;
       }
     }
+    const initialBpm = currentBpm;
 
     const notes: NoteEvent[] = [];
     let currentTimeMs = 0;
     let noteIdCounter = 0;
     // Last emitted note per string, so tied notes extend it instead of becoming a new hit
     const lastNoteByString = new Map<number, NoteEvent>();
+    const beatGrid: BeatMark[] = [];
+    // Songsterr only repeats the signature on measures where it changes
+    let signature: [number, number] = [4, 4];
 
     const measures = rawTab.measures || [];
 
@@ -214,9 +224,17 @@ export class SongsterrApi {
       }
 
       const measure = measures[mIdx];
+      if (Array.isArray(measure.signature) && measure.signature[0] > 0 && measure.signature[1] > 0) {
+        signature = [measure.signature[0], measure.signature[1]];
+      }
       const voices = measure.voices || [];
       const primaryVoice = voices[0];
       if (!primaryVoice) continue;
+
+      const pulseMs = ((60000 / currentBpm) * 4) / signature[1];
+      for (let pulse = 0; pulse < signature[0]; pulse++) {
+        beatGrid.push({ timeMs: Math.round(currentTimeMs + pulse * pulseMs), accent: pulse === 0 });
+      }
 
       const beats = primaryVoice.beats || [];
       for (let bIdx = 0; bIdx < beats.length; bIdx++) {
@@ -313,7 +331,8 @@ export class SongsterrApi {
       stringCount,
       totalDurationMs: Math.round(currentTimeMs),
       notes,
-      initialBpm: currentBpm
+      beatGrid,
+      initialBpm
     };
   }
 }

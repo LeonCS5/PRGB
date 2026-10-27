@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import type { NormalizedSongTab, NoteEvent } from '../services/songsterrApi';
 import { useAudioSession, useLatestPitch } from '../context/AudioSessionContext';
-import { SoundFX } from '../services/synthAudio';
+import { MetronomeScheduler, SoundFX } from '../services/synthAudio';
 import {
   Tone3000AmpEngine,
   AMP_PRESETS,
@@ -107,7 +107,7 @@ export const YousicianGame: React.FC<YousicianGameProps> = ({
   const particlesRef = useRef<Particle[]>([]);
   const floatingTextsRef = useRef<FloatingText[]>([]);
   const lastFrameTimeRef = useRef<number>(0);
-  const lastMetronomeBeatRef = useRef<number>(-1);
+  const [metronome] = useState(() => new MetronomeScheduler());
   const synthPlayedNotesRef = useRef<Set<string>>(new Set());
 
   const [previousTab, setPreviousTab] = useState(tab);
@@ -358,16 +358,16 @@ export const YousicianGame: React.FC<YousicianGameProps> = ({
     [combo]
   );
 
-  // Metronome audio pulse
+  // Metronome: clicks are scheduled on the audio clock; the render loop only reports the song position
+  const startMetronome = useEffectEvent(() => {
+    metronome.start(tab.beatGrid, currentTimeMs, speed);
+  });
+
   useEffect(() => {
     if (!isPlaying || !metronomeEnabled) return;
-    const msPerBeat = (60000 / tab.initialBpm);
-    const currentBeat = Math.floor(currentTimeMs / msPerBeat);
-    if (currentBeat !== lastMetronomeBeatRef.current) {
-      lastMetronomeBeatRef.current = currentBeat;
-      SoundFX.playClick(currentBeat % 4 === 0);
-    }
-  }, [isPlaying, metronomeEnabled, currentTimeMs, tab.initialBpm]);
+    startMetronome();
+    return () => metronome.stop();
+  }, [isPlaying, metronomeEnabled, speed, tab.beatGrid, metronome]);
 
   // Synth preview of song notes
   useEffect(() => {
@@ -555,6 +555,7 @@ export const YousicianGame: React.FC<YousicianGameProps> = ({
         }
         return next;
       });
+      if (metronomeEnabled) metronome.update(currentTimeMs + delta);
     }
     // Some DPR changes do not dispatch resize or media-query events.
     if (sceneRef.current && sceneRef.current.dpr !== (window.devicePixelRatio || 1)) {
