@@ -160,28 +160,37 @@ Mais de um agente trabalha neste repositório. O humano coordena; os agentes seg
 
 ## Problemas Conhecidos (Backlog de Melhoria)
 
-Formato: `- [ ] **Item** — descrição` + `(@agente, branch, status)` quando atribuído.
+Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 
-### Prioridade Alta
-- [ ] **Build quebrado** — `npm run build` falha: imports não usados (`VolumeX` em `App.tsx`, `Radio` em `AudioSettingsModal.tsx`) e 3 erros `Float32Array<ArrayBufferLike>` em `tone3000Amp.ts`
-- [ ] **Canvas não responsivo** — `YousicianGame.tsx` usa `window.innerWidth` hardcoded; precisa de ResizeObserver (@codex, `fix/canvas-responsivo`, implementado, aguardando revisão)
-- [ ] **Estado monolítico** — tudo em `App.tsx`; extrair para Context ou zustand (@codex, `fix/canvas-responsivo`, implementado, aguardando revisão)
-- [ ] **TONE3000 recriada a cada reconexão** — `stop()` destrói o engine, `start()` recria; causa clicks (@codex, `fix/canvas-responsivo`, implementado, aguardando revisão)
+### Divisão de áreas
+- **@claude:** `src/services/` (áudio, DSP, pitch, parser) e testes.
+- **@codex:** `src/context/`, `src/components/`, `App.tsx` (UI, estado, canvas), PWA.
+- Item que cruza áreas espera o dono da outra área liberar o arquivo.
 
-### Prioridade Média
-- [ ] **Sem persistência** — preferências não salvas em localStorage (device, canal, preset, última música)
-- [ ] **Pitch detection incompleta** — `stringEstimate`/`fretEstimate` existem na interface mas nunca são populados
-- [ ] **Sem tratamento de erros na UI** — muitos `console.error` sem feedback visual
-- [ ] **Performance do Canvas** — gradients e paths recriados a cada frame
+### Rodada 1 — destravar o build
+- [ ] **Build quebrado** — `npm run build` falha: imports não usados (`VolumeX` em `App.tsx`, `Radio` em `AudioSettingsModal.tsx`) e 3 erros `Float32Array<ArrayBufferLike>` em `tone3000Amp.ts` (@claude, `claude/build-errors`, em andamento; revisão @codex)
+- [ ] **Canvas não responsivo** — `YousicianGame.tsx` usa `window.innerWidth` hardcoded; precisa de ResizeObserver (@codex, `fix/canvas-responsivo`, implementado; revisão @claude)
+- [ ] **Estado monolítico** — tudo em `App.tsx`; extrair para Context ou zustand (@codex, `fix/canvas-responsivo`, implementado; revisão @claude)
+- [ ] **TONE3000 recriada a cada reconexão** — `stop()` destrói o engine, `start()` recria; causa clicks (@codex, `fix/canvas-responsivo`, implementado; revisão @claude)
 
-### Prioridade Baixa
+### Rodada 2 — após merge da rodada 1 (em paralelo)
+- [ ] **Pitch detection incompleta** — `stringEstimate`/`fretEstimate` existem na interface mas nunca são populados (@claude)
+- [ ] **Parser de tabs incompleto** — não suporta bends, harmonics, tapping, ghost notes (@claude)
+- [ ] **Sem persistência** — preferências não salvas em localStorage (device, canal, preset, última música) (@codex)
+- [ ] **Performance do Canvas** — gradients e paths recriados a cada frame (@codex)
+
+### Rodada 3
+- [ ] **Sem tratamento de erros na UI** — muitos `console.error` sem feedback visual (@codex, depois de persistência)
+- [ ] **Metrônomo impreciso** — scheduling via React state, deveria usar AudioContext (@claude, depois de performance do canvas: divide `YousicianGame.tsx`)
+- [ ] **Sem testes** — zero unit/integration/e2e tests; usar **Vitest** (aprovado) nos services (@claude)
+- [ ] **Sem PWA/offline** — sem service worker ou manifest (@codex)
+
+### Sem dono
+- [ ] **Sem router** — SPA sem rotas; se crescer, avaliar react-router
+
+### Concluídos
 - [x] **App.css é lixo** — removido
 - [x] **Assets legados** — `src/assets/` removido
-- [ ] **Sem testes** — zero unit/integration/e2e tests
-- [ ] **Metrônomo impreciso** — scheduling via React state, deveria usar AudioContext
-- [ ] **Parser de tabs incompleto** — não suporta bends, harmonics, tapping, ghost notes
-- [ ] **Sem PWA/offline** — sem service worker ou manifest
-- [ ] **Sem router** — SPA sem rotas; se crescer, avaliar react-router
 
 ---
 
