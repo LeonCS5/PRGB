@@ -9,11 +9,11 @@
 
 **PRGB** = Play Real Guitar in Browser
 
-Um app web (React + TypeScript + Vite) que funciona como um "Yousician open-source":
+Um app web (React + TypeScript + Vite) de prática de guitarra open-source e gratuito:
 - Captura áudio da guitarra real via interface USB (Web Audio API, 48kHz, sem processamento do OS)
 - Processa o som em tempo real com o motor **TONE3000** (amplificador + gabinete + reverb + noise gate)
 - Carrega tablaturas de 1M+ músicas da API do Songsterr
-- Renderiza um jogo estilo Guitar Hero/Yousician em Canvas 2D com detecção de pitch e scoring
+- Renderiza um jogo de prática estilo "rails" em Canvas 2D com detecção de pitch e scoring
 
 **Zero backend. Zero login. 100% client-side.**
 
@@ -37,16 +37,18 @@ npm test           # Testes (Vitest) dos services
 
 ```
 PRGB/
-├── index.html                       # HTML shell (mount point #root)
-├── vite.config.ts                   # Vite config + proxy Songsterr API
+├── index.html                       # HTML shell: título, meta/Open Graph, fontes (Google Fonts)
+├── vite.config.ts                   # Vite config + proxy Songsterr (dev) + plugin que gera o sw.js
+├── vercel.json                      # Deploy: rewrites do Songsterr (proxy sem backend), SPA, cache
 ├── package.json                     # Dependencies & scripts
 ├── tsconfig.app.json                # TypeScript config (strict, ES2023, bundler mode)
 ├── .oxlintrc.json                   # oxlint config (react + typescript plugins)
 │
 ├── src/
 │   ├── main.tsx                     # React entry point
-│   ├── App.tsx                      # Root component (estado global, landing page)
-│   ├── index.css                    # Tailwind CSS 4 import + global reset
+│   ├── App.tsx                      # Root component: landing de produto + troca para o jogo
+│   ├── index.css                    # Tailwind 4 + tokens de design PRGB (@theme) + reset global
+│   ├── vite-env.d.ts                # Tipos de import.meta.env (VITE_SUPPORT_URL)
 │   │
 │   ├── context/
 │   │   ├── AudioSessionContext.tsx  # AudioEngine, TONE3000, device/canal, erros de áudio; pitch em store próprio (useLatestPitch)
@@ -55,7 +57,8 @@ PRGB/
 │   │   └── uiErrors.ts              # Mensagens de erro pt-BR + carga/validação de música e tab
 │   │
 │   ├── components/
-│   │   ├── YousicianGame.tsx        # Canvas game: rails (camada estática em cache, DPR), notas, scoring, metrônomo
+│   │   ├── PracticeGame.tsx         # Canvas game: rails (camada estática em cache, DPR), notas, scoring, metrônomo
+│   │   ├── BrandMark.tsx            # Logo PRGB (palheta) + wordmark
 │   │   ├── SongSearchModal.tsx      # Modal: busca Songsterr + seleção de faixa
 │   │   ├── AudioSettingsModal.tsx   # Modal: device selector, afinador, VU meter
 │   │   ├── Tone3000AmpRack.tsx      # Modal: rack completo do amp modeler
@@ -65,11 +68,15 @@ PRGB/
 │   │   ├── audioEngine.ts           # Captura, channel routing, pitch (NSDF), corda/casa estimadas, fila start/stop com fade
 │   │   ├── tone3000Amp.ts           # DSP chain: preamp→waveshaper→EQ→cab→reverb→output
 │   │   ├── songsterrApi.ts          # API client + normalizer (cordas 0-indexed no JSON bruto, ties, grace, técnicas, beatGrid)
-│   │   └── synthAudio.ts            # SFX + MetronomeScheduler (cliques agendados no relógio do AudioContext)
+│   │   ├── synthAudio.ts            # SFX + MetronomeScheduler (cliques agendados no relógio do AudioContext)
+│   │   └── demoSong.ts              # Exercício original offline (pentatônica de Lá menor), sem direitos de terceiros
 │
 └── public/
-    ├── favicon.svg
-    └── icons.svg
+    ├── favicon.svg                  # Logo (palheta laranja com onda de sinal)
+    ├── icons/                       # Ícones PNG do app (192, 512, maskable)
+    ├── og-image.png                 # Imagem de compartilhamento 1200×630
+    ├── manifest.webmanifest         # PWA
+    └── sw.js                        # Template do service worker (o build injeta versão e arquivos)
 ```
 
 ---
@@ -82,6 +89,14 @@ PRGB/
 - **oxlint** (linter — NÃO usa ESLint)
 - **Web Audio API** (captura, DSP, e output — tudo nativo)
 - **Songsterr API** (reverse-engineered, proxied via Vite dev server)
+
+---
+
+## Deploy (Vercel)
+
+1. Importar o repositório no Vercel (framework Vite; `vercel.json` já define build, saída `dist` e rewrites).
+2. Opcional: variável `VITE_SUPPORT_URL` com o link de apoio (Ko-fi, Pix, GitHub Sponsors...).
+3. `/api/songsterr/*` e `/cdn/songsterr/*` são reescritos para o Songsterr pela própria plataforma (sem backend nosso). **Não verificado em produção**: se o Songsterr bloquear o proxy, a busca falha com o aviso de rede e a demo offline continua funcionando.
 
 ---
 
@@ -98,7 +113,7 @@ Guitarra → USB Interface → getUserMedia(48kHz, raw, sem noise suppress)
          (pitch detect)                        │
                 │                    Gate → PreGain → WaveShaper
                 ▼                              │
-        Yousician Game              EQ (Bass→Mid→Treble→Presence)
+        Jogo (PracticeGame)         EQ (Bass→Mid→Treble→Presence)
         (note matching)                        │
                                      CabSim (HP→Reso→Scoop→LP×2)
                                                │
@@ -121,7 +136,15 @@ Guitarra → USB Interface → getUserMedia(48kHz, raw, sem noise suppress)
 
 ### Styling
 - Tailwind CSS 4 exclusivo — sem CSS-in-JS, sem CSS Modules, sem styled-components
-- Paleta: `slate-950` (bg), `cyan` (primário), `rose` (secundário), `emerald` (sucesso), `amber` (warning)
+- Use **só os tokens PRGB** de `src/index.css` (nada de `slate`/`cyan`/`rose` crus):
+  - superfícies `ink-950…ink-100`; primária `amp-*` (laranja "válvula"); secundária `signal-*` (ciano: notas, afinação)
+  - feedback `hit` (Perfeito), `near` (Bom), `miss` (Errou); sombras `shadow-glow-amp`, `shadow-glow-signal`, `shadow-panel`
+  - fontes `font-display` (Space Grotesk, títulos), `font-sans` (Inter), `font-mono` (JetBrains Mono, números/HUD)
+
+### Marca
+- Nome: **PRGB**. Não usar nomes de produtos de terceiros (ex.: Yousician) em UI, código ou comentários.
+- O conteúdo vem do Songsterr: o rodapé precisa manter o aviso de não afiliação.
+- Projeto gratuito; o único "monetizar" é o link "Apoie o projeto" (`VITE_SUPPORT_URL`, com fallback para estrela no GitHub).
 
 ### Linting
 - **oxlint** (`.oxlintrc.json`) — NÃO instalar ESLint, prettier, ou similares
@@ -189,7 +212,7 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 
 ### Rodada 1 — destravar o build (concluída, merge em `main` 4ba14eb)
 - [x] **Build quebrado** — tipos `Float32Array<ArrayBuffer>` em `tone3000Amp.ts` + imports não usados (@claude, `bb447da`, aprovado por @codex)
-- [x] **Canvas não responsivo** — ResizeObserver em `YousicianGame.tsx` (@codex, `77d100c`, aprovado por @claude)
+- [x] **Canvas não responsivo** — ResizeObserver em `YousicianGame.tsx`, hoje `PracticeGame.tsx` (@codex, `77d100c`, aprovado por @claude)
 - [x] **Estado monolítico** — `AudioSessionContext` + `ModalsContext` (@codex, `77d100c`, aprovado por @claude)
 - [x] **TONE3000 recriada a cada reconexão** — AudioContext e amp reaproveitados entre `start()` (@codex, `77d100c`, aprovado por @claude; não testado com interface real)
 
@@ -208,7 +231,7 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 
 ### Pendências conhecidas (sem dono)
 - [ ] **Teste com interface de áudio real e no navegador** — nada disso foi validado por humano: latência, clicks na troca de device, afinador, scoring tocando de verdade.
-- [ ] **`setCurrentTimeMs` a cada frame** — o `YousicianGame` ainda re-renderiza ~60×/s enquanto toca (posição da música em state). Mover para ref exige mexer no scoring; deixado de fora para não alterar comportamento.
+- [ ] **`setCurrentTimeMs` a cada frame** — o `PracticeGame` ainda re-renderiza ~60×/s enquanto toca (posição da música em state). Mover para ref exige mexer no scoring; deixado de fora para não alterar comportamento.
 - [ ] **Songsterr em produção (não verificado)** — o proxy `/api/songsterr` e `/cdn/songsterr` só existe no dev server/preview do Vite; num deploy estático o app cai no fallback direto, que pode ser bloqueado por CORS.
 - [ ] **Sem router** — SPA sem rotas; se crescer, avaliar react-router
 
@@ -227,7 +250,7 @@ Landing Page → Clica "Tocar" ou "Buscar" → getUserMedia() → TONE3000 Ativo
   Songsterr Search → Seleciona Música → Download Tab JSON → Parse para NoteEvent[]
                                                                  │
                                                                  ▼
-                                                    Canvas Game (Yousician Rails)
+                                                    Canvas Game (PRGB Rails)
                                                     Pitch Detection ↔ Note Matching
                                                     Score / Combo / Accuracy
 ```
