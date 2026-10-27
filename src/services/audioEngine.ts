@@ -98,7 +98,8 @@ export class AudioEngine {
   ): Promise<void> {
     if (this.isRunning) await this.stop();
 
-    if (deviceId) this.selectedDeviceId = deviceId;
+    // '' is a valid choice (system default), so only an omitted id keeps the previous device
+    if (deviceId !== undefined) this.selectedDeviceId = deviceId;
     this.channelMode = channelMode;
     if (onPitch) this.onPitchCallback = onPitch;
 
@@ -120,9 +121,9 @@ export class AudioEngine {
     }
 
     // Constraints configured for clean guitar input without Windows noise suppression distortion
-    const constraints: MediaStreamConstraints = {
+    const buildConstraints = (id: string): MediaStreamConstraints => ({
       audio: {
-        deviceId: this.selectedDeviceId ? { exact: this.selectedDeviceId } : undefined,
+        deviceId: id ? { exact: id } : undefined,
         channelCount: { ideal: 2 },
         echoCancellation: false,
         noiseSuppression: false,
@@ -130,9 +131,19 @@ export class AudioEngine {
         sampleRate: { ideal: 48000 }
       },
       video: false
-    };
+    });
 
-    this.mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+    try {
+      this.mediaStream = await navigator.mediaDevices.getUserMedia(buildConstraints(this.selectedDeviceId));
+    } catch (err) {
+      // A remembered interface that was unplugged fails the exact deviceId; fall back to the default input
+      const deviceMissing =
+        err instanceof DOMException && (err.name === 'OverconstrainedError' || err.name === 'NotFoundError');
+      if (!this.selectedDeviceId || !deviceMissing) throw err;
+      console.warn('Selected audio device unavailable, using system default:', err);
+      this.selectedDeviceId = '';
+      this.mediaStream = await navigator.mediaDevices.getUserMedia(buildConstraints(''));
+    }
     this.sourceNode = this.audioContext.createMediaStreamSource(this.mediaStream);
 
     // Channel Routing (Input 1 / Input 2 / Stereo)
@@ -387,6 +398,13 @@ export class AudioEngine {
 
   getIsRunning(): boolean {
     return this.isRunning;
+  }
+
+  /**
+   * Device actually in use; '' after falling back to the system default
+   */
+  getSelectedDeviceId(): string {
+    return this.selectedDeviceId;
   }
 
   getTone3000(): Tone3000AmpEngine | null {
