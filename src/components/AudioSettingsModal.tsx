@@ -8,7 +8,8 @@ import {
   Zap,
   X
 } from 'lucide-react';
-import { AudioEngine, type DetectedPitch, type InputChannelMode } from '../services/audioEngine';
+import { AudioEngine, type InputChannelMode } from '../services/audioEngine';
+import { useLatestPitch } from '../context/AudioSessionContext';
 import { AMP_PRESETS, type AmpPresetId, type Tone3000Settings } from '../services/tone3000Amp';
 
 interface AudioSettingsModalProps {
@@ -19,7 +20,6 @@ interface AudioSettingsModalProps {
   currentChannelMode: InputChannelMode;
   onDeviceChange: (deviceId: string) => void;
   onChannelModeChange: (mode: InputChannelMode) => void;
-  latestPitch: DetectedPitch | null;
   onOpenTone3000Rack?: () => void;
 }
 
@@ -31,7 +31,6 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
   currentChannelMode,
   onDeviceChange,
   onChannelModeChange,
-  latestPitch,
   onOpenTone3000Rack
 }) => {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -58,7 +57,6 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
 
   if (!isOpen) return null;
 
-  const volumePercent = latestPitch ? Math.round(latestPitch.volume * 100) : 0;
   const isMonitoring = toneSettings?.isMonitoringEnabled ?? true;
 
   return (
@@ -244,58 +242,7 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
           </div>
 
           {/* Live Level VU Meter */}
-          <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-4 space-y-3">
-            <div className="flex items-center justify-between text-xs">
-              <span className="flex items-center gap-1.5 text-neutral-400">
-                <Volume2 size={15} />
-                Sinal de Entrada da Interface (VU Meter)
-              </span>
-              <span className="font-mono font-bold text-cyan-400">{volumePercent}%</span>
-            </div>
-            <div className="h-3 w-full overflow-hidden rounded-full bg-neutral-800 p-0.5">
-              <div
-                className="h-full rounded-full transition-all duration-75 bg-gradient-to-r from-emerald-500 via-amber-400 to-rose-500"
-                style={{ width: `${Math.min(100, volumePercent * 2.5)}%` }}
-              />
-            </div>
-
-            {/* Live Tuner Pitch Display */}
-            <div className="mt-2 pt-3 border-t border-neutral-800/80 flex items-center justify-between">
-              <div>
-                <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-bold block">
-                  Afinador em Tempo Real
-                </span>
-                <div className="flex items-baseline gap-2 mt-0.5">
-                  <span className="text-2xl font-black font-mono text-white">
-                    {latestPitch ? latestPitch.noteName : '--'}
-                  </span>
-                  <span className="text-xs text-neutral-400 font-mono">
-                    {latestPitch ? `${latestPitch.frequency} Hz` : 'Toque uma corda'}
-                  </span>
-                </div>
-              </div>
-
-              {latestPitch && (
-                <div className="text-right">
-                  <span
-                    className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full ${
-                      Math.abs(latestPitch.cents) <= 5
-                        ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/50'
-                        : 'bg-neutral-800 text-neutral-300'
-                    }`}
-                  >
-                    {Math.abs(latestPitch.cents) <= 5 ? (
-                      <>
-                        <CheckCircle2 size={13} /> AFINADO
-                      </>
-                    ) : (
-                      `${latestPitch.cents > 0 ? '+' : ''}${latestPitch.cents} cents`
-                    )}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
+          <AudioInputMeter />
         </div>
 
         <div className="mt-6 flex items-center justify-between">
@@ -319,6 +266,65 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
             Pronto para Tocar
           </button>
         </div>
+      </div>
+    </div>
+  );
+};
+
+const AudioInputMeter: React.FC = () => {
+  const latestPitch = useLatestPitch();
+  const volumePercent = latestPitch ? Math.round(latestPitch.volume * 100) : 0;
+  return (
+    <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-4 space-y-3">
+      <div className="flex items-center justify-between text-xs">
+        <span className="flex items-center gap-1.5 text-neutral-400">
+          <Volume2 size={15} />
+          Sinal de Entrada da Interface (VU Meter)
+        </span>
+        <span className="font-mono font-bold text-cyan-400">{volumePercent}%</span>
+      </div>
+      <div className="h-3 w-full overflow-hidden rounded-full bg-neutral-800 p-0.5">
+        <div
+          className="h-full rounded-full transition-all duration-75 bg-gradient-to-r from-emerald-500 via-amber-400 to-rose-500"
+          style={{ width: `${Math.min(100, volumePercent * 2.5)}%` }}
+        />
+      </div>
+
+      {/* Live Tuner Pitch Display */}
+      <div className="mt-2 pt-3 border-t border-neutral-800/80 flex items-center justify-between">
+        <div>
+          <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-bold block">
+            Afinador em Tempo Real
+          </span>
+          <div className="flex items-baseline gap-2 mt-0.5">
+            <span className="text-2xl font-black font-mono text-white">
+              {latestPitch ? latestPitch.noteName : '--'}
+            </span>
+            <span className="text-xs text-neutral-400 font-mono">
+              {latestPitch ? `${latestPitch.frequency} Hz` : 'Toque uma corda'}
+            </span>
+          </div>
+        </div>
+
+        {latestPitch && (
+          <div className="text-right">
+            <span
+              className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full ${
+                Math.abs(latestPitch.cents) <= 5
+                  ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/50'
+                  : 'bg-neutral-800 text-neutral-300'
+              }`}
+            >
+              {Math.abs(latestPitch.cents) <= 5 ? (
+                <>
+                  <CheckCircle2 size={13} /> AFINADO
+                </>
+              ) : (
+                `${latestPitch.cents > 0 ? '+' : ''}${latestPitch.cents} cents`
+              )}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
