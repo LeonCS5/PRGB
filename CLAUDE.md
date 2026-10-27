@@ -11,11 +11,11 @@
 
 ## 1. Visão Geral do Projeto
 
-**PRGB** (Play Real Guitar in Browser) é um aplicativo web estilo "Yousician" que permite ao usuário:
+**PRGB** (Play Real Guitar in Browser) é um aplicativo web gratuito de prática de guitarra que permite ao usuário:
 
 1. **Conectar sua guitarra real** via interface de áudio USB (Focusrite, Behringer, Realtek, etc.)
 2. **Ouvir o som processado** em tempo real pelo motor DSP **TONE3000** (emulação de amplificador valvulado, gabinete, noise gate, reverb)
-3. **Tocar junto com tablaturas** baixadas da API do Songsterr (1M+ músicas), com detecção de pitch e gamificação no estilo Yousician (score, combo, acertos Perfect/Good/Miss)
+3. **Tocar junto com tablaturas** baixadas da API do Songsterr (1M+ músicas), com detecção de pitch e gamificação (score, combo, acertos Perfect/Good/Miss)
 
 **O app é 100% client-side** — sem backend, sem login, sem banco de dados. Todo o processamento de áudio acontece via Web Audio API no navegador.
 
@@ -51,8 +51,9 @@ npm run preview  # Preview da build de produção
 ```
 src/
 ├── main.tsx                         # Entry point React (StrictMode)
-├── App.tsx                          # Componente raiz, estado global, landing page
-├── index.css                        # Tailwind import + reset global
+├── App.tsx                          # Componente raiz: landing de produto + troca para o jogo
+├── index.css                        # Tailwind + tokens de design PRGB (@theme) + reset global
+├── vite-env.d.ts                    # Tipos de import.meta.env (VITE_SUPPORT_URL)
 │
 ├── context/
 │   ├── AudioSessionContext.tsx      # AudioEngine, TONE3000, device/canal, erros; pitch via useLatestPitch
@@ -61,7 +62,8 @@ src/
 │   └── uiErrors.ts                  # Mensagens de erro pt-BR + carga/validação de tabs
 │
 ├── components/
-│   ├── YousicianGame.tsx            # ⭐ Canvas game principal (rails de notas, scoring, particles, metrônomo)
+│   ├── PracticeGame.tsx             # ⭐ Canvas game principal (rails de notas, scoring, particles, metrônomo)
+│   ├── BrandMark.tsx                # Logo PRGB
 │   ├── SongSearchModal.tsx          # Modal de busca de músicas no Songsterr
 │   ├── AudioSettingsModal.tsx       # Modal de configuração de interface de áudio + afinador
 │   ├── Tone3000AmpRack.tsx          # Modal do rack completo do amp modeler TONE3000
@@ -72,11 +74,14 @@ src/
 │   ├── tone3000Amp.ts               # ⭐ DSP engine: preamp, waveshaper, tone stack, cab sim, reverb
 │   ├── songsterrApi.ts              # Client da API Songsterr: busca, meta, download de tabs, normalização
 │   ├── synthAudio.ts                # Sintetizador de notas, MetronomeScheduler e efeitos sonoros do jogo
+│   ├── demoSong.ts                  # Exercício original offline (sem rede, sem direitos de terceiros)
 │   └── *.test.ts                    # Testes Vitest de cada service
 │
 public/
-├── favicon.svg
-└── icons.svg
+├── favicon.svg                      # Logo PRGB
+├── icons/, og-image.png             # Ícones do app e imagem de compartilhamento
+├── manifest.webmanifest, sw.js      # PWA
+vercel.json                          # Deploy com rewrites do Songsterr (ver AGENTS.md › Deploy)
 ```
 
 ### Proxies Vite (vite.config.ts)
@@ -104,7 +109,7 @@ AnalyserNode ← Merger ← (Channel selecionado)      TONE3000 Input
  Pitch Detection (NSDF)                        Noise Gate    PreGain
     │                                               │          │
     ▼                                               ▼          ▼
- Yousician Game (hit matching)              WaveShaper (Tube Saturation)
+ PracticeGame (hit matching)                 WaveShaper (Tube Saturation)
                                                     │
                                           Tone Stack (Bass→Mid→Treble→Presence)
                                                     │
@@ -135,11 +140,11 @@ AnalyserNode ← Merger ← (Channel selecionado)      TONE3000 Input
 ### Styling
 - **Tailwind CSS 4.x** via plugin Vite (sem `tailwind.config.js`, sem PostCSS)
 - Import global: `@import "tailwindcss"` em `index.css`
-- Paleta predominante: `slate-950` (bg), `cyan` (acentos primários), `rose` (acentos secundários), `emerald` (sucesso)
+- Tokens PRGB em `index.css` (`ink-*`, `amp-*`, `signal-*`, `hit`/`near`/`miss`, `font-display`/`font-mono`); detalhes em AGENTS.md › Convenções
 - Nunca usar CSS-in-JS, styled-components, ou CSS modules
 
 ### Nomenclatura
-- Componentes: PascalCase (ex: `YousicianGame.tsx`)
+- Componentes: PascalCase (ex: `PracticeGame.tsx`)
 - Services: camelCase (ex: `audioEngine.ts`)
 - Interfaces: PascalCase com prefixo descritivo (ex: `DetectedPitch`, `NormalizedSongTab`)
 - IDs de notas: formato `note-{counter}` (sequencial)
@@ -212,7 +217,7 @@ npm run lint
 2. **Conectar Áudio** → Ao clicar em qualquer botão, `getUserMedia` é chamado (permissão de mic)
 3. **TONE3000 Ativo** → Som da guitarra começa a sair pelos fones/caixas em tempo real
 4. **Carregar Música** → Tab é baixada do Songsterr CDN e parseada em `NoteEvent[]`
-5. **Jogo Yousician** → Canvas mostra rails coloridos com notas scrollando. Pitch detection compara nota tocada com nota da tab
+5. **Jogo (PracticeGame)** → Canvas mostra rails coloridos com notas scrollando. Pitch detection compara nota tocada com nota da tab
 6. **Scoring** → Perfect (±55ms + MIDI match), Good (±130ms + MIDI match), Miss (passou da hit line)
 7. **Modais** → Usuário pode ajustar interface de áudio, trocar preset do TONE3000, buscar outra música
 
@@ -228,5 +233,5 @@ npm run lint
 | Tone Stack | Equalizador de 4 bandas (Bass, Mid, Treble, Presence) |
 | WaveShaper | Nó Web Audio que aplica distorção não-linear (emulação de válvula) |
 | Songsterr | Serviço de tablaturas online (API reverse-engineered) |
-| Rails | As linhas horizontais coloridas do jogo onde as notas descem (estilo Guitar Hero/Yousician) |
+| Rails | As linhas horizontais coloridas do jogo onde as notas descem (estilo Guitar Hero) |
 | Hit Window | Janela de tolerância temporal para acertar uma nota (±130ms) |
