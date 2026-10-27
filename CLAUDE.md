@@ -2,6 +2,10 @@
 
 > **Leia este arquivo inteiro antes de fazer qualquer alteração no projeto.**
 > Este é o documento raiz de contexto para Claude Code, Claude em IDEs, e qualquer agente baseado em Claude.
+>
+> **Fonte única de regras, backlog e protocolo de colaboração com o Codex: `AGENTS.md`** (importado abaixo). Em caso de conflito, o `AGENTS.md` vale.
+
+@AGENTS.md
 
 ---
 
@@ -48,7 +52,10 @@ src/
 ├── main.tsx                         # Entry point React (StrictMode)
 ├── App.tsx                          # Componente raiz, estado global, landing page
 ├── index.css                        # Tailwind import + reset global
-├── App.css                          # CSS legado do template Vite (NÃO USADO — pode ser removido)
+│
+├── context/
+│   ├── AudioSessionContext.tsx      # AudioEngine, TONE3000, device/canal, pitch
+│   └── ModalsContext.tsx            # Estado aberto/fechado dos modais
 │
 ├── components/
 │   ├── YousicianGame.tsx            # ⭐ Canvas game principal (rails de notas, scoring, particles)
@@ -61,8 +68,6 @@ src/
 │   ├── tone3000Amp.ts               # ⭐ DSP engine: preamp, waveshaper, tone stack, cab sim, reverb
 │   ├── songsterrApi.ts              # Client da API Songsterr: busca, meta, download de tabs, normalização
 │   └── synthAudio.ts                # Sintetizador de notas, metrônomo e efeitos sonoros do jogo
-│
-├── assets/                          # Assets estáticos legados do template Vite (hero.png, react.svg, vite.svg)
 │
 public/
 ├── favicon.svg
@@ -143,39 +148,7 @@ AnalyserNode ← Merger ← (Channel selecionado)      TONE3000 Input
 
 ## 6. Problemas Conhecidos e Prioridades de Melhoria
 
-### 🔴 Críticos
-
-1. **`App.css` é lixo** — Contém 185 linhas de CSS do template original do Vite que não são usadas. **Pode ser deletado** sem impacto.
-
-2. **Assets legados** — `src/assets/hero.png`, `react.svg`, `vite.svg` são do template Vite. **Podem ser deletados**.
-
-3. **Canvas não é responsivo** — O `YousicianGame.tsx` usa `window.innerWidth/innerHeight` hardcoded no `<canvas>`. Não reage a resize. Precisa de um `ResizeObserver` ou `useLayoutEffect` para recalcular dimensões.
-
-4. **Gerenciamento de estado monolítico** — Todo o estado do App está em `App.tsx` com muitos `useState`. Precisa ser refatorado para contextos React ou zustand.
-
-5. **TONE3000 recriado a cada reconexão** — `AudioEngine.stop()` seta `tone3000 = null` e `start()` recria tudo. Isso é caro e causa clicks/pops audíveis.
-
-### 🟡 Importantes
-
-6. **Sem tratamento de erros robusto** — Muitos `catch` com apenas `console.error`. Falta UI de erro amigável.
-
-7. **Detecção de pitch limitada** — NSDF funciona bem, mas não estima `stringEstimate` nem `fretEstimate` (os campos existem na interface mas nunca são populados).
-
-8. **Sem persistência** — Preferências do usuário (dispositivo, canal, preset do TONE3000, última música) não são salvos em localStorage.
-
-9. **Performance do canvas** — O loop de renderização cria novos objetos (gradients, paths) a cada frame. Precisa de cache/memoização.
-
-10. **Sem testes** — Zero testes unitários, de integração, ou e2e.
-
-### 🟢 Nice-to-have
-
-11. **Sem router** — É um SPA single-page sem rotas. Se crescer, precisará de react-router ou similar.
-
-12. **Sem PWA** — Não tem service worker, manifest, ou capacidade offline.
-
-13. **Metrônomo precário** — Usa `useEffect` com `currentTimeMs` como dependência, o que causa timing impreciso. Deveria usar `AudioContext.currentTime` scheduling.
-
-14. **Tab notation parcial** — O parser do Songsterr ignora várias técnicas (bends, harmonics, tapping, ghost notes, tempo changes mid-beat).
+O backlog fica **só** no `AGENTS.md` (seção "Problemas Conhecidos"), com dono e status de cada item. Não duplique aqui; atualize lá.
 
 ---
 

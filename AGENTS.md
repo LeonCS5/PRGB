@@ -46,7 +46,10 @@ PRGB/
 │   ├── main.tsx                     # React entry point
 │   ├── App.tsx                      # Root component (estado global, landing page)
 │   ├── index.css                    # Tailwind CSS 4 import + global reset
-│   ├── App.css                      # ⚠️ LIXO — CSS do template Vite, não usado, pode deletar
+│   │
+│   ├── context/
+│   │   ├── AudioSessionContext.tsx  # AudioEngine, TONE3000, device/canal, pitch
+│   │   └── ModalsContext.tsx        # Estado aberto/fechado dos modais
 │   │
 │   ├── components/
 │   │   ├── YousicianGame.tsx        # [730 linhas] Canvas game: rails, notas, scoring, particles
@@ -59,8 +62,6 @@ PRGB/
 │   │   ├── tone3000Amp.ts           # [585 linhas] DSP chain: preamp→waveshaper→EQ→cab→reverb→output
 │   │   ├── songsterrApi.ts          # [254 linhas] API client: search, meta, tab download, normalizer
 │   │   └── synthAudio.ts            # [128 linhas] SFX: note synth, metronome clicks, hit/miss sounds
-│   │
-│   └── assets/                      # ⚠️ LIXO — hero.png, react.svg, vite.svg (template, não usado)
 │
 └── public/
     ├── favicon.svg
@@ -139,12 +140,33 @@ Guitarra → USB Interface → getUserMedia(48kHz, raw, sem noise suppress)
 
 ---
 
+## Colaboração entre Agentes (Claude + Codex)
+
+Mais de um agente trabalha neste repositório. O humano coordena; os agentes seguem este protocolo.
+
+1. **Uma tarefa por agente, atribuída pelo humano.** Antes de começar, confira no backlog abaixo se o item está marcado com o seu nome (`@claude` ou `@codex`). Não pegue item sem dono nem item de outro agente.
+2. **Worktree próprio, nunca a pasta principal.** `PRGB/` é reservada para `main` e merges.
+   ```bash
+   git worktree add ../PRGB-codex  -b codex/<tarefa>  main   # Codex
+   git worktree add ../PRGB-claude -b claude/<tarefa> main   # Claude
+   ```
+   Cada worktree precisa do seu próprio `npm install`.
+3. **Branch com prefixo do agente** (`codex/…`, `claude/…`), um problema por branch, commits no padrão `feat:`/`fix:`/`refactor:`/`docs:`/`chore:`.
+4. **Sem sobreposição de arquivos.** Dois agentes não editam o mesmo arquivo ao mesmo tempo. `tone3000Amp.ts`, `audioEngine.ts` e `App.tsx` ficam com um agente por vez.
+5. **Revisão cruzada antes do merge.** O outro agente revisa `git diff main...<branch>` e roda `npm run lint && npm run build`. Merge em `main` só pelo humano, depois da revisão.
+6. **Ao terminar:** atualize o item do backlog (status + branch), deixe o worktree limpo e reporte o que foi verificado e o que ficou pendente.
+
+---
+
 ## Problemas Conhecidos (Backlog de Melhoria)
 
+Formato: `- [ ] **Item** — descrição` + `(@agente, branch, status)` quando atribuído.
+
 ### Prioridade Alta
-- [ ] **Canvas não responsivo** — `YousicianGame.tsx` usa `window.innerWidth` hardcoded; precisa de ResizeObserver
-- [ ] **Estado monolítico** — tudo em `App.tsx`; extrair para Context ou zustand
-- [ ] **TONE3000 recriada a cada reconexão** — `stop()` destrói o engine, `start()` recria; causa clicks
+- [ ] **Build quebrado** — `npm run build` falha: imports não usados (`VolumeX` em `App.tsx`, `Radio` em `AudioSettingsModal.tsx`) e 3 erros `Float32Array<ArrayBufferLike>` em `tone3000Amp.ts`
+- [ ] **Canvas não responsivo** — `YousicianGame.tsx` usa `window.innerWidth` hardcoded; precisa de ResizeObserver (@codex, `fix/canvas-responsivo`, implementado, aguardando revisão)
+- [ ] **Estado monolítico** — tudo em `App.tsx`; extrair para Context ou zustand (@codex, `fix/canvas-responsivo`, implementado, aguardando revisão)
+- [ ] **TONE3000 recriada a cada reconexão** — `stop()` destrói o engine, `start()` recria; causa clicks (@codex, `fix/canvas-responsivo`, implementado, aguardando revisão)
 
 ### Prioridade Média
 - [ ] **Sem persistência** — preferências não salvas em localStorage (device, canal, preset, última música)
@@ -153,12 +175,13 @@ Guitarra → USB Interface → getUserMedia(48kHz, raw, sem noise suppress)
 - [ ] **Performance do Canvas** — gradients e paths recriados a cada frame
 
 ### Prioridade Baixa
-- [ ] **App.css é lixo** — 185 linhas de CSS do template Vite, pode deletar
-- [ ] **Assets legados** — `src/assets/` tem arquivos do template, pode limpar
+- [x] **App.css é lixo** — removido
+- [x] **Assets legados** — `src/assets/` removido
 - [ ] **Sem testes** — zero unit/integration/e2e tests
 - [ ] **Metrônomo impreciso** — scheduling via React state, deveria usar AudioContext
 - [ ] **Parser de tabs incompleto** — não suporta bends, harmonics, tapping, ghost notes
 - [ ] **Sem PWA/offline** — sem service worker ou manifest
+- [ ] **Sem router** — SPA sem rotas; se crescer, avaliar react-router
 
 ---
 
