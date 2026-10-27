@@ -274,13 +274,22 @@ export class AudioEngine {
 
   /**
    * Resolve once the audio clock reaches `time`, using a silent source's `ended` event
-   * so the wait follows AudioContext time rather than a JS timer.
+   * so the wait follows AudioContext time rather than a JS timer. Also resolves if the context
+   * stops running, since its clock freezes and `ended` might never fire (nothing is audible then).
    */
   private static waitForAudioTime(ctx: AudioContext, time: number): Promise<void> {
     return new Promise((resolve) => {
       const clock = ctx.createConstantSource();
+      const finish = () => {
+        ctx.removeEventListener('statechange', onStateChange);
+        resolve();
+      };
+      const onStateChange = () => {
+        if (ctx.state !== 'running') finish();
+      };
+      ctx.addEventListener('statechange', onStateChange);
       clock.offset.value = 0;
-      clock.onended = () => resolve();
+      clock.onended = finish;
       clock.start();
       clock.stop(time);
     });
