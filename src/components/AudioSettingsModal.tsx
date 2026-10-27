@@ -9,7 +9,9 @@ import {
   X
 } from 'lucide-react';
 import { AudioEngine, type InputChannelMode } from '../services/audioEngine';
-import { useLatestPitch } from '../context/AudioSessionContext';
+import { useAudioSession, useLatestPitch } from '../context/AudioSessionContext';
+import { ErrorNotice } from './ErrorNotice';
+import { getAudioErrorMessage } from '../context/uiErrors';
 import { AMP_PRESETS, type AmpPresetId, type Tone3000Settings } from '../services/tone3000Amp';
 
 interface AudioSettingsModalProps {
@@ -35,6 +37,10 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
 }) => {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deviceError, setDeviceError] = useState<string | null>(null);
+  const [deviceAttempt, setDeviceAttempt] = useState(0);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const { isAudioRunning, startAudio } = useAudioSession();
   const tone3000 = audioEngine.getTone3000();
   const [toneSettings, setToneSettings] = useState<Tone3000Settings | null>(
     tone3000 ? tone3000.getSettings() : null
@@ -42,18 +48,28 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
+    let cancelled = false;
     setLoading(true);
+    setDeviceError(null);
     audioEngine.getAudioInputDevices().then((devs) => {
+      if (cancelled) return;
       setDevices(devs);
-      setLoading(false);
+      if (devs.length === 0) {
+        setDeviceError('Nenhuma entrada de áudio pôde ser listada. Conecte sua interface e confira a permissão de microfone no navegador.');
+      }
+    }).catch((err: unknown) => {
+      if (!cancelled) setDeviceError(getAudioErrorMessage(err));
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
     });
 
+    let unsubscribe: (() => void) | undefined;
     if (tone3000) {
       setToneSettings(tone3000.getSettings());
-      const unsub = tone3000.subscribe((s) => setToneSettings(s));
-      return () => unsub();
+      unsubscribe = tone3000.subscribe((s) => setToneSettings(s));
     }
-  }, [isOpen, audioEngine, tone3000]);
+    return () => { cancelled = true; unsubscribe?.(); };
+  }, [isOpen, audioEngine, tone3000, deviceAttempt]);
 
   if (!isOpen) return null;
 
@@ -82,6 +98,24 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
         </div>
 
         <div className="space-y-4">
+          {deviceError && (
+            <ErrorNotice message={deviceError} onDismiss={() => setDeviceError(null)}
+              actionLabel="Atualizar dispositivos" onAction={() => setDeviceAttempt((attempt) => attempt + 1)}
+              actionDisabled={loading} />
+          )}
+          {!isAudioRunning && (
+            <button type="button" disabled={isConnecting} onClick={async () => {
+              setIsConnecting(true);
+              try {
+                await startAudio();
+                setDeviceAttempt((attempt) => attempt + 1);
+              } finally {
+                setIsConnecting(false);
+              }
+            }} className="rounded-xl bg-cyan-600 px-4 py-2 text-sm font-bold text-white hover:bg-cyan-500 disabled:opacity-50 cursor-pointer">
+              {isConnecting ? 'Conectando...' : 'Conectar / tentar novamente'}
+            </button>
+          )}
           {/* TONE3000 Guitar Monitoring Card */}
           <div className="rounded-2xl border border-cyan-500/40 bg-gradient-to-b from-cyan-950/40 via-neutral-900 to-neutral-900 p-4 space-y-3">
             <div className="flex items-center justify-between">

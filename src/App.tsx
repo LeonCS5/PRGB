@@ -8,7 +8,9 @@ import {
   Zap,
   Loader2
 } from 'lucide-react';
-import { SongsterrApi, type NormalizedSongTab } from './services/songsterrApi';
+import type { NormalizedSongTab } from './services/songsterrApi';
+import { ErrorNotice } from './components/ErrorNotice';
+import { getSongMetadata, loadSongTrack } from './context/uiErrors';
 import { YousicianGame } from './components/YousicianGame';
 import { SongSearchModal } from './components/SongSearchModal';
 import { AudioSettingsModal } from './components/AudioSettingsModal';
@@ -33,6 +35,8 @@ const AppContent: React.FC = () => {
     audioEngine,
     tone3000,
     isAudioRunning,
+    audioError,
+    dismissAudioError,
     selectedDeviceId,
     channelMode,
     startAudio: handleStartAudio,
@@ -52,6 +56,8 @@ const AppContent: React.FC = () => {
   const [isLoadingDefault, setIsLoadingDefault] = useState(false);
   const [savedSong] = useState(() => readPreferences().lastSong);
   const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [restoreAttempt, setRestoreAttempt] = useState(0);
+  const [defaultError, setDefaultError] = useState<string | null>(null);
   const songSelectionVersion = useRef(0);
 
   useEffect(() => {
@@ -64,29 +70,26 @@ const AppContent: React.FC = () => {
     const version = songSelectionVersion.current;
     const restoreSong = async () => {
       try {
-        const meta = await SongsterrApi.getSongMeta(savedSong.songId);
+        const meta = await getSongMetadata(savedSong.songId);
         const trackIndex = meta.tracks.findIndex((track) => track.partId === savedSong.partId);
         if (trackIndex < 0) throw new Error('A faixa salva não está mais disponível.');
-        const rawTab = await SongsterrApi.getTrackTabJson(
-          meta.songId, meta.revisionId, meta.image, savedSong.partId
-        );
-        const normalized = SongsterrApi.normalizeTab(rawTab, meta, trackIndex);
+        const normalized = await loadSongTrack(meta, trackIndex);
         if (!cancelled && version === songSelectionVersion.current) setActiveTab(normalized);
       } catch (err) {
-        console.error('Failed to restore last song:', err);
         if (!cancelled && version === songSelectionVersion.current) {
-          setRestoreError('Não foi possível restaurar a última música. Busque uma música para continuar.');
+          setRestoreError(`Não foi possível restaurar a última música. ${err instanceof Error ? err.message : 'Busque uma música para continuar.'}`);
         }
       }
     };
     void restoreSong();
     return () => { cancelled = true; };
-  }, [savedSong]);
+  }, [savedSong, restoreAttempt]);
 
   // Load default song (Metallica - Creeping Death)
   const handleLoadDefaultSong = async () => {
     songSelectionVersion.current += 1;
     setRestoreError(null);
+    setDefaultError(null);
     setIsLoadingDefault(true);
     try {
       // Connect audio if not running
@@ -95,25 +98,16 @@ const AppContent: React.FC = () => {
       }
 
       const songId = 5194; // Creeping Death
-      const meta = await SongsterrApi.getSongMeta(songId);
+      const meta = await getSongMetadata(songId);
       // Track index 3: James Hetfield Rhythm Guitar
       const trackIndex = meta.tracks.length > 3 ? 3 : 0;
       const track = meta.tracks[trackIndex];
 
-      const rawTab = await SongsterrApi.getTrackTabJson(
-        meta.songId,
-        meta.revisionId,
-        meta.image,
-        track.partId
-      );
-
-      const normalized = SongsterrApi.normalizeTab(rawTab, meta, trackIndex);
+      const normalized = await loadSongTrack(meta, trackIndex);
       setActiveTab(normalized);
       savePreferences({ lastSong: { songId: meta.songId, partId: track.partId } });
     } catch (err) {
-      console.error('Failed to load default song:', err);
-      // Open search modal on failure
-      setIsSearchOpen(true);
+      setDefaultError(err instanceof Error ? err.message : 'Não foi possível carregar a música padrão. Busque outra música.');
     } finally {
       setIsLoadingDefault(false);
     }
@@ -121,6 +115,28 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="h-screen w-screen bg-slate-950 text-white font-sans overflow-hidden">
+      <div className="fixed inset-x-4 top-4 z-[100] mx-auto max-h-[50vh] max-w-xl space-y-3 overflow-y-auto">
+        {audioError && (
+          <ErrorNotice message={audioError} onDismiss={dismissAudioError}
+            actionLabel="Abrir configurações de áudio" onAction={() => {
+              setIsSearchOpen(false);
+              setIsTone3000RackOpen(false);
+              setIsSettingsOpen(true);
+              dismissAudioError();
+            }} />
+        )}
+        {restoreError && (
+          <ErrorNotice message={restoreError} onDismiss={() => setRestoreError(null)}
+            actionLabel="Tentar novamente" onAction={() => {
+              setRestoreError(null);
+              setRestoreAttempt((attempt) => attempt + 1);
+            }} />
+        )}
+        {defaultError && (
+          <ErrorNotice message={defaultError} onDismiss={() => setDefaultError(null)}
+            actionLabel="Tentar novamente" onAction={() => void handleLoadDefaultSong()} actionDisabled={isLoadingDefault} />
+        )}
+      </div>
       {activeTab ? (
         /* Yousician In-Game Interactive Mode */
         <>
@@ -167,7 +183,6 @@ const AppContent: React.FC = () => {
             </p>
 
             {/* Quick Actions */}
-            {restoreError && <p role="alert" className="text-sm text-amber-300">{restoreError}</p>}
             <div className="pt-6 flex flex-col sm:flex-row items-center justify-center gap-4">
               <button
                 onClick={handleLoadDefaultSong}
@@ -245,6 +260,7 @@ const AppContent: React.FC = () => {
         onSelectSong={(tab, song) => {
           songSelectionVersion.current += 1;
           setRestoreError(null);
+          setDefaultError(null);
           if (!isAudioRunning) handleStartAudio();
           setActiveTab(tab);
           savePreferences({ lastSong: song });
