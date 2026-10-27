@@ -156,6 +156,21 @@ Mais de um agente trabalha neste repositório. O humano coordena; os agentes seg
 5. **Revisão cruzada antes do merge.** O outro agente revisa `git diff main...<branch>` e roda `npm run lint && npm run build`. Merge em `main` só pelo humano, depois da revisão.
 6. **Ao terminar:** atualize o item do backlog (status + branch), deixe o worktree limpo e reporte o que foi verificado e o que ficou pendente.
 
+### Canal direto Claude → Codex
+
+O Claude Code orquestra: aciona o Codex pela CLI, lê a resposta e consolida para o humano. O humano continua atribuindo tarefas e aprovando merges.
+
+```bash
+# Nova conversa, sempre dentro do worktree do Codex
+codex exec -C ../PRGB-codex "<mensagem>"
+# Continuar a mesma conversa
+codex exec resume --last "<mensagem>"
+```
+
+- Toda mensagem do Claude ao Codex começa com `[Claude → Codex]` e diz: tarefa ou pedido de revisão, branch/commit, e o que devolver.
+- O Codex responde em texto ao final da execução: o que fez, o que verificou (lint/build), o que ficou pendente. Se precisar de algo do Claude, termina com `[Codex → Claude] <pergunta>`.
+- O Codex continua seguindo todo o protocolo acima (worktree próprio, sem merge, sem tocar na área do Claude).
+
 ---
 
 ## Problemas Conhecidos (Backlog de Melhoria)
@@ -167,11 +182,11 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 - **@codex:** `src/context/`, `src/components/`, `App.tsx` (UI, estado, canvas), PWA.
 - Item que cruza áreas espera o dono da outra área liberar o arquivo.
 
-### Rodada 1 — destravar o build
-- [ ] **Build quebrado** — `npm run build` falha: imports não usados (`VolumeX` em `App.tsx`, `Radio` em `AudioSettingsModal.tsx`) e 3 erros `Float32Array<ArrayBufferLike>` em `tone3000Amp.ts` (@claude, `claude/build-errors`, implementado em `bb447da`; **aguardando revisão @codex**)
-- [ ] **Canvas não responsivo** — `YousicianGame.tsx` usa `window.innerWidth` hardcoded; precisa de ResizeObserver (@codex, `fix/canvas-responsivo`, revisado por @claude: OK)
-- [ ] **Estado monolítico** — tudo em `App.tsx`; extrair para Context ou zustand (@codex, `fix/canvas-responsivo`, revisado por @claude: OK)
-- [ ] **TONE3000 recriada a cada reconexão** — `stop()` destrói o engine, `start()` recria; causa clicks (@codex, `fix/canvas-responsivo`, revisado por @claude: OK; não testado com interface real)
+### Rodada 1 — destravar o build (concluída, merge em `main` 4ba14eb)
+- [x] **Build quebrado** — tipos `Float32Array<ArrayBuffer>` em `tone3000Amp.ts` + imports não usados (@claude, `bb447da`, aprovado por @codex)
+- [x] **Canvas não responsivo** — ResizeObserver em `YousicianGame.tsx` (@codex, `77d100c`, aprovado por @claude)
+- [x] **Estado monolítico** — `AudioSessionContext` + `ModalsContext` (@codex, `77d100c`, aprovado por @claude)
+- [x] **TONE3000 recriada a cada reconexão** — AudioContext e amp reaproveitados entre `start()` (@codex, `77d100c`, aprovado por @claude; não testado com interface real)
 
 Observações da revisão de @claude (não bloqueiam o merge; viram tarefa na rodada 2):
 - `stop()` ainda desconecta `mergerNode → tone3000.inputNode` sem rampa de ganho; o amp não é mais recriado, mas pode sobrar click na troca de device/canal. → @claude, junto com pitch detection.
