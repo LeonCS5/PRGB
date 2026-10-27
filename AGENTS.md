@@ -26,6 +26,7 @@ npm install        # Instalar dependências
 npm run dev        # Dev server → http://localhost:5173
 npm run build      # Build produção (tsc + vite build)
 npm run lint       # Linter (oxlint, NÃO eslint)
+npm test           # Testes (Vitest) dos services
 ```
 
 **Requisitos:** Node 20+, navegador moderno com Web Audio API.
@@ -48,20 +49,23 @@ PRGB/
 │   ├── index.css                    # Tailwind CSS 4 import + global reset
 │   │
 │   ├── context/
-│   │   ├── AudioSessionContext.tsx  # AudioEngine, TONE3000, device/canal, pitch
-│   │   └── ModalsContext.tsx        # Estado aberto/fechado dos modais
+│   │   ├── AudioSessionContext.tsx  # AudioEngine, TONE3000, device/canal, erros de áudio; pitch em store próprio (useLatestPitch)
+│   │   ├── ModalsContext.tsx        # Estado aberto/fechado dos modais
+│   │   ├── preferences.ts           # localStorage versionado (prgb:prefs:v1): device, canal, TONE3000, última música
+│   │   └── uiErrors.ts              # Mensagens de erro pt-BR + carga/validação de música e tab
 │   │
 │   ├── components/
-│   │   ├── YousicianGame.tsx        # [730 linhas] Canvas game: rails, notas, scoring, particles
-│   │   ├── SongSearchModal.tsx      # [245 linhas] Modal: busca Songsterr + seleção de faixa
-│   │   ├── AudioSettingsModal.tsx   # [327 linhas] Modal: device selector, afinador, VU meter
-│   │   └── Tone3000AmpRack.tsx      # [393 linhas] Modal: rack completo do amp modeler
+│   │   ├── YousicianGame.tsx        # Canvas game: rails (camada estática em cache, DPR), notas, scoring, metrônomo
+│   │   ├── SongSearchModal.tsx      # Modal: busca Songsterr + seleção de faixa
+│   │   ├── AudioSettingsModal.tsx   # Modal: device selector, afinador, VU meter
+│   │   ├── Tone3000AmpRack.tsx      # Modal: rack completo do amp modeler
+│   │   └── ErrorNotice.tsx          # Aviso de erro dispensável com ação (role="alert")
 │   │
-│   ├── services/
-│   │   ├── audioEngine.ts           # [296 linhas] Captura mic, channel routing, pitch detection (NSDF)
-│   │   ├── tone3000Amp.ts           # [585 linhas] DSP chain: preamp→waveshaper→EQ→cab→reverb→output
-│   │   ├── songsterrApi.ts          # [254 linhas] API client: search, meta, tab download, normalizer
-│   │   └── synthAudio.ts            # [128 linhas] SFX: note synth, metronome clicks, hit/miss sounds
+│   ├── services/                    # Cada service tem um *.test.ts (Vitest) ao lado
+│   │   ├── audioEngine.ts           # Captura, channel routing, pitch (NSDF), corda/casa estimadas, fila start/stop com fade
+│   │   ├── tone3000Amp.ts           # DSP chain: preamp→waveshaper→EQ→cab→reverb→output
+│   │   ├── songsterrApi.ts          # API client + normalizer (cordas 0-indexed no JSON bruto, ties, grace, técnicas, beatGrid)
+│   │   └── synthAudio.ts            # SFX + MetronomeScheduler (cliques agendados no relógio do AudioContext)
 │
 └── public/
     ├── favicon.svg
@@ -153,7 +157,7 @@ Mais de um agente trabalha neste repositório. O humano coordena; os agentes seg
    Cada worktree precisa do seu próprio `npm install`.
 3. **Branch com prefixo do agente** (`codex/…`, `claude/…`), um problema por branch, commits no padrão `feat:`/`fix:`/`refactor:`/`docs:`/`chore:`.
 4. **Sem sobreposição de arquivos.** Dois agentes não editam o mesmo arquivo ao mesmo tempo. `tone3000Amp.ts`, `audioEngine.ts` e `App.tsx` ficam com um agente por vez.
-5. **Revisão cruzada antes do merge.** O outro agente revisa `git diff main...<branch>` e roda `npm run lint && npm run build`. Merge em `main` só pelo humano, depois da revisão.
+5. **Revisão cruzada antes do merge.** O outro agente revisa `git diff main...<branch>` e roda `npm run lint && npm run build && npm test`. Merge em `main` pelo humano, ou pelo Claude quando o humano delegar, sempre depois da revisão.
 6. **Ao terminar:** atualize o item do backlog (status + branch), deixe o worktree limpo e reporte o que foi verificado e o que ficou pendente.
 
 ### Canal direto Claude → Codex
@@ -161,15 +165,16 @@ Mais de um agente trabalha neste repositório. O humano coordena; os agentes seg
 O Claude Code orquestra: aciona o Codex pela CLI, lê a resposta e consolida para o humano. O humano continua atribuindo tarefas e aprovando merges.
 
 ```bash
-# Nova conversa, sempre dentro do worktree do Codex
-codex exec -C ../PRGB-codex "<mensagem>"
-# Continuar a mesma conversa
-codex exec resume --last "<mensagem>"
+# Tarefa (edita só o worktree do Codex); prompt via stdin, pois o PowerShell 5.1 quebra aspas em argumentos
+codex exec -C ../PRGB-codex -s workspace-write - < tarefa.md
+# Revisão (somente leitura) de uma branch do Claude
+codex exec -C ../PRGB-claude -s read-only - < revisao.md
 ```
 
 - Toda mensagem do Claude ao Codex começa com `[Claude → Codex]` e diz: tarefa ou pedido de revisão, branch/commit, e o que devolver.
-- O Codex responde em texto ao final da execução: o que fez, o que verificou (lint/build), o que ficou pendente. Se precisar de algo do Claude, termina com `[Codex → Claude] <pergunta>`.
-- O Codex continua seguindo todo o protocolo acima (worktree próprio, sem merge, sem tocar na área do Claude).
+- O Codex responde em texto ao final da execução: o que fez, o que verificou (lint/build/test), o que ficou pendente. Se precisar de algo do Claude, termina com `[Codex → Claude] <pergunta>`.
+- O Codex não faz commit (o sandbox não grava no `.git` do repositório principal): o Claude revisa, roda lint/build/test e commita com "Implemented by Codex, reviewed by Claude."
+- Arquivos sempre em UTF-8: já houve um "Ú" virando "?" numa gravação do Codex.
 
 ---
 
@@ -178,7 +183,7 @@ codex exec resume --last "<mensagem>"
 Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 
 ### Divisão de áreas
-- **@claude:** `src/services/` (áudio, DSP, pitch, parser) e testes.
+- **@claude:** `src/services/` (áudio, DSP, pitch, parser), testes, documentação e orquestração.
 - **@codex:** `src/context/`, `src/components/`, `App.tsx` (UI, estado, canvas), PWA.
 - Item que cruza áreas espera o dono da outra área liberar o arquivo.
 
@@ -188,24 +193,23 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 - [x] **Estado monolítico** — `AudioSessionContext` + `ModalsContext` (@codex, `77d100c`, aprovado por @claude)
 - [x] **TONE3000 recriada a cada reconexão** — AudioContext e amp reaproveitados entre `start()` (@codex, `77d100c`, aprovado por @claude; não testado com interface real)
 
-Observações da revisão de @claude (não bloqueiam o merge; viram tarefa na rodada 2):
-- `stop()` ainda desconecta `mergerNode → tone3000.inputNode` sem rampa de ganho; o amp não é mais recriado, mas pode sobrar click na troca de device/canal. → @claude, junto com pitch detection.
-- Canvas não considera `devicePixelRatio`; fica borrado em telas com escala 125–150%. → @codex, junto com performance do canvas.
-- `latestPitch` está no value do `AudioSessionContext` e muda a cada frame; todo consumidor re-renderiza ~60×/s. → @codex, junto com performance do canvas.
+### Rodada 2 (concluída, merge em `main` 1a77f10)
+- [x] **Pitch detection incompleta** — `stringEstimate`/`fretEstimate` (posição de casa mais baixa, `setTuning`), fade de ganho na reconexão, fila start/stop, fallback de device (@claude, aprovado por @codex)
+- [x] **Parser de tabs** — **bug grave corrigido**: cordas do JSON bruto do Songsterr são 0-indexed (todas as notas saíam uma corda acima); ties, grace notes, dead/ghost/tapping/harmonic/bend (@claude, aprovado por @codex)
+- [x] **Sem persistência** — `preferences.ts` (@codex, aprovado por @claude)
+- [x] **Performance do Canvas** — camada estática em OffscreenCanvas, Path2D, DPR, pitch fora do render do React (@codex, aprovado por @claude)
 
-### Rodada 2 — após merge da rodada 1 (em paralelo)
-- [ ] **Pitch detection incompleta** — `stringEstimate`/`fretEstimate` existem na interface mas nunca são populados (@claude)
-- [ ] **Parser de tabs incompleto** — não suporta bends, harmonics, tapping, ghost notes (@claude)
-- [ ] **Sem persistência** — preferências não salvas em localStorage (device, canal, preset, última música) (@codex)
-- [ ] **Performance do Canvas** — gradients e paths recriados a cada frame (@codex)
+### Rodada 3 (merge em `main` d3b7450)
+- [x] **Integração dos novos campos** — tuning da tab no pitch, device efetivo persistido, dead/grace/ghost sem penalidade, bend aceita base ou alvo (@codex, aprovado por @claude)
+- [x] **Sem tratamento de erros na UI** — `ErrorNotice` + `uiErrors.ts` (@codex, aprovado por @claude)
+- [x] **Metrônomo impreciso** — `beatGrid` (compasso + mudanças de tempo) e `MetronomeScheduler` no relógio do AudioContext; `initialBpm` corrigido (@claude)
+- [x] **Sem testes** — Vitest, 26 testes nos services; 12 deles falham no código anterior às correções (@claude)
+- [ ] **Sem PWA/offline** — manifest + service worker (@codex, em andamento)
 
-### Rodada 3
-- [ ] **Sem tratamento de erros na UI** — muitos `console.error` sem feedback visual (@codex, depois de persistência)
-- [ ] **Metrônomo impreciso** — scheduling via React state, deveria usar AudioContext (@claude, depois de performance do canvas: divide `YousicianGame.tsx`)
-- [ ] **Sem testes** — zero unit/integration/e2e tests; usar **Vitest** (aprovado) nos services (@claude)
-- [ ] **Sem PWA/offline** — sem service worker ou manifest (@codex)
-
-### Sem dono
+### Pendências conhecidas (sem dono)
+- [ ] **Teste com interface de áudio real e no navegador** — nada disso foi validado por humano: latência, clicks na troca de device, afinador, scoring tocando de verdade.
+- [ ] **`setCurrentTimeMs` a cada frame** — o `YousicianGame` ainda re-renderiza ~60×/s enquanto toca (posição da música em state). Mover para ref exige mexer no scoring; deixado de fora para não alterar comportamento.
+- [ ] **Songsterr em produção (não verificado)** — o proxy `/api/songsterr` e `/cdn/songsterr` só existe no dev server/preview do Vite; num deploy estático o app cai no fallback direto, que pode ser bloqueado por CORS.
 - [ ] **Sem router** — SPA sem rotas; se crescer, avaliar react-router
 
 ### Concluídos
