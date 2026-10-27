@@ -1,28 +1,42 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Music,
   Play,
   Sliders,
   Sparkles,
   Volume2,
-  VolumeX,
   Zap,
   Loader2
 } from 'lucide-react';
-import { SongsterrApi, type NormalizedSongTab } from './services/songsterrApi';
+import type { NormalizedSongTab } from './services/songsterrApi';
+import { ErrorNotice } from './components/ErrorNotice';
+import { getSongMetadata, loadSongTrack } from './context/uiErrors';
 import { YousicianGame } from './components/YousicianGame';
 import { SongSearchModal } from './components/SongSearchModal';
 import { AudioSettingsModal } from './components/AudioSettingsModal';
 import { Tone3000AmpRack } from './components/Tone3000AmpRack';
-import { AudioSessionProvider, useAudioSession } from './context/AudioSessionContext';
+import { AudioSessionProvider, useAudioSession, useLatestPitch } from './context/AudioSessionContext';
 import { ModalsProvider, useModals } from './context/ModalsContext';
+import { readPreferences, savePreferences } from './context/preferences';
+
+const LandingPitch: React.FC = () => {
+  const latestPitch = useLatestPitch();
+  if (!latestPitch) return null;
+  return (
+    <div className="text-xs font-mono text-cyan-300 flex items-center justify-center gap-1.5">
+      <Volume2 size={13} />
+      Última nota ouvida: <strong>{latestPitch.noteName}</strong> ({latestPitch.frequency} Hz)
+    </div>
+  );
+};
 
 const AppContent: React.FC = () => {
   const {
     audioEngine,
     tone3000,
     isAudioRunning,
-    latestPitch,
+    audioError,
+    dismissAudioError,
     selectedDeviceId,
     channelMode,
     startAudio: handleStartAudio,
@@ -40,9 +54,42 @@ const AppContent: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<NormalizedSongTab | null>(null);
   const [isLoadingDefault, setIsLoadingDefault] = useState(false);
+  const [savedSong] = useState(() => readPreferences().lastSong);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [restoreAttempt, setRestoreAttempt] = useState(0);
+  const [defaultError, setDefaultError] = useState<string | null>(null);
+  const songSelectionVersion = useRef(0);
+
+  useEffect(() => {
+    if (activeTab) audioEngine.setTuning(activeTab.tuning);
+  }, [activeTab, audioEngine]);
+
+  useEffect(() => {
+    if (!savedSong) return;
+    let cancelled = false;
+    const version = songSelectionVersion.current;
+    const restoreSong = async () => {
+      try {
+        const meta = await getSongMetadata(savedSong.songId);
+        const trackIndex = meta.tracks.findIndex((track) => track.partId === savedSong.partId);
+        if (trackIndex < 0) throw new Error('A faixa salva não está mais disponível.');
+        const normalized = await loadSongTrack(meta, trackIndex);
+        if (!cancelled && version === songSelectionVersion.current) setActiveTab(normalized);
+      } catch (err) {
+        if (!cancelled && version === songSelectionVersion.current) {
+          setRestoreError(`Não foi possível restaurar a última música. ${err instanceof Error ? err.message : 'Busque uma música para continuar.'}`);
+        }
+      }
+    };
+    void restoreSong();
+    return () => { cancelled = true; };
+  }, [savedSong, restoreAttempt]);
 
   // Load default song (Metallica - Creeping Death)
   const handleLoadDefaultSong = async () => {
+    songSelectionVersion.current += 1;
+    setRestoreError(null);
+    setDefaultError(null);
     setIsLoadingDefault(true);
     try {
       // Connect audio if not running
@@ -51,24 +98,16 @@ const AppContent: React.FC = () => {
       }
 
       const songId = 5194; // Creeping Death
-      const meta = await SongsterrApi.getSongMeta(songId);
+      const meta = await getSongMetadata(songId);
       // Track index 3: James Hetfield Rhythm Guitar
       const trackIndex = meta.tracks.length > 3 ? 3 : 0;
       const track = meta.tracks[trackIndex];
 
-      const rawTab = await SongsterrApi.getTrackTabJson(
-        meta.songId,
-        meta.revisionId,
-        meta.image,
-        track.partId
-      );
-
-      const normalized = SongsterrApi.normalizeTab(rawTab, meta, trackIndex);
+      const normalized = await loadSongTrack(meta, trackIndex);
       setActiveTab(normalized);
-    } catch (err: any) {
-      console.error('Failed to load default song:', err);
-      // Open search modal on failure
-      setIsSearchOpen(true);
+      savePreferences({ lastSong: { songId: meta.songId, partId: track.partId } });
+    } catch (err) {
+      setDefaultError(err instanceof Error ? err.message : 'Não foi possível carregar a música padrão. Busque outra música.');
     } finally {
       setIsLoadingDefault(false);
     }
@@ -76,16 +115,47 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="h-screen w-screen bg-slate-950 text-white font-sans overflow-hidden">
+      <div className="fixed inset-x-4 top-4 z-[100] mx-auto max-h-[50vh] max-w-xl space-y-3 overflow-y-auto">
+        {audioError && (
+          <ErrorNotice message={audioError} onDismiss={dismissAudioError}
+            actionLabel="Abrir configurações de áudio" onAction={() => {
+              setIsSearchOpen(false);
+              setIsTone3000RackOpen(false);
+              setIsSettingsOpen(true);
+              dismissAudioError();
+            }} />
+        )}
+        {restoreError && (
+          <ErrorNotice message={restoreError} onDismiss={() => setRestoreError(null)}
+            actionLabel="Tentar novamente" onAction={() => {
+              setRestoreError(null);
+              setRestoreAttempt((attempt) => attempt + 1);
+            }} />
+        )}
+        {defaultError && (
+          <ErrorNotice message={defaultError} onDismiss={() => setDefaultError(null)}
+            actionLabel="Tentar novamente" onAction={() => void handleLoadDefaultSong()} actionDisabled={isLoadingDefault} />
+        )}
+      </div>
       {activeTab ? (
         /* Yousician In-Game Interactive Mode */
-        <YousicianGame
-          tab={activeTab}
-          latestPitch={latestPitch}
-          onOpenSearch={() => setIsSearchOpen(true)}
-          onOpenAudioSettings={() => setIsSettingsOpen(true)}
-          tone3000={tone3000}
-          onOpenTone3000Rack={() => setIsTone3000RackOpen(true)}
-        />
+        <>
+          {!isAudioRunning && (
+            <button
+              onClick={() => void handleStartAudio()}
+              className="absolute left-1/2 top-20 z-30 -translate-x-1/2 rounded-xl bg-cyan-600 px-4 py-2 text-sm font-bold text-white hover:bg-cyan-500 cursor-pointer"
+            >
+              Conectar guitarra
+            </button>
+          )}
+          <YousicianGame
+            tab={activeTab}
+            onOpenSearch={() => setIsSearchOpen(true)}
+            onOpenAudioSettings={() => setIsSettingsOpen(true)}
+            tone3000={tone3000}
+            onOpenTone3000Rack={() => setIsTone3000RackOpen(true)}
+          />
+        </>
       ) : (
         /* Welcome / Landing Screen */
         <div className="flex h-full w-full flex-col items-center justify-center p-6 text-center relative overflow-hidden">
@@ -177,12 +247,7 @@ const AppContent: React.FC = () => {
                 </button>
               </div>
 
-              {latestPitch && (
-                <div className="text-xs font-mono text-cyan-300 flex items-center justify-center gap-1.5">
-                  <Volume2 size={13} />
-                  Última nota ouvida: <strong>{latestPitch.noteName}</strong> ({latestPitch.frequency} Hz)
-                </div>
-              )}
+              <LandingPitch />
             </div>
           </div>
         </div>
@@ -192,9 +257,13 @@ const AppContent: React.FC = () => {
       <SongSearchModal
         isOpen={isSearchOpen}
         onClose={() => setIsSearchOpen(false)}
-        onSelectSong={(tab) => {
+        onSelectSong={(tab, song) => {
+          songSelectionVersion.current += 1;
+          setRestoreError(null);
+          setDefaultError(null);
           if (!isAudioRunning) handleStartAudio();
           setActiveTab(tab);
+          savePreferences({ lastSong: song });
         }}
       />
 
@@ -207,7 +276,6 @@ const AppContent: React.FC = () => {
         currentChannelMode={channelMode}
         onDeviceChange={handleDeviceChange}
         onChannelModeChange={handleChannelModeChange}
-        latestPitch={latestPitch}
         onOpenTone3000Rack={() => setIsTone3000RackOpen(true)}
       />
 

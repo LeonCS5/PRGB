@@ -16,6 +16,33 @@ import { Tone3000AmpEngine } from './tone3000Amp';
 
 export type InputChannelMode = 'ch1' | 'ch2' | 'both';
 
+// MIDI notes per string, index 0 = string 1 (high E), same convention as Songsterr tabs
+export const STANDARD_TUNING = [64, 59, 55, 50, 45, 40];
+
+export interface StringFretPosition {
+  string: number; // 1-indexed, 1 = highest string
+  fret: number;
+}
+
+/**
+ * Estimate where a note was played on the neck. A pitch alone can't tell positions apart
+ * (e.g. E4 = string 1 fret 0 = string 2 fret 5), so this picks the lowest fret, which is
+ * how most players and tabs voice a single note.
+ */
+export function estimateStringAndFret(
+  midiNote: number,
+  tuning: number[] = STANDARD_TUNING,
+  maxFret = 24
+): StringFretPosition | null {
+  let best: StringFretPosition | null = null;
+  for (let i = 0; i < tuning.length; i++) {
+    const fret = midiNote - tuning[i];
+    if (fret < 0 || fret > maxFret) continue;
+    if (!best || fret < best.fret) best = { string: i + 1, fret };
+  }
+  return best;
+}
+
 export class AudioEngine {
   private audioContext: AudioContext | null = null;
   private mediaStream: MediaStream | null = null;
@@ -24,13 +51,17 @@ export class AudioEngine {
   private mergerNode: ChannelMergerNode | null = null;
   private analyserNode: AnalyserNode | null = null;
   private tone3000: Tone3000AmpEngine | null = null;
+  // Lives as long as the AudioContext; fades the amp input so (re)connections don't click
+  private monitorGain: GainNode | null = null;
   private buffer: Float32Array<ArrayBuffer> | null = null;
   private isRunning = false;
   private animationFrameId: number | null = null;
   private onPitchCallback: ((pitch: DetectedPitch | null) => void) | null = null;
+  private pending: Promise<void> = Promise.resolve();
 
   private selectedDeviceId = '';
   private channelMode: InputChannelMode = 'both';
+  private tuning: number[] = STANDARD_TUNING;
 
   // Guitar frequency bounds (E1 ~ 41 Hz for 4-string bass up to B5 ~ 987 Hz for guitar)
   private readonly MIN_FREQ = 40;
@@ -38,6 +69,7 @@ export class AudioEngine {
   private readonly BUFFER_SIZE = 2048;
 
   private static readonly NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  private static readonly FADE_SEC = 0.015;
 
   constructor() {
     // Audio engine initialized in idle state
@@ -58,28 +90,49 @@ export class AudioEngine {
   }
 
   /**
+   * Run start/stop/dispose one at a time. Each awaits getUserMedia or the fade-out, and an
+   * overlapping call (e.g. device then channel change) would otherwise open a second stream.
+   */
+  private enqueue(operation: () => Promise<void>): Promise<void> {
+    const run = this.pending.then(operation);
+    this.pending = run.catch(() => undefined);
+    return run;
+  }
+
+  /**
    * Start listening to the audio interface / microphone with raw studio settings
    */
-  async start(
+  start(
     deviceId?: string,
     channelMode: InputChannelMode = 'both',
     onPitch?: (pitch: DetectedPitch | null) => void
   ): Promise<void> {
-    if (this.isRunning) await this.stop();
+    return this.enqueue(() => this.startNow(deviceId, channelMode, onPitch));
+  }
 
-    if (deviceId) this.selectedDeviceId = deviceId;
+  private async startNow(
+    deviceId: string | undefined,
+    channelMode: InputChannelMode,
+    onPitch: ((pitch: DetectedPitch | null) => void) | undefined
+  ): Promise<void> {
+    if (this.isRunning) await this.stopNow();
+
+    // '' is a valid choice (system default), so only an omitted id keeps the previous device
+    if (deviceId !== undefined) this.selectedDeviceId = deviceId;
     this.channelMode = channelMode;
     if (onPitch) this.onPitchCallback = onPitch;
 
     // The AudioContext (and the TONE3000 chain bound to it) is reused across
     // reconnections so switching device/channel doesn't rebuild the amp or click.
     if (!this.audioContext || this.audioContext.state === 'closed') {
+      // webkitAudioContext (old Safari) isn't part of the DOM lib typings
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       this.audioContext = new AudioContextClass({
         sampleRate: 48000,
         latencyHint: 'interactive'
       });
       this.tone3000 = null;
+      this.monitorGain = null;
     }
 
     if (this.audioContext.state === 'suspended') {
@@ -87,9 +140,9 @@ export class AudioEngine {
     }
 
     // Constraints configured for clean guitar input without Windows noise suppression distortion
-    const constraints: MediaStreamConstraints = {
+    const buildConstraints = (id: string): MediaStreamConstraints => ({
       audio: {
-        deviceId: this.selectedDeviceId ? { exact: this.selectedDeviceId } : undefined,
+        deviceId: id ? { exact: id } : undefined,
         channelCount: { ideal: 2 },
         echoCancellation: false,
         noiseSuppression: false,
@@ -97,9 +150,19 @@ export class AudioEngine {
         sampleRate: { ideal: 48000 }
       },
       video: false
-    };
+    });
 
-    this.mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+    try {
+      this.mediaStream = await navigator.mediaDevices.getUserMedia(buildConstraints(this.selectedDeviceId));
+    } catch (err) {
+      // A remembered interface that was unplugged fails the exact deviceId; fall back to the default input
+      const deviceMissing =
+        err instanceof DOMException && (err.name === 'OverconstrainedError' || err.name === 'NotFoundError');
+      if (!this.selectedDeviceId || !deviceMissing) throw err;
+      console.warn('Selected audio device unavailable, using system default:', err);
+      this.selectedDeviceId = '';
+      this.mediaStream = await navigator.mediaDevices.getUserMedia(buildConstraints(''));
+    }
     this.sourceNode = this.audioContext.createMediaStreamSource(this.mediaStream);
 
     // Channel Routing (Input 1 / Input 2 / Stereo)
@@ -131,7 +194,13 @@ export class AudioEngine {
     if (!this.tone3000) {
       this.tone3000 = new Tone3000AmpEngine(this.audioContext);
     }
-    this.mergerNode.connect(this.tone3000.inputNode);
+    if (!this.monitorGain) {
+      this.monitorGain = this.audioContext.createGain();
+      this.monitorGain.gain.value = 0;
+      this.monitorGain.connect(this.tone3000.inputNode);
+    }
+    this.mergerNode.connect(this.monitorGain);
+    this.rampMonitorGain(1);
 
     this.isRunning = true;
     this.loopDetection();
@@ -140,11 +209,21 @@ export class AudioEngine {
   /**
    * Stop audio capture. Keeps the AudioContext and TONE3000 chain alive for the next start().
    */
-  async stop(): Promise<void> {
+  stop(): Promise<void> {
+    return this.enqueue(() => this.stopNow());
+  }
+
+  private async stopNow(): Promise<void> {
     this.isRunning = false;
     if (this.animationFrameId !== null) {
       cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = null;
+    }
+
+    // Fade out before cutting the stream; an abrupt disconnect is heard as a click
+    const fadeEnd = this.rampMonitorGain(0);
+    if (fadeEnd !== null && this.audioContext) {
+      await AudioEngine.waitForAudioTime(this.audioContext, fadeEnd);
     }
 
     if (this.mediaStream) {
@@ -166,13 +245,61 @@ export class AudioEngine {
   /**
    * Stop capture and fully release the AudioContext and TONE3000 chain
    */
-  async dispose(): Promise<void> {
-    await this.stop();
-    if (this.audioContext && this.audioContext.state !== 'closed') {
-      await this.audioContext.close();
-    }
-    this.audioContext = null;
-    this.tone3000 = null;
+  dispose(): Promise<void> {
+    return this.enqueue(async () => {
+      await this.stopNow();
+      if (this.audioContext && this.audioContext.state !== 'closed') {
+        await this.audioContext.close();
+      }
+      this.audioContext = null;
+      this.tone3000 = null;
+      this.monitorGain = null;
+    });
+  }
+
+  /**
+   * Ramp the amp input gain on the audio clock. Returns the ramp end time, or null when the
+   * context isn't running (nothing is audible, and the clock wouldn't advance to finish it).
+   */
+  private rampMonitorGain(target: number): number | null {
+    const ctx = this.audioContext;
+    if (!ctx || !this.monitorGain || ctx.state !== 'running') return null;
+    const now = ctx.currentTime;
+    const gain = this.monitorGain.gain;
+    gain.cancelScheduledValues(now);
+    gain.setValueAtTime(gain.value, now);
+    gain.linearRampToValueAtTime(target, now + AudioEngine.FADE_SEC);
+    return now + AudioEngine.FADE_SEC;
+  }
+
+  /**
+   * Resolve once the audio clock reaches `time`, using a silent source's `ended` event
+   * so the wait follows AudioContext time rather than a JS timer. Also resolves if the context
+   * stops running, since its clock freezes and `ended` might never fire (nothing is audible then).
+   */
+  private static waitForAudioTime(ctx: AudioContext, time: number): Promise<void> {
+    return new Promise((resolve) => {
+      const clock = ctx.createConstantSource();
+      const finish = () => {
+        ctx.removeEventListener('statechange', onStateChange);
+        resolve();
+      };
+      const onStateChange = () => {
+        if (ctx.state !== 'running') finish();
+      };
+      ctx.addEventListener('statechange', onStateChange);
+      clock.offset.value = 0;
+      clock.onended = finish;
+      clock.start();
+      clock.stop(time);
+    });
+  }
+
+  /**
+   * Tuning used for string/fret estimates (MIDI per string, string 1 first). Defaults to standard.
+   */
+  setTuning(tuning: number[]): void {
+    this.tuning = tuning.length > 0 ? [...tuning] : STANDARD_TUNING;
   }
 
   /**
@@ -283,6 +410,7 @@ export class AudioEngine {
     const cents = Math.round((midiFloat - midiNote) * 100);
 
     const noteName = AudioEngine.getNoteName(midiNote);
+    const position = estimateStringAndFret(midiNote, this.tuning);
 
     return {
       frequency: Math.round(frequency * 10) / 10,
@@ -290,7 +418,9 @@ export class AudioEngine {
       noteName,
       cents,
       clarity: Math.min(1, Math.round(maxValue * 100) / 100),
-      volume: Math.min(1, Math.round(volume * 100) / 100)
+      volume: Math.min(1, Math.round(volume * 100) / 100),
+      stringEstimate: position?.string,
+      fretEstimate: position?.fret
     };
   }
 
@@ -302,6 +432,13 @@ export class AudioEngine {
 
   getIsRunning(): boolean {
     return this.isRunning;
+  }
+
+  /**
+   * Device actually in use; '' after falling back to the system default
+   */
+  getSelectedDeviceId(): string {
+    return this.selectedDeviceId;
   }
 
   getTone3000(): Tone3000AmpEngine | null {

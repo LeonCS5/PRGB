@@ -6,10 +6,12 @@ import {
   CheckCircle2,
   Sliders,
   Zap,
-  Radio,
   X
 } from 'lucide-react';
-import { AudioEngine, type DetectedPitch, type InputChannelMode } from '../services/audioEngine';
+import { AudioEngine, type InputChannelMode } from '../services/audioEngine';
+import { useAudioSession, useLatestPitch } from '../context/AudioSessionContext';
+import { ErrorNotice } from './ErrorNotice';
+import { getAudioErrorMessage } from '../context/uiErrors';
 import { AMP_PRESETS, type AmpPresetId, type Tone3000Settings } from '../services/tone3000Amp';
 
 interface AudioSettingsModalProps {
@@ -20,7 +22,6 @@ interface AudioSettingsModalProps {
   currentChannelMode: InputChannelMode;
   onDeviceChange: (deviceId: string) => void;
   onChannelModeChange: (mode: InputChannelMode) => void;
-  latestPitch: DetectedPitch | null;
   onOpenTone3000Rack?: () => void;
 }
 
@@ -32,11 +33,14 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
   currentChannelMode,
   onDeviceChange,
   onChannelModeChange,
-  latestPitch,
   onOpenTone3000Rack
 }) => {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deviceError, setDeviceError] = useState<string | null>(null);
+  const [deviceAttempt, setDeviceAttempt] = useState(0);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const { isAudioRunning, startAudio } = useAudioSession();
   const tone3000 = audioEngine.getTone3000();
   const [toneSettings, setToneSettings] = useState<Tone3000Settings | null>(
     tone3000 ? tone3000.getSettings() : null
@@ -44,22 +48,31 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
+    let cancelled = false;
     setLoading(true);
+    setDeviceError(null);
     audioEngine.getAudioInputDevices().then((devs) => {
+      if (cancelled) return;
       setDevices(devs);
-      setLoading(false);
+      if (devs.length === 0) {
+        setDeviceError('Nenhuma entrada de áudio pôde ser listada. Conecte sua interface e confira a permissão de microfone no navegador.');
+      }
+    }).catch((err: unknown) => {
+      if (!cancelled) setDeviceError(getAudioErrorMessage(err));
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
     });
 
+    let unsubscribe: (() => void) | undefined;
     if (tone3000) {
       setToneSettings(tone3000.getSettings());
-      const unsub = tone3000.subscribe((s) => setToneSettings(s));
-      return () => unsub();
+      unsubscribe = tone3000.subscribe((s) => setToneSettings(s));
     }
-  }, [isOpen, audioEngine, tone3000]);
+    return () => { cancelled = true; unsubscribe?.(); };
+  }, [isOpen, audioEngine, tone3000, deviceAttempt]);
 
   if (!isOpen) return null;
 
-  const volumePercent = latestPitch ? Math.round(latestPitch.volume * 100) : 0;
   const isMonitoring = toneSettings?.isMonitoringEnabled ?? true;
 
   return (
@@ -85,6 +98,24 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
         </div>
 
         <div className="space-y-4">
+          {deviceError && (
+            <ErrorNotice message={deviceError} onDismiss={() => setDeviceError(null)}
+              actionLabel="Atualizar dispositivos" onAction={() => setDeviceAttempt((attempt) => attempt + 1)}
+              actionDisabled={loading} />
+          )}
+          {!isAudioRunning && (
+            <button type="button" disabled={isConnecting} onClick={async () => {
+              setIsConnecting(true);
+              try {
+                await startAudio();
+                setDeviceAttempt((attempt) => attempt + 1);
+              } finally {
+                setIsConnecting(false);
+              }
+            }} className="rounded-xl bg-cyan-600 px-4 py-2 text-sm font-bold text-white hover:bg-cyan-500 disabled:opacity-50 cursor-pointer">
+              {isConnecting ? 'Conectando...' : 'Conectar / tentar novamente'}
+            </button>
+          )}
           {/* TONE3000 Guitar Monitoring Card */}
           <div className="rounded-2xl border border-cyan-500/40 bg-gradient-to-b from-cyan-950/40 via-neutral-900 to-neutral-900 p-4 space-y-3">
             <div className="flex items-center justify-between">
@@ -245,58 +276,7 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
           </div>
 
           {/* Live Level VU Meter */}
-          <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-4 space-y-3">
-            <div className="flex items-center justify-between text-xs">
-              <span className="flex items-center gap-1.5 text-neutral-400">
-                <Volume2 size={15} />
-                Sinal de Entrada da Interface (VU Meter)
-              </span>
-              <span className="font-mono font-bold text-cyan-400">{volumePercent}%</span>
-            </div>
-            <div className="h-3 w-full overflow-hidden rounded-full bg-neutral-800 p-0.5">
-              <div
-                className="h-full rounded-full transition-all duration-75 bg-gradient-to-r from-emerald-500 via-amber-400 to-rose-500"
-                style={{ width: `${Math.min(100, volumePercent * 2.5)}%` }}
-              />
-            </div>
-
-            {/* Live Tuner Pitch Display */}
-            <div className="mt-2 pt-3 border-t border-neutral-800/80 flex items-center justify-between">
-              <div>
-                <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-bold block">
-                  Afinador em Tempo Real
-                </span>
-                <div className="flex items-baseline gap-2 mt-0.5">
-                  <span className="text-2xl font-black font-mono text-white">
-                    {latestPitch ? latestPitch.noteName : '--'}
-                  </span>
-                  <span className="text-xs text-neutral-400 font-mono">
-                    {latestPitch ? `${latestPitch.frequency} Hz` : 'Toque uma corda'}
-                  </span>
-                </div>
-              </div>
-
-              {latestPitch && (
-                <div className="text-right">
-                  <span
-                    className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full ${
-                      Math.abs(latestPitch.cents) <= 5
-                        ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/50'
-                        : 'bg-neutral-800 text-neutral-300'
-                    }`}
-                  >
-                    {Math.abs(latestPitch.cents) <= 5 ? (
-                      <>
-                        <CheckCircle2 size={13} /> AFINADO
-                      </>
-                    ) : (
-                      `${latestPitch.cents > 0 ? '+' : ''}${latestPitch.cents} cents`
-                    )}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
+          <AudioInputMeter />
         </div>
 
         <div className="mt-6 flex items-center justify-between">
@@ -320,6 +300,65 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
             Pronto para Tocar
           </button>
         </div>
+      </div>
+    </div>
+  );
+};
+
+const AudioInputMeter: React.FC = () => {
+  const latestPitch = useLatestPitch();
+  const volumePercent = latestPitch ? Math.round(latestPitch.volume * 100) : 0;
+  return (
+    <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-4 space-y-3">
+      <div className="flex items-center justify-between text-xs">
+        <span className="flex items-center gap-1.5 text-neutral-400">
+          <Volume2 size={15} />
+          Sinal de Entrada da Interface (VU Meter)
+        </span>
+        <span className="font-mono font-bold text-cyan-400">{volumePercent}%</span>
+      </div>
+      <div className="h-3 w-full overflow-hidden rounded-full bg-neutral-800 p-0.5">
+        <div
+          className="h-full rounded-full transition-all duration-75 bg-gradient-to-r from-emerald-500 via-amber-400 to-rose-500"
+          style={{ width: `${Math.min(100, volumePercent * 2.5)}%` }}
+        />
+      </div>
+
+      {/* Live Tuner Pitch Display */}
+      <div className="mt-2 pt-3 border-t border-neutral-800/80 flex items-center justify-between">
+        <div>
+          <span className="text-[11px] uppercase tracking-wider text-neutral-500 font-bold block">
+            Afinador em Tempo Real
+          </span>
+          <div className="flex items-baseline gap-2 mt-0.5">
+            <span className="text-2xl font-black font-mono text-white">
+              {latestPitch ? latestPitch.noteName : '--'}
+            </span>
+            <span className="text-xs text-neutral-400 font-mono">
+              {latestPitch ? `${latestPitch.frequency} Hz` : 'Toque uma corda'}
+            </span>
+          </div>
+        </div>
+
+        {latestPitch && (
+          <div className="text-right">
+            <span
+              className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-full ${
+                Math.abs(latestPitch.cents) <= 5
+                  ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-500/50'
+                  : 'bg-neutral-800 text-neutral-300'
+              }`}
+            >
+              {Math.abs(latestPitch.cents) <= 5 ? (
+                <>
+                  <CheckCircle2 size={13} /> AFINADO
+                </>
+              ) : (
+                `${latestPitch.cents > 0 ? '+' : ''}${latestPitch.cents} cents`
+              )}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

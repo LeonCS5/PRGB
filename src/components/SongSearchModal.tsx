@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { Search, Music, Disc, Loader2, Sparkles, X, ChevronRight } from 'lucide-react';
 import { SongsterrApi, type SongsterrSearchResult, type SongsterrMeta, type NormalizedSongTab } from '../services/songsterrApi';
+import type { SavedSong } from '../context/preferences';
+import { ErrorNotice } from './ErrorNotice';
+import { getSongMetadata, loadSongTrack } from '../context/uiErrors';
 
 interface SongSearchModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelectSong: (tab: NormalizedSongTab) => void;
+  onSelectSong: (tab: NormalizedSongTab, song: SavedSong) => void;
 }
 
 const FEATURED_SONGS = [
@@ -28,25 +31,29 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
   const [selectedSongMeta, setSelectedSongMeta] = useState<SongsterrMeta | null>(null);
   const [isLoadingTab, setIsLoadingTab] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [retry, setRetry] = useState<(() => void) | null>(null);
 
   if (!isOpen) return null;
 
-  const handleSearch = async (e?: React.FormEvent) => {
+  const handleSearch = async (e?: React.FormEvent, searchQuery = query) => {
     if (e) e.preventDefault();
-    if (!query.trim()) return;
+    if (!searchQuery.trim()) return;
 
     setIsSearching(true);
     setError(null);
+    setRetry(null);
     setSelectedSongMeta(null);
 
     try {
-      const data = await SongsterrApi.searchSongs(query);
+      const data = await SongsterrApi.searchSongs(searchQuery);
       setResults(data);
       if (data.length === 0) {
         setError('Nenhuma música encontrada com esse nome no Songsterr.');
       }
-    } catch (err: any) {
-      setError(`Erro na busca: ${err.message || 'Falha ao conectar com o Songsterr'}`);
+    } catch {
+      setResults([]);
+      setError('Não foi possível buscar músicas no Songsterr. Verifique sua conexão e tente novamente.');
+      setRetry(() => () => void handleSearch(undefined, searchQuery));
     } finally {
       setIsSearching(false);
     }
@@ -55,11 +62,13 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
   const handleSelectSong = async (songId: number) => {
     setIsLoadingTab(true);
     setError(null);
+    setRetry(null);
     try {
-      const meta = await SongsterrApi.getSongMeta(songId);
+      const meta = await getSongMetadata(songId);
       setSelectedSongMeta(meta);
-    } catch (err: any) {
-      setError(`Falha ao obter dados da música: ${err.message}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Não foi possível obter os dados da música no Songsterr.');
+      setRetry(() => () => void handleSelectSong(songId));
     } finally {
       setIsLoadingTab(false);
     }
@@ -70,21 +79,16 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
 
     setIsLoadingTab(true);
     setError(null);
+    setRetry(null);
 
     try {
       const track = selectedSongMeta.tracks[trackIndex];
-      const rawTab = await SongsterrApi.getTrackTabJson(
-        selectedSongMeta.songId,
-        selectedSongMeta.revisionId,
-        selectedSongMeta.image,
-        track.partId
-      );
-
-      const normalized = SongsterrApi.normalizeTab(rawTab, selectedSongMeta, trackIndex);
-      onSelectSong(normalized);
+      const normalized = await loadSongTrack(selectedSongMeta, trackIndex);
+      onSelectSong(normalized, { songId: selectedSongMeta.songId, partId: track.partId });
       onClose();
-    } catch (err: any) {
-      setError(`Falha ao carregar a tablatura do CDN: ${err.message}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Não foi possível carregar a tablatura. Escolha outra faixa.');
+      setRetry(() => () => void handleSelectTrack(trackIndex));
     } finally {
       setIsLoadingTab(false);
     }
@@ -124,7 +128,7 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
           <Search className="absolute left-3.5 top-3.5 text-neutral-400" size={18} />
           <button
             type="submit"
-            disabled={isSearching}
+            disabled={isSearching || isLoadingTab}
             className="absolute right-2 top-2 rounded-lg bg-gradient-to-r from-rose-500 to-amber-500 px-4 py-1.5 text-xs font-bold text-white shadow-md hover:from-rose-400 hover:to-amber-400 transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
           >
             {isSearching ? <Loader2 size={14} className="animate-spin" /> : 'Buscar'}
@@ -132,8 +136,9 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
         </form>
 
         {error && (
-          <div className="mb-4 rounded-xl border border-rose-900/50 bg-rose-950/40 p-3 text-xs text-rose-300">
-            {error}
+          <div className="mb-4">
+            <ErrorNotice message={error} onDismiss={() => { setError(null); setRetry(null); }}
+              actionLabel="Tentar novamente" onAction={retry ?? undefined} actionDisabled={isSearching || isLoadingTab} />
           </div>
         )}
 
@@ -148,7 +153,8 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
                   <p className="text-xs text-neutral-400">{selectedSongMeta.artist}</p>
                 </div>
                 <button
-                  onClick={() => setSelectedSongMeta(null)}
+                  onClick={() => { setSelectedSongMeta(null); setError(null); setRetry(null); }}
+                  disabled={isLoadingTab}
                   className="text-xs text-rose-400 hover:underline cursor-pointer"
                 >
                   Voltar à lista
@@ -199,7 +205,7 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
                 <button
                   key={song.songId}
                   onClick={() => handleSelectSong(song.songId)}
-                  disabled={isLoadingTab}
+                  disabled={isLoadingTab || isSearching}
                   className="w-full flex items-center justify-between p-3 rounded-xl border border-neutral-800 bg-neutral-800/40 hover:border-neutral-600 hover:bg-neutral-800 transition text-left cursor-pointer"
                 >
                   <div className="flex items-center gap-3">
@@ -227,7 +233,7 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
                   <button
                     key={song.id}
                     onClick={() => handleSelectSong(song.id)}
-                    disabled={isLoadingTab}
+                    disabled={isLoadingTab || isSearching}
                     className="flex flex-col p-3 rounded-xl border border-neutral-800 bg-neutral-800/30 hover:border-amber-500/50 hover:bg-neutral-800 transition text-left cursor-pointer"
                   >
                     <span className="text-sm font-bold text-white">{song.title}</span>
