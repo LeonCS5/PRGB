@@ -57,6 +57,7 @@ export class AudioEngine {
   private isRunning = false;
   private animationFrameId: number | null = null;
   private onPitchCallback: ((pitch: DetectedPitch | null) => void) | null = null;
+  private pending: Promise<void> = Promise.resolve();
 
   private selectedDeviceId = '';
   private channelMode: InputChannelMode = 'both';
@@ -89,14 +90,32 @@ export class AudioEngine {
   }
 
   /**
+   * Run start/stop/dispose one at a time. Each awaits getUserMedia or the fade-out, and an
+   * overlapping call (e.g. device then channel change) would otherwise open a second stream.
+   */
+  private enqueue(operation: () => Promise<void>): Promise<void> {
+    const run = this.pending.then(operation);
+    this.pending = run.catch(() => undefined);
+    return run;
+  }
+
+  /**
    * Start listening to the audio interface / microphone with raw studio settings
    */
-  async start(
+  start(
     deviceId?: string,
     channelMode: InputChannelMode = 'both',
     onPitch?: (pitch: DetectedPitch | null) => void
   ): Promise<void> {
-    if (this.isRunning) await this.stop();
+    return this.enqueue(() => this.startNow(deviceId, channelMode, onPitch));
+  }
+
+  private async startNow(
+    deviceId: string | undefined,
+    channelMode: InputChannelMode,
+    onPitch: ((pitch: DetectedPitch | null) => void) | undefined
+  ): Promise<void> {
+    if (this.isRunning) await this.stopNow();
 
     // '' is a valid choice (system default), so only an omitted id keeps the previous device
     if (deviceId !== undefined) this.selectedDeviceId = deviceId;
@@ -190,7 +209,11 @@ export class AudioEngine {
   /**
    * Stop audio capture. Keeps the AudioContext and TONE3000 chain alive for the next start().
    */
-  async stop(): Promise<void> {
+  stop(): Promise<void> {
+    return this.enqueue(() => this.stopNow());
+  }
+
+  private async stopNow(): Promise<void> {
     this.isRunning = false;
     if (this.animationFrameId !== null) {
       cancelAnimationFrame(this.animationFrameId);
@@ -222,14 +245,16 @@ export class AudioEngine {
   /**
    * Stop capture and fully release the AudioContext and TONE3000 chain
    */
-  async dispose(): Promise<void> {
-    await this.stop();
-    if (this.audioContext && this.audioContext.state !== 'closed') {
-      await this.audioContext.close();
-    }
-    this.audioContext = null;
-    this.tone3000 = null;
-    this.monitorGain = null;
+  dispose(): Promise<void> {
+    return this.enqueue(async () => {
+      await this.stopNow();
+      if (this.audioContext && this.audioContext.state !== 'closed') {
+        await this.audioContext.close();
+      }
+      this.audioContext = null;
+      this.tone3000 = null;
+      this.monitorGain = null;
+    });
   }
 
   /**
