@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { AudioEngine, type DetectedPitch, type InputChannelMode } from '../services/audioEngine';
 import type { Tone3000AmpEngine } from '../services/tone3000Amp';
 import { readPreferences, savePreferences } from './preferences';
@@ -7,13 +7,44 @@ export interface AudioSessionValue {
   audioEngine: AudioEngine;
   tone3000: Tone3000AmpEngine | null;
   isAudioRunning: boolean;
-  latestPitch: DetectedPitch | null;
+  getLatestPitch: () => DetectedPitch | null;
   selectedDeviceId: string;
   channelMode: InputChannelMode;
   startAudio: (deviceId?: string, mode?: InputChannelMode) => Promise<void>;
   changeDevice: (deviceId: string) => Promise<void>;
   changeChannelMode: (mode: InputChannelMode) => Promise<void>;
 }
+
+interface PitchStore {
+  getSnapshot: () => DetectedPitch | null;
+  subscribe: (listener: () => void) => () => void;
+  publish: (pitch: DetectedPitch | null) => void;
+}
+
+const PitchContext = createContext<PitchStore | null>(null);
+
+const createPitchStore = (): PitchStore => {
+  let latestPitch: DetectedPitch | null = null;
+  const listeners = new Set<() => void>();
+  return {
+    getSnapshot: () => latestPitch,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => { listeners.delete(listener); };
+    },
+    publish: (pitch) => {
+      if (Object.is(latestPitch, pitch)) return;
+      latestPitch = pitch;
+      listeners.forEach((listener) => listener());
+    }
+  };
+};
+
+export const useLatestPitch = (): DetectedPitch | null => {
+  const store = useContext(PitchContext);
+  if (!store) throw new Error('useLatestPitch must be used within AudioSessionProvider');
+  return useSyncExternalStore(store.subscribe, store.getSnapshot);
+};
 
 const AudioSessionContext = createContext<AudioSessionValue | null>(null);
 
@@ -23,7 +54,7 @@ export const AudioSessionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const initializedAmp = useRef<Tone3000AmpEngine | null>(null);
 
   const [isAudioRunning, setIsAudioRunning] = useState(false);
-  const [latestPitch, setLatestPitch] = useState<DetectedPitch | null>(null);
+  const [pitchStore] = useState(createPitchStore);
   const [selectedDeviceId, setSelectedDeviceId] = useState(preferences.deviceId);
   const [channelMode, setChannelMode] = useState<InputChannelMode>(preferences.channelMode);
   const [tone3000, setTone3000] = useState<Tone3000AmpEngine | null>(null);
@@ -31,7 +62,7 @@ export const AudioSessionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const startAudio = useCallback(
     async (deviceId = selectedDeviceId, mode = channelMode) => {
       try {
-        await audioEngine.start(deviceId, mode, setLatestPitch);
+        await audioEngine.start(deviceId, mode, pitchStore.publish);
         const amp = audioEngine.getTone3000();
         if (amp && initializedAmp.current !== amp) {
           const settings = readPreferences().tone3000 ?? preferences.tone3000;
@@ -60,7 +91,7 @@ export const AudioSessionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         alert('Permissão de microfone/áudio necessária para escutar a interface.');
       }
     },
-    [audioEngine, selectedDeviceId, channelMode, preferences]
+    [audioEngine, selectedDeviceId, channelMode, preferences, pitchStore]
   );
 
   const changeDevice = useCallback(
@@ -96,17 +127,21 @@ export const AudioSessionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       audioEngine,
       tone3000,
       isAudioRunning,
-      latestPitch,
+      getLatestPitch: pitchStore.getSnapshot,
       selectedDeviceId,
       channelMode,
       startAudio,
       changeDevice,
       changeChannelMode
     }),
-    [audioEngine, tone3000, isAudioRunning, latestPitch, selectedDeviceId, channelMode, startAudio, changeDevice, changeChannelMode]
+    [audioEngine, tone3000, isAudioRunning, pitchStore, selectedDeviceId, channelMode, startAudio, changeDevice, changeChannelMode]
   );
 
-  return <AudioSessionContext.Provider value={value}>{children}</AudioSessionContext.Provider>;
+  return (
+    <AudioSessionContext.Provider value={value}>
+      <PitchContext.Provider value={pitchStore}>{children}</PitchContext.Provider>
+    </AudioSessionContext.Provider>
+  );
 };
 
 export const useAudioSession = (): AudioSessionValue => {

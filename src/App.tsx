@@ -13,16 +13,26 @@ import { YousicianGame } from './components/YousicianGame';
 import { SongSearchModal } from './components/SongSearchModal';
 import { AudioSettingsModal } from './components/AudioSettingsModal';
 import { Tone3000AmpRack } from './components/Tone3000AmpRack';
-import { AudioSessionProvider, useAudioSession } from './context/AudioSessionContext';
+import { AudioSessionProvider, useAudioSession, useLatestPitch } from './context/AudioSessionContext';
 import { ModalsProvider, useModals } from './context/ModalsContext';
 import { readPreferences, savePreferences } from './context/preferences';
+
+const LandingPitch: React.FC = () => {
+  const latestPitch = useLatestPitch();
+  if (!latestPitch) return null;
+  return (
+    <div className="text-xs font-mono text-cyan-300 flex items-center justify-center gap-1.5">
+      <Volume2 size={13} />
+      Última nota ouvida: <strong>{latestPitch.noteName}</strong> ({latestPitch.frequency} Hz)
+    </div>
+  );
+};
 
 const AppContent: React.FC = () => {
   const {
     audioEngine,
     tone3000,
     isAudioRunning,
-    latestPitch,
     selectedDeviceId,
     channelMode,
     startAudio: handleStartAudio,
@@ -120,7 +130,6 @@ const AppContent: React.FC = () => {
           )}
           <YousicianGame
             tab={activeTab}
-            latestPitch={latestPitch}
             onOpenSearch={() => setIsSearchOpen(true)}
             onOpenAudioSettings={() => setIsSettingsOpen(true)}
             tone3000={tone3000}
@@ -219,12 +228,7 @@ const AppContent: React.FC = () => {
                 </button>
               </div>
 
-              {latestPitch && (
-                <div className="text-xs font-mono text-cyan-300 flex items-center justify-center gap-1.5">
-                  <Volume2 size={13} />
-                  Última nota ouvida: <strong>{latestPitch.noteName}</strong> ({latestPitch.frequency} Hz)
-                </div>
-              )}
+              <LandingPitch />
             </div>
           </div>
         </div>
@@ -252,7 +256,6 @@ const AppContent: React.FC = () => {
         currentChannelMode={channelMode}
         onDeviceChange={handleDeviceChange}
         onChannelModeChange={handleChannelModeChange}
-        latestPitch={latestPitch}
         onOpenTone3000Rack={() => setIsTone3000RackOpen(true)}
       />
 
