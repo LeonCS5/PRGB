@@ -16,6 +16,7 @@ import {
   Zap,
   Loader2
 } from 'lucide-react';
+import { getDemoSong, DEMO_SONG_ID } from './services/demoSong';
 import type { NormalizedSongTab } from './services/songsterrApi';
 import { ErrorNotice } from './components/ErrorNotice';
 import { BrandMark } from './components/BrandMark';
@@ -109,7 +110,7 @@ const AppContent: React.FC = () => {
     setTone3000RackOpen: setIsTone3000RackOpen
   } = useModals();
 
-  const [activeTab, setActiveTab] = useState<NormalizedSongTab | null>(null);
+  const [activeTab, setActiveTab] = useState<NormalizedSongTab | null>(() => new URLSearchParams(window.location.search).has('demo') ? getDemoSong() : null);
   const [isLoadingDefault, setIsLoadingDefault] = useState(false);
   const [savedSong] = useState(() => readPreferences().lastSong);
   const [restoreError, setRestoreError] = useState<string | null>(null);
@@ -122,7 +123,7 @@ const AppContent: React.FC = () => {
   }, [activeTab, audioEngine]);
 
   useEffect(() => {
-    if (!savedSong) return;
+    if (!savedSong || savedSong.songId === DEMO_SONG_ID || new URLSearchParams(window.location.search).has('demo')) return;
     let cancelled = false;
     const version = songSelectionVersion.current;
     const restoreSong = async () => {
@@ -141,6 +142,13 @@ const AppContent: React.FC = () => {
     void restoreSong();
     return () => { cancelled = true; };
   }, [savedSong, restoreAttempt]);
+
+  const handleLoadDemo = () => {
+    songSelectionVersion.current += 1;
+    setRestoreError(null);
+    setDefaultError(null);
+    setActiveTab(getDemoSong());
+  };
 
   // Load default song (Metallica - Creeping Death)
   const handleLoadDefaultSong = async () => {
@@ -197,16 +205,9 @@ const AppContent: React.FC = () => {
       {activeTab ? (
         /* Practice mode */
         <>
-          {!isAudioRunning && (
-            <button
-              onClick={() => void handleStartAudio()}
-              className="absolute left-1/2 top-20 z-30 -translate-x-1/2 rounded-xl bg-cyan-600 px-4 py-2 text-sm font-bold text-white hover:bg-cyan-500 cursor-pointer"
-            >
-              Conectar guitarra
-            </button>
-          )}
           <PracticeGame
             tab={activeTab}
+            onExit={() => { songSelectionVersion.current += 1; setActiveTab(null); window.history.replaceState(null, '', window.location.pathname + window.location.hash); }}
             onOpenSearch={() => setIsSearchOpen(true)}
             onOpenAudioSettings={() => setIsSettingsOpen(true)}
             tone3000={tone3000}
@@ -224,8 +225,8 @@ const AppContent: React.FC = () => {
                   <span className="hidden sm:inline">Áudio {isAudioRunning ? 'conectado' : 'desconectado'}</span>
                   <span className="sr-only sm:hidden">Áudio {isAudioRunning ? 'conectado' : 'desconectado'}</span>
                 </span>
-                <a href={supportHref} target="_blank" rel="noopener noreferrer" className="flex min-h-11 max-w-48 items-center gap-2 rounded-lg px-2 py-2 text-xs font-semibold text-ink-200 transition hover:bg-ink-800 hover:text-amp-300 sm:max-w-none sm:text-sm">
-                  <Heart size={16} className="shrink-0 text-amp-400" aria-hidden="true" /> {supportLabel}
+                <a href={supportHref} target="_blank" rel="noopener noreferrer" aria-label={supportLabel} className="flex min-h-11 max-w-48 items-center gap-2 rounded-lg px-2 py-2 text-xs font-semibold text-ink-200 transition hover:bg-ink-800 hover:text-amp-300 sm:max-w-none sm:text-sm">
+                  <Heart size={16} className="shrink-0 text-amp-400" aria-hidden="true" /><span className="sm:hidden">Apoiar</span><span className="hidden sm:inline">{supportLabel}</span>
                 </a>
               </div>
             </div>
@@ -245,7 +246,7 @@ const AppContent: React.FC = () => {
                   <p className="mt-6 max-w-lg text-base leading-relaxed text-ink-300 sm:text-lg">
                     Conecte sua guitarra, encontre seu timbre e toque suas músicas favoritas. Cada nota é um passo no seu próximo riff.
                   </p>
-                  <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+                  <div className="mt-8 flex flex-col flex-wrap gap-3 sm:flex-row">
                     <button onClick={() => void handleLoadDefaultSong()} disabled={isLoadingDefault} aria-busy={isLoadingDefault}
                       className="flex min-h-16 cursor-pointer items-center justify-center gap-3 rounded-xl bg-amp-400 px-6 py-3 text-ink-950 shadow-glow-amp transition hover:bg-amp-300 disabled:cursor-wait disabled:opacity-70">
                       {isLoadingDefault ? <Loader2 size={22} className="animate-spin" aria-hidden="true" /> : <Play size={22} className="fill-current" aria-hidden="true" />}
@@ -256,6 +257,9 @@ const AppContent: React.FC = () => {
                       setIsSearchOpen(true);
                     }} className="flex min-h-16 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-600 bg-ink-900 px-6 py-3 text-sm font-semibold text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
                       <Music size={18} aria-hidden="true" /> Buscar música
+                    </button>
+                    <button onClick={handleLoadDemo} className="flex min-h-16 cursor-pointer items-center justify-center gap-3 rounded-xl border border-signal-500/30 bg-signal-500/5 px-5 py-3 text-signal-300 transition hover:bg-signal-500/10">
+                      <Play size={18} aria-hidden="true" /><span className="text-left"><span className="block text-sm font-bold">Experimentar demo</span><span className="mt-1 block text-xs text-ink-300">Exercício offline - ~20 s</span></span>
                     </button>
                   </div>
                   <p className="mt-5 flex items-center gap-2 text-xs text-ink-300"><Check size={14} className="text-hit" aria-hidden="true" /> Sem cadastro. O palco é seu.</p>
@@ -350,7 +354,7 @@ const AppContent: React.FC = () => {
           setDefaultError(null);
           if (!isAudioRunning) handleStartAudio();
           setActiveTab(tab);
-          savePreferences({ lastSong: song });
+          if (song.songId !== DEMO_SONG_ID) savePreferences({ lastSong: song });
         }}
       />
 

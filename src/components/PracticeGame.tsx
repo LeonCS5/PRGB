@@ -5,14 +5,13 @@ import {
   RotateCcw,
   Volume2,
   VolumeX,
-  Gauge,
   Sliders,
   Search,
-  Trophy,
-  Flame,
   Clock,
   Zap
 } from 'lucide-react';
+import { BrandMark } from './BrandMark';
+import { ModalFrame } from './ModalFrame';
 import type { NormalizedSongTab, NoteEvent } from '../services/songsterrApi';
 import { useAudioSession, useLatestPitch } from '../context/AudioSessionContext';
 import { MetronomeScheduler, SoundFX } from '../services/synthAudio';
@@ -25,6 +24,7 @@ import {
 interface PracticeGameProps {
   tab: NormalizedSongTab;
   onOpenSearch: () => void;
+  onExit: () => void;
   onOpenAudioSettings: () => void;
   tone3000?: Tone3000AmpEngine | null;
   onOpenTone3000Rack?: () => void;
@@ -50,24 +50,23 @@ interface FloatingText {
   scale: number;
 }
 
-// Practice standard string colors (String 1 to 6)
-const STRING_COLORS: Record<number, string> = {
-  1: '#ec4899', // Pink / High E
-  2: '#3b82f6', // Blue / B
-  3: '#06b6d4', // Cyan / G
-  4: '#10b981', // Green / D
-  5: '#f59e0b', // Yellow / A
-  6: '#ef4444' // Red / Low E
+// Resolve CSS tokens once, outside the animation loop.
+const readPalette = () => {
+  const styles = getComputedStyle(document.documentElement);
+  const color = (name: string) => styles.getPropertyValue('--color-' + name).trim();
+  return { background: color('ink-900'), rail: color('ink-800'), ink: color('ink-950'), muted: color('ink-400'), signal: color('signal-400'), hit: color('hit'), near: color('near'), miss: color('miss'), strings: [color('note-violet'), color('signal-300'), color('signal-600'), color('hit'), color('near'), color('amp-400')] };
 };
 
 export const PracticeGame: React.FC<PracticeGameProps> = ({
   tab,
   onOpenSearch,
+  onExit,
   onOpenAudioSettings,
   tone3000,
   onOpenTone3000Rack
 }) => {
-  const { getLatestPitch } = useAudioSession();
+  const { getLatestPitch, isAudioRunning, startAudio } = useAudioSession();
+  const [palette] = useState(readPalette);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasContainerRef = useRef<HTMLElement | null>(null);
 
@@ -163,13 +162,13 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
       if (!ctx) return;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       // Clear background
-      ctx.fillStyle = '#0f172a'; // Deep slate
+      ctx.fillStyle = palette.background;
       ctx.fillRect(0, 0, width, height);
 
       const hitLineX = 140; // Practice hit target X
       const stringCount = tab.stringCount || 6;
-      const topMargin = 70;
-      const bottomMargin = 70;
+      const topMargin = Math.min(70, height * 0.16);
+      const bottomMargin = Math.min(70, height * 0.16);
       const availableHeight = height - topMargin - bottomMargin;
       const stringSpacing = availableHeight / (stringCount - 1);
       setNoteHeight(Math.min(46, Math.max(0, stringSpacing * 0.7)));
@@ -177,11 +176,11 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
       // 1. Draw horizontal string rails
       for (let s = 1; s <= stringCount; s++) {
         const y = topMargin + (s - 1) * stringSpacing;
-        const color = STRING_COLORS[s] || '#64748b';
+        const color = palette.strings[(s) - 1] || palette.muted;
 
         // String line glow & rail
         ctx.beginPath();
-        ctx.strokeStyle = '#1e293b';
+        ctx.strokeStyle = palette.rail;
         ctx.lineWidth = 14;
         ctx.moveTo(0, y);
         ctx.lineTo(width, y);
@@ -200,23 +199,30 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
         ctx.font = 'bold 13px Inter, sans-serif';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        ctx.fillText(`Corda ${s}`, 18, y);
+        ctx.fillStyle = palette.background;
+        const labelHeight = Math.min(26, stringSpacing * 0.9);
+        ctx.fillRect(10, y - labelHeight / 2, 62, labelHeight);
+        ctx.fillStyle = color;
+        ctx.fillText(`${s} / ${['e', 'B', 'G', 'D', 'A', 'E'][s - 1] || s}`, 18, y);
       }
 
       // 2. Draw Practice Playhead / Target Hit Zone Bar
       const grad = ctx.createLinearGradient(hitLineX - 4, 0, hitLineX + 4, 0);
-      grad.addColorStop(0, 'rgba(56, 189, 248, 0.1)');
-      grad.addColorStop(0.5, 'rgba(56, 189, 248, 0.9)');
-      grad.addColorStop(1, 'rgba(56, 189, 248, 0.1)');
+      grad.addColorStop(0, palette.signal + '1a');
+      grad.addColorStop(0.5, palette.signal);
+      grad.addColorStop(1, palette.signal + '1a');
       ctx.fillStyle = grad;
       ctx.fillRect(hitLineX - 8, topMargin - 20, 16, availableHeight + 40);
 
       ctx.beginPath();
-      ctx.strokeStyle = '#38bdf8';
+      ctx.strokeStyle = palette.signal;
       ctx.lineWidth = 3;
+      ctx.shadowColor = palette.signal;
+      ctx.shadowBlur = 16;
       ctx.moveTo(hitLineX, topMargin - 20);
       ctx.lineTo(hitLineX, topMargin + availableHeight + 20);
       ctx.stroke();
+      ctx.shadowBlur = 0;
 
       sceneRef.current = { width, height, dpr, background };
     };
@@ -239,7 +245,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
       syncCanvasSizeRef.current = null;
       sceneRef.current = null;
     };
-  }, [tab.stringCount]);
+  }, [tab.stringCount, palette]);
 
   const particlePath = useMemo(() => {
     const path = new Path2D();
@@ -307,7 +313,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
             y: yPos,
             vx: Math.cos(angle) * spd,
             vy: Math.sin(angle) * spd,
-            color: '#10b981',
+            color: palette.hit,
             alpha: 1,
             size: 3 + Math.random() * 4
           });
@@ -315,8 +321,8 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
 
         floatingTextsRef.current.push({
           id: `float-${Math.random()}`,
-          text: `PERFECT! ${note.noteName}`,
-          color: '#34d399',
+          text: `Perfeito! ${note.noteName}`,
+          color: palette.hit,
           x: hitX + 15,
           y: yPos - 10,
           alpha: 1,
@@ -340,7 +346,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
             y: yPos,
             vx: Math.cos(angle) * spd,
             vy: Math.sin(angle) * spd,
-            color: '#06b6d4',
+            color: palette.near,
             alpha: 1,
             size: 2.5 + Math.random() * 3
           });
@@ -348,8 +354,8 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
 
         floatingTextsRef.current.push({
           id: `float-${Math.random()}`,
-          text: 'GOOD',
-          color: '#38bdf8',
+          text: 'Bom',
+          color: palette.near,
           x: hitX + 15,
           y: yPos - 10,
           alpha: 1,
@@ -363,8 +369,8 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
 
         floatingTextsRef.current.push({
           id: `float-${Math.random()}`,
-          text: 'MISS',
-          color: '#ef4444',
+          text: 'Errou',
+          color: palette.miss,
           x: hitX + 15,
           y: yPos - 10,
           alpha: 0.9,
@@ -372,7 +378,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
         });
       }
     },
-    [combo]
+    [combo, palette]
   );
 
   // Metronome: clicks are scheduled on the audio clock; the render loop only reports the song position
@@ -414,8 +420,8 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     ctx.font = 'bold 13px Inter, sans-serif';
     const latestPitch = getLatestPitch();
     const hitLineX = 140;
-    const topMargin = 70;
-    const stringSpacing = (height - 140) / ((tab.stringCount || 6) - 1);
+    const topMargin = Math.min(70, height * 0.16);
+    const stringSpacing = (height - topMargin * 2) / ((tab.stringCount || 6) - 1);
     const pixelsPerMs = 0.45 * speed;
 
     // 3. Process & Draw Notes
@@ -427,7 +433,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
 
       // Note Y position based on its string
       const noteY = topMargin + (note.string - 1) * stringSpacing;
-      const stringColor = STRING_COLORS[note.string] || '#3b82f6';
+      const stringColor = palette.strings[(note.string) - 1] || palette.muted;
 
       // Only draw if within screen view
       if (noteX < -100 || noteX > width + 100) continue;
@@ -475,10 +481,10 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
 
       // Shadow / Glow
       if (state === 'perfect') {
-        ctx.shadowColor = '#10b981';
+        ctx.shadowColor = palette.hit;
         ctx.shadowBlur = 18;
       } else if (state === 'good') {
-        ctx.shadowColor = '#06b6d4';
+        ctx.shadowColor = palette.near;
         ctx.shadowBlur = 12;
       } else if (state === 'miss') {
         ctx.globalAlpha = 0.35;
@@ -488,11 +494,11 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
 
       // Note background fill
       if (state === 'perfect') {
-        ctx.fillStyle = '#10b981';
+        ctx.fillStyle = palette.hit;
       } else if (state === 'good') {
-        ctx.fillStyle = '#06b6d4';
+        ctx.fillStyle = palette.near;
       } else if (state === 'miss') {
-        ctx.fillStyle = '#64748b';
+        ctx.fillStyle = palette.muted;
       } else {
         ctx.fillStyle = stringColor;
       }
@@ -500,18 +506,18 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
 
       // Note border
       ctx.lineWidth = 2.5 * noteHeight / 46;
-      ctx.strokeStyle = state === 'perfect' ? '#a7f3d0' : '#ffffff';
+      ctx.strokeStyle = state === 'perfect' ? palette.hit : palette.ink;
       ctx.stroke(path);
 
       // Draw Fret Number inside the note block
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = palette.ink;
       ctx.font = fretFont;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(fret, fretX, 0);
 
       // Note name subtitle (e.g. A2, D3)
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+      ctx.fillStyle = palette.ink;
       ctx.font = subtitleFont;
       ctx.textAlign = 'left';
       ctx.fillText(subtitle, subtitleX, 0);
@@ -606,244 +612,85 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const restart = () => {
+    setCurrentTimeMs(0);
+    setScore(0); setCombo(0); setMaxCombo(0);
+    setPerfectCount(0); setGoodCount(0); setMissCount(0);
+    noteStatesRef.current.clear(); synthPlayedNotesRef.current.clear();
+    particlesRef.current = []; floatingTextsRef.current = [];
+    setIsPlaying(true);
+  };
+  const finished = currentTimeMs >= tab.totalDurationMs;
+  const toolClass = 'flex min-h-10 min-w-10 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-700 bg-ink-800 px-3 text-xs font-semibold text-ink-200 transition hover:border-ink-500';
+
   return (
-    <div className="flex h-screen w-screen flex-col bg-slate-950 text-white select-none overflow-hidden">
-      {/* Top Header / Scoreboard HUD */}
-      <header className="flex h-16 items-center justify-between border-b border-slate-800/80 bg-slate-900/90 px-6 backdrop-blur">
-        {/* Song Info */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onOpenSearch}
-            className="flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 px-3 py-1.5 text-xs font-semibold text-rose-300 border border-slate-700 transition cursor-pointer"
-          >
-            <Search size={14} />
-            Mudar Música
-          </button>
-          <div>
-            <div className="text-sm font-bold text-white flex items-center gap-2">
-              {tab.title}
-              <span className="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-                {tab.trackName}
-              </span>
-            </div>
-            <div className="text-xs text-slate-400">{tab.artist}</div>
+    <div className="flex h-dvh w-full flex-col overflow-hidden bg-ink-950 text-ink-100 select-none">
+      <header className="shrink-0 border-b border-ink-700 bg-ink-900 px-4 py-3 sm:px-6 [@media(max-height:500px)]:py-1">
+        <div className="flex items-center justify-between gap-3">
+          <button onClick={onExit} aria-label="Voltar ao início" className="flex min-h-10 shrink-0 cursor-pointer items-center rounded-lg"><BrandMark size={26} className="[&>span]:text-lg" /></button>
+          <div className="min-w-0 flex-1 font-display">
+            <h1 className="truncate text-base font-bold sm:text-xl">{tab.title}</h1>
+            <p className="truncate text-xs text-ink-300">{tab.artist} · {tab.trackName}</p>
           </div>
+          <LiveTuner />
+          <button onClick={onOpenSearch} aria-label="Escolher outra música" className={toolClass}><Search size={17} /><span className="hidden lg:inline">Mudar música</span></button>
         </div>
-
-        {/* Live Tuner Widget (Listening to Realtek / Audio Interface) */}
-        <LiveTuner />
-
-        {/* Practice HUD (Score, Combo, Accuracy, Max Combo) */}
-        <div className="flex items-center gap-6">
-          {/* Combo Multiplier */}
-          <div className="flex items-center gap-1.5">
-            <Flame
-              size={20}
-              className={combo >= 5 ? 'text-amber-400 animate-bounce' : 'text-slate-500'}
-            />
-            <div className="text-right">
-              <div className="text-[10px] font-bold text-slate-400 uppercase">Combo (Max {maxCombo})</div>
-              <div className="text-sm font-black text-amber-300 font-mono">
-                {combo} <span className="text-xs text-amber-500">({comboMultiplier}x)</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Accuracy */}
-          <div className="text-right">
-            <div className="text-[10px] font-bold text-slate-400 uppercase">Precisão</div>
-            <div className="text-sm font-black text-emerald-400 font-mono">{accuracy}%</div>
-          </div>
-
-          {/* Total Score */}
-          <div className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500/20 to-rose-500/20 px-3.5 py-1 border border-amber-500/30 shadow-sm">
-            <Trophy size={18} className="text-amber-400" />
-            <div className="font-mono text-lg font-black text-white">{score}</div>
-          </div>
+        <div className="mt-3 grid grid-cols-4 gap-3 border-t border-ink-700 pt-3 font-mono [@media(max-height:500px)]:mt-1 [@media(max-height:500px)]:pt-1">
+          {[
+            { label: 'PONTUAÇÃO', value: score.toLocaleString('pt-BR'), color: 'text-amp-300' },
+            { label: 'COMBO', value: combo + ' ×' + comboMultiplier, color: 'text-near' },
+            { label: 'PRECISÃO', value: accuracy + '%', color: 'text-hit' },
+            { label: 'MAX COMBO', value: maxCombo, color: 'text-signal-300' }
+          ].map(item => <div key={item.label}><p className="text-[9px] tracking-wider text-ink-300 sm:text-[10px]">{item.label}</p><p className={'mt-0.5 text-xl font-bold sm:text-2xl ' + item.color}>{item.value}</p></div>)}
         </div>
       </header>
-
-      {/* Main Practice Rails Canvas */}
-      <main ref={canvasContainerRef} className="relative flex-1 w-full min-h-0 overflow-hidden">
-        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block" />
+      <main ref={canvasContainerRef} aria-label="Pista de prática de guitarra" className="relative min-h-0 w-full flex-1 overflow-hidden">
+        <canvas ref={canvasRef} aria-label="Notas da tablatura nas seis cordas" className="absolute inset-0 block size-full" />
+        {!isAudioRunning && <button onClick={() => void startAudio()} className="absolute right-3 top-2 min-h-10 cursor-pointer rounded-xl border border-signal-500/30 bg-ink-900/90 px-3 text-xs font-semibold text-signal-300">Conectar guitarra</button>}
       </main>
-
-      {/* Bottom Playback & Audio Controls Dock */}
-      <footer className="h-20 border-t border-slate-800/80 bg-slate-900/95 px-6 flex items-center justify-between backdrop-blur">
-        {/* Play / Pause / Restart */}
+      <footer className="shrink-0 border-t border-ink-700 bg-ink-900 px-3 py-3 sm:px-6 [@media(max-height:500px)]:py-1">
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setIsPlaying(!isPlaying)}
-            className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 shadow-lg shadow-cyan-500/25 hover:from-cyan-400 hover:to-blue-500 text-white transition active:scale-95 cursor-pointer"
-          >
-            {isPlaying ? <Pause size={22} /> : <Play size={22} className="ml-0.5" />}
-          </button>
-
-          <button
-            onClick={() => {
-              setCurrentTimeMs(0);
-              noteStatesRef.current.clear();
-              synthPlayedNotesRef.current.clear();
-            }}
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white transition cursor-pointer"
-            title="Reiniciar música"
-          >
-            <RotateCcw size={18} />
-          </button>
-
-          {/* Progress Timeline Slider */}
-          <div className="flex items-center gap-2 ml-2">
-            <span className="font-mono text-xs text-slate-400">{formatTime(currentTimeMs)}</span>
-            <input
-              type="range"
-              min={0}
-              max={tab.totalDurationMs}
-              value={currentTimeMs}
-              onChange={(e) => {
-                const target = Number(e.target.value);
-                setCurrentTimeMs(target);
-                // Clear state for future notes
-                for (const [id] of noteStatesRef.current) {
-                  const n = tab.notes.find((x) => x.id === id);
-                  if (n && n.timeMs > target) {
-                    noteStatesRef.current.delete(id);
-                    synthPlayedNotesRef.current.delete(id);
-                  }
-                }
-              }}
-              className="w-48 sm:w-64 accent-cyan-400 h-1.5 bg-slate-700 rounded-lg cursor-pointer"
-            />
-            <span className="font-mono text-xs text-slate-500">{formatTime(tab.totalDurationMs)}</span>
-          </div>
-        </div>
-
-        {/* Practice Tools (Speed, Metronome, Backing Synth, Audio Settings) */}
-        <div className="flex items-center gap-3">
-          {/* Practice Speed */}
-          <div className="flex items-center gap-1 rounded-xl border border-slate-700 bg-slate-800 p-1">
-            <Gauge size={14} className="text-slate-400 ml-1.5" />
-            {[0.5, 0.75, 1.0].map((s) => (
-              <button
-                key={s}
-                onClick={() => setSpeed(s)}
-                className={`rounded-lg px-2 py-1 text-xs font-bold transition cursor-pointer ${
-                  speed === s ? 'bg-cyan-500 text-white shadow-sm' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                {s}x
-              </button>
-            ))}
-          </div>
-
-          {/* Metronome */}
-          <button
-            onClick={() => setMetronomeEnabled(!metronomeEnabled)}
-            className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition cursor-pointer ${
-              metronomeEnabled
-                ? 'border-amber-500 bg-amber-950/60 text-amber-300'
-                : 'border-slate-700 bg-slate-800 text-slate-400 hover:text-white'
-            }`}
-          >
-            <Clock size={15} />
-            Metrônomo
-          </button>
-
-          {/* Backing Synth Audio */}
-          <button
-            onClick={() => setSynthAudioEnabled(!synthAudioEnabled)}
-            className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition cursor-pointer ${
-              synthAudioEnabled
-                ? 'border-cyan-500 bg-cyan-950/60 text-cyan-300'
-                : 'border-slate-700 bg-slate-800 text-slate-400 hover:text-white'
-            }`}
-          >
-            {synthAudioEnabled ? <Volume2 size={15} /> : <VolumeX size={15} />}
-            Áudio da Tab
-          </button>
-
-          {/* Audio Interface Settings Modal */}
-          <button
-            onClick={onOpenAudioSettings}
-            className="flex items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 px-3.5 py-2 text-xs font-semibold text-white transition shadow-sm cursor-pointer"
-          >
-            <Sliders size={15} className="text-cyan-400" />
-            Interface
-          </button>
-
-          {/* TONE3000 Live Guitar Monitor & Amp Controls */}
-          <div className="flex items-center gap-1">
-            <button
-              onClick={onOpenTone3000Rack}
-              className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition cursor-pointer ${
-                toneSettings?.isMonitoringEnabled
-                  ? 'border-emerald-500/80 bg-emerald-950/60 text-emerald-300 shadow-sm shadow-emerald-500/20'
-                  : 'border-slate-700 bg-slate-800 text-slate-400 hover:text-white'
-              }`}
-              title="Abrir Rack TONE3000 (Amplificador & Efeitos)"
-            >
-              <Zap
-                size={14}
-                className={
-                  toneSettings?.isMonitoringEnabled
-                    ? 'text-emerald-400 fill-emerald-400'
-                    : 'text-slate-400'
-                }
-              />
-              <span>
-                {toneSettings
-                  ? AMP_PRESETS[toneSettings.preset]?.badge || 'TONE3000'
-                  : 'TONE3000'}
-              </span>
-            </button>
-
-            <button
-              onClick={() => {
-                if (tone3000 && toneSettings) {
-                  tone3000.setMonitoringEnabled(!toneSettings.isMonitoringEnabled);
-                }
-              }}
-              className={`flex h-8 w-8 items-center justify-center rounded-xl border transition cursor-pointer ${
-                toneSettings?.isMonitoringEnabled
-                  ? 'border-emerald-500/60 bg-emerald-900/40 text-emerald-300'
-                  : 'border-rose-900 bg-rose-950/40 text-rose-400'
-              }`}
-              title={
-                toneSettings?.isMonitoringEnabled
-                  ? 'Mutar Som da Guitarra'
-                  : 'Ouvir Som da Guitarra'
+          <button onClick={() => finished ? restart() : setIsPlaying(!isPlaying)} aria-label={isPlaying ? 'Pausar' : 'Tocar'} className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-amp-400 text-ink-950 transition hover:bg-amp-300">{isPlaying ? <Pause size={22} /> : <Play size={22} />}</button>
+          <button onClick={restart} aria-label="Reiniciar música" className={toolClass}><RotateCcw size={18} /></button>
+          <span className="font-mono text-xs text-ink-300">{formatTime(currentTimeMs)}</span>
+          <input aria-label="Posição da música" type="range" min={0} max={tab.totalDurationMs} value={currentTimeMs}
+            onChange={(event) => {
+              const target = Number(event.target.value);
+              setCurrentTimeMs(target);
+              for (const [id] of noteStatesRef.current) {
+                const note = tab.notes.find(item => item.id === id);
+                if (note && note.timeMs > target) { noteStatesRef.current.delete(id); synthPlayedNotesRef.current.delete(id); }
               }
-            >
-              {toneSettings?.isMonitoringEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
-            </button>
-          </div>
+            }} className="h-10 min-w-0 flex-1 cursor-pointer accent-amp-400" />
+          <span className="font-mono text-xs text-ink-300">{formatTime(tab.totalDurationMs)}</span>
+        </div>
+        <div className="mt-2 flex items-center gap-2 overflow-x-auto pb-1">
+          <label className={toolClass}><span className="sr-only">Velocidade</span><select aria-label="Velocidade" value={speed} onChange={event => setSpeed(Number(event.target.value))} className="min-h-10 cursor-pointer bg-ink-800 font-mono outline-none">{[0.5, 0.75, 1].map(value => <option key={value} value={value}>{value}×</option>)}</select></label>
+          <button aria-label="Metrônomo" aria-pressed={metronomeEnabled} onClick={() => setMetronomeEnabled(!metronomeEnabled)} className={toolClass + (metronomeEnabled ? ' border-amp-400 text-amp-300' : '')}><Clock size={16} /><span className="hidden sm:inline">Metrônomo</span></button>
+          <button aria-label="Sintetizador da tablatura" aria-pressed={synthAudioEnabled} onClick={() => setSynthAudioEnabled(!synthAudioEnabled)} className={toolClass + (synthAudioEnabled ? ' border-signal-500 text-signal-300' : '')}>{synthAudioEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}<span className="hidden sm:inline">Sintetizador</span></button>
+          <button aria-label="Configurações de áudio" onClick={onOpenAudioSettings} className={toolClass}><Sliders size={16} /><span className="hidden sm:inline">Áudio</span></button>
+          <button aria-label="Abrir amplificador TONE3000" onClick={onOpenTone3000Rack} className={toolClass + ' text-amp-300'}><Zap size={16} /><span>{toneSettings ? AMP_PRESETS[toneSettings.preset]?.badge : 'Amp'}</span></button>
+          <button aria-label={toneSettings?.isMonitoringEnabled ? 'Silenciar guitarra' : 'Ouvir guitarra'} aria-pressed={toneSettings?.isMonitoringEnabled ?? false} onClick={() => { if (tone3000 && toneSettings) tone3000.setMonitoringEnabled(!toneSettings.isMonitoringEnabled); }} className={toolClass}>{toneSettings?.isMonitoringEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}</button>
         </div>
       </footer>
+      {finished && <ModalFrame titleId="practice-result" onClose={() => setCurrentTimeMs(0)} className="max-w-md text-center">
+        <p className="font-mono text-xs tracking-widest text-amp-300">MAIS UM RIFF NO CAMINHO</p>
+        <h2 id="practice-result" className="mt-3 font-display text-3xl font-bold">Prática concluída</h2>
+        <p className="mt-2 text-sm text-ink-300">{tab.title}</p>
+        <p className="mt-7 font-mono text-5xl font-bold text-amp-300">{score.toLocaleString('pt-BR')}</p><p className="mt-2 text-xs text-ink-300">PONTOS</p>
+        <div className="my-7 grid grid-cols-2 gap-3 font-mono"><div><p className="text-2xl text-hit">{accuracy}%</p><p className="text-xs text-ink-300">Precisão</p></div><div><p className="text-2xl text-signal-300">{maxCombo}</p><p className="text-xs text-ink-300">Max combo</p></div></div>
+        <button onClick={restart} className="min-h-11 w-full cursor-pointer rounded-xl bg-amp-400 px-4 font-bold text-ink-950">Tocar de novo</button>
+        <button onClick={() => { setCurrentTimeMs(0); onOpenSearch(); }} className="mt-3 min-h-11 w-full cursor-pointer rounded-xl border border-ink-700 px-4 text-sm text-ink-200">Escolher outra música</button>
+      </ModalFrame>}
     </div>
   );
 };
 
 const LiveTuner: React.FC = () => {
   const latestPitch = useLatestPitch();
-  return (
-    <div className="flex items-center gap-3 rounded-xl border border-slate-700 bg-slate-950/80 px-4 py-1.5 shadow-inner">
-      <div className="text-[11px] uppercase tracking-wider font-bold text-slate-400">
-        Escuta:
-      </div>
-      <div className="flex items-baseline gap-1.5 font-mono">
-        <span className="text-base font-black text-cyan-400">
-          {latestPitch ? latestPitch.noteName : '--'}
-        </span>
-        <span className="text-xs text-slate-500">
-          {latestPitch ? `${latestPitch.frequency} Hz` : 'Silêncio'}
-        </span>
-      </div>
-      {latestPitch && (
-        <div
-          className={`h-2.5 w-2.5 rounded-full animate-pulse ${
-            Math.abs(latestPitch.cents) <= 6 ? 'bg-emerald-400 shadow-emerald-500/50 shadow-md' : 'bg-cyan-400'
-          }`}
-        />
-      )}
-    </div>
-  );
+  return <div aria-label="Afinador" className="flex shrink-0 items-center gap-2 rounded-xl border border-signal-500/20 bg-signal-500/5 px-2 py-2 font-mono sm:px-4">
+    <span className="text-lg font-bold text-signal-300">{latestPitch ? latestPitch.noteName : '--'}</span>
+    <span className="hidden text-xs text-ink-300 sm:inline">{latestPitch ? latestPitch.frequency + ' Hz' : 'Toque uma corda'}</span>
+    {latestPitch && <span className={'size-2 rounded-full ' + (Math.abs(latestPitch.cents) <= 6 ? 'bg-hit' : 'bg-signal-400')} />}
+  </div>;
 };
