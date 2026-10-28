@@ -30,7 +30,7 @@ const measure = (beats: unknown[], signature?: [number, number]) => ({
 const ascending = BOX_ONE.map(([s, f]) => eighth(s, f));
 const descending = [...BOX_ONE].reverse().map(([s, f]) => eighth(s, f));
 
-const rawDemo = {
+export const rawDemo = {
   tuning: STANDARD_TUNING,
   automations: { tempo: [{ measure: 0, position: 0, bpm: 90, type: 4 }] },
   measures: [
