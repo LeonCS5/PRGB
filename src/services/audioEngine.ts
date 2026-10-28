@@ -14,7 +14,11 @@ export interface DetectedPitch {
 
 import { Tone3000AmpEngine } from './tone3000Amp';
 
-export type InputChannelMode = 'ch1' | 'ch2' | 'both';
+// 'duo': two players on one interface, guitar 1 on channel 1 and guitar 2 on channel 2
+export type InputChannelMode = 'ch1' | 'ch2' | 'both' | 'duo';
+export type PlayerSlot = 0 | 1;
+// Single-player modes always report player 0
+export type PitchCallback = (pitch: DetectedPitch | null, player: PlayerSlot) => void;
 
 // MIDI notes per string, index 0 = string 1 (high E), same convention as Songsterr tabs
 export const STANDARD_TUNING = [64, 59, 55, 50, 45, 40];
@@ -43,25 +47,34 @@ export function estimateStringAndFret(
   return best;
 }
 
+// Pitch detector of one player; duo mode has one per guitar
+interface PlayerInput {
+  slot: PlayerSlot;
+  analyser: AnalyserNode;
+  buffer: Float32Array<ArrayBuffer>;
+  rms: number; // level of the current frame, kept here so the loop doesn't allocate
+}
+
 export class AudioEngine {
   private audioContext: AudioContext | null = null;
   private mediaStream: MediaStream | null = null;
   private sourceNode: MediaStreamAudioSourceNode | null = null;
   private splitterNode: ChannelSplitterNode | null = null;
   private mergerNode: ChannelMergerNode | null = null;
-  private analyserNode: AnalyserNode | null = null;
+  private playerInputs: PlayerInput[] = [];
   private tone3000: Tone3000AmpEngine | null = null;
   // Lives as long as the AudioContext; fades the amp input so (re)connections don't click
   private monitorGain: GainNode | null = null;
-  private buffer: Float32Array<ArrayBuffer> | null = null;
+  // NSDF scratch space, reused every frame and by both players
+  private nsdf: Float32Array<ArrayBuffer> | null = null;
   private isRunning = false;
   private animationFrameId: number | null = null;
-  private onPitchCallback: ((pitch: DetectedPitch | null) => void) | null = null;
+  private onPitchCallback: PitchCallback | null = null;
   private pending: Promise<void> = Promise.resolve();
 
   private selectedDeviceId = '';
   private channelMode: InputChannelMode = 'both';
-  private tuning: number[] = STANDARD_TUNING;
+  private tunings: [number[], number[]] = [STANDARD_TUNING, STANDARD_TUNING];
 
   // Guitar frequency bounds (E1 ~ 41 Hz for 4-string bass up to B5 ~ 987 Hz for guitar)
   private readonly MIN_FREQ = 40;
@@ -105,7 +118,7 @@ export class AudioEngine {
   start(
     deviceId?: string,
     channelMode: InputChannelMode = 'both',
-    onPitch?: (pitch: DetectedPitch | null) => void
+    onPitch?: PitchCallback
   ): Promise<void> {
     return this.enqueue(() => this.startNow(deviceId, channelMode, onPitch));
   }
@@ -113,7 +126,7 @@ export class AudioEngine {
   private async startNow(
     deviceId: string | undefined,
     channelMode: InputChannelMode,
-    onPitch: ((pitch: DetectedPitch | null) => void) | undefined
+    onPitch: PitchCallback | undefined
   ): Promise<void> {
     if (this.isRunning) await this.stopNow();
 
@@ -165,14 +178,9 @@ export class AudioEngine {
     }
     this.sourceNode = this.audioContext.createMediaStreamSource(this.mediaStream);
 
-    // Channel Routing (Input 1 / Input 2 / Stereo)
+    // Channel Routing (Input 1 / Input 2 / Stereo / Duo)
     this.splitterNode = this.audioContext.createChannelSplitter(2);
     this.mergerNode = this.audioContext.createChannelMerger(1);
-
-    this.analyserNode = this.audioContext.createAnalyser();
-    this.analyserNode.fftSize = this.BUFFER_SIZE;
-    this.analyserNode.smoothingTimeConstant = 0.1;
-    this.buffer = new Float32Array(this.analyserNode.fftSize);
 
     this.sourceNode.connect(this.splitterNode);
 
@@ -183,12 +191,21 @@ export class AudioEngine {
       // Route only channel 2 (Right)
       this.splitterNode.connect(this.mergerNode, 1, 0);
     } else {
-      // Mix both channels
+      // Mix both channels (in duo mode too: both guitars are heard through the amp)
       this.splitterNode.connect(this.mergerNode, 0, 0);
       this.splitterNode.connect(this.mergerNode, 1, 0);
     }
 
-    this.mergerNode.connect(this.analyserNode);
+    if (this.channelMode === 'duo') {
+      // One detector per guitar, fed straight from its channel: channel 1 → player 0, channel 2 → player 1
+      const players = [this.createPlayerInput(this.audioContext, 0), this.createPlayerInput(this.audioContext, 1)];
+      for (const input of players) this.splitterNode.connect(input.analyser, input.slot);
+      this.playerInputs = players;
+    } else {
+      const input = this.createPlayerInput(this.audioContext, 0);
+      this.mergerNode.connect(input.analyser);
+      this.playerInputs = [input];
+    }
 
     // Initialize and route to TONE3000 Amp Modeler for live low-latency guitar monitoring
     if (!this.tone3000) {
@@ -204,6 +221,13 @@ export class AudioEngine {
 
     this.isRunning = true;
     this.loopDetection();
+  }
+
+  private createPlayerInput(ctx: AudioContext, slot: PlayerSlot): PlayerInput {
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = this.BUFFER_SIZE;
+    analyser.smoothingTimeConstant = 0.1;
+    return { slot, analyser, buffer: new Float32Array(analyser.fftSize), rms: 0 };
   }
 
   /**
@@ -234,12 +258,12 @@ export class AudioEngine {
     this.sourceNode?.disconnect();
     this.splitterNode?.disconnect();
     this.mergerNode?.disconnect();
-    this.analyserNode?.disconnect();
+    for (const input of this.playerInputs) input.analyser.disconnect();
 
     this.sourceNode = null;
     this.splitterNode = null;
     this.mergerNode = null;
-    this.analyserNode = null;
+    this.playerInputs = [];
   }
 
   /**
@@ -297,43 +321,45 @@ export class AudioEngine {
 
   /**
    * Tuning used for string/fret estimates (MIDI per string, string 1 first). Defaults to standard.
+   * Set per player: in duo mode each guitarist may read a part in a different tuning.
    */
-  setTuning(tuning: number[]): void {
-    this.tuning = tuning.length > 0 ? [...tuning] : STANDARD_TUNING;
+  setTuning(tuning: number[], player: PlayerSlot = 0): void {
+    this.tunings[player] = tuning.length > 0 ? [...tuning] : STANDARD_TUNING;
   }
 
   /**
-   * Continuous pitch detection loop
+   * Continuous pitch detection loop, one detection per player
    */
   private loopDetection = () => {
-    if (!this.isRunning || !this.analyserNode || !this.buffer || !this.audioContext) return;
-
-    this.analyserNode.getFloatTimeDomainData(this.buffer);
+    if (!this.isRunning || this.playerInputs.length === 0 || !this.audioContext) return;
 
     // Calculate RMS volume level
-    let sumSquares = 0;
-    for (let i = 0; i < this.buffer.length; i++) {
-      sumSquares += this.buffer[i] * this.buffer[i];
+    let loudest = 0;
+    for (const input of this.playerInputs) {
+      const buffer = input.buffer;
+      input.analyser.getFloatTimeDomainData(buffer);
+      let sumSquares = 0;
+      for (let i = 0; i < buffer.length; i++) {
+        sumSquares += buffer[i] * buffer[i];
+      }
+      input.rms = Math.sqrt(sumSquares / buffer.length);
+      loudest = Math.max(loudest, input.rms);
     }
-    const rms = Math.sqrt(sumSquares / this.buffer.length);
 
-    // Real-time TONE3000 noise gate processing
+    // Real-time TONE3000 noise gate processing; the amp is shared, so the louder guitar opens it
     if (this.tone3000) {
-      this.tone3000.processGate(rms);
+      this.tone3000.processGate(loudest);
     }
 
-    // Minimum noise gate threshold for pitch detection
-    if (rms < 0.01) {
-      if (this.onPitchCallback) this.onPitchCallback(null);
-      this.animationFrameId = requestAnimationFrame(this.loopDetection);
-      return;
-    }
+    for (const input of this.playerInputs) {
+      // Minimum noise gate threshold for pitch detection, per channel so a quiet guitar skips the costly NSDF
+      const pitch = input.rms < 0.01
+        ? null
+        : this.detectPitchNSDF(input.buffer, this.audioContext.sampleRate, input.rms, this.tunings[input.slot]);
 
-    // Normalized Square Difference Function (NSDF) / MPM Algorithm
-    const pitch = this.detectPitchNSDF(this.buffer, this.audioContext.sampleRate, rms);
-
-    if (this.onPitchCallback) {
-      this.onPitchCallback(pitch);
+      if (this.onPitchCallback) {
+        this.onPitchCallback(pitch, input.slot);
+      }
     }
 
     this.animationFrameId = requestAnimationFrame(this.loopDetection);
@@ -345,13 +371,16 @@ export class AudioEngine {
   private detectPitchNSDF(
     buffer: Float32Array,
     sampleRate: number,
-    volume: number
+    volume: number,
+    tuning: number[]
   ): DetectedPitch | null {
     const minPeriod = Math.floor(sampleRate / this.MAX_FREQ);
     const maxPeriod = Math.floor(sampleRate / this.MIN_FREQ);
 
     const length = buffer.length;
-    const nsdf = new Float32Array(maxPeriod + 1);
+    // Every lag up to maxPeriod is rewritten below, so the scratch array can be reused as is
+    if (!this.nsdf || this.nsdf.length <= maxPeriod) this.nsdf = new Float32Array(maxPeriod + 1);
+    const nsdf = this.nsdf;
 
     // Compute autocorrelation & squared sum
     for (let tau = 0; tau <= maxPeriod; tau++) {
@@ -410,7 +439,7 @@ export class AudioEngine {
     const cents = Math.round((midiFloat - midiNote) * 100);
 
     const noteName = AudioEngine.getNoteName(midiNote);
-    const position = estimateStringAndFret(midiNote, this.tuning);
+    const position = estimateStringAndFret(midiNote, tuning);
 
     return {
       frequency: Math.round(frequency * 10) / 10,
@@ -439,6 +468,15 @@ export class AudioEngine {
    */
   getSelectedDeviceId(): string {
     return this.selectedDeviceId;
+  }
+
+  /**
+   * Channels the input actually delivers (duo mode needs 2); 0 when stopped
+   */
+  getInputChannelCount(): number {
+    if (!this.isRunning || !this.mediaStream) return 0;
+    const track = this.mediaStream.getAudioTracks()[0];
+    return track?.getSettings().channelCount ?? this.sourceNode?.channelCount ?? 1;
   }
 
   getTone3000(): Tone3000AmpEngine | null {
