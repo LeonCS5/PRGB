@@ -205,6 +205,7 @@ export const PRIVACY_POLICY: LegalDocument = {
         'registros técnicos das partidas ranqueadas: 7 dias;',
         'sala online: nada fica gravado;',
         'registros técnicos de acesso da Vercel e do Supabase: pelos prazos definidos por esses fornecedores;',
+        'cópias de segurança automáticas do banco, quando o Supabase as mantém: descartadas no ciclo do fornecedor, em poucos dias; nunca as usamos para recuperar dados que você excluiu;',
         'e-mails de contato: pelo tempo necessário para atender ao seu pedido;',
         'dados no seu navegador: até você apagá-los.'
       ]
