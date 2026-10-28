@@ -67,6 +67,7 @@ export class AudioEngine {
   private monitorGain: GainNode | null = null;
   // NSDF scratch space, reused every frame and by both players
   private nsdf: Float32Array<ArrayBuffer> | null = null;
+  private keyMaxima: Int32Array<ArrayBuffer> | null = null;
   private isRunning = false;
   private animationFrameId: number | null = null;
   private onPitchCallback: PitchCallback | null = null;
@@ -83,6 +84,10 @@ export class AudioEngine {
 
   private static readonly NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
   private static readonly FADE_SEC = 0.015;
+  // A frame counts as pitched when its best key maximum reaches this NSDF value
+  private static readonly CLARITY_THRESHOLD = 0.55;
+  // MPM's k: the period is the first key maximum within this fraction of the highest one
+  private static readonly PEAK_RATIO = 0.9;
 
   constructor() {
     // Audio engine initialized in idle state
@@ -393,28 +398,47 @@ export class AudioEngine {
       nsdf[tau] = divisor > 0 ? (2 * acf) / divisor : 0;
     }
 
-    // Find first key peak above threshold
-    let maxIndex = -1;
-    let maxValue = -1;
-    let inPeak = false;
-    const threshold = 0.55; // 55% peak clarity threshold for guitar harmonics
+    // McLeod (MPM) peak picking. The lobe around lag 0 is always high and says nothing about the period,
+    // so key maxima only count after the NSDF first turns negative. Searching inside that lobe picked lag
+    // minPeriod (~1.1 kHz, then discarded) for every note below ~175 Hz: the open low strings went undetected.
+    let tau = 1;
+    while (tau <= maxPeriod && nsdf[tau] > 0) tau++;
 
-    for (let tau = minPeriod; tau <= maxPeriod; tau++) {
-      if (nsdf[tau] > threshold) {
-        inPeak = true;
-        if (nsdf[tau] > maxValue) {
-          maxValue = nsdf[tau];
-          maxIndex = tau;
+    if (!this.keyMaxima || this.keyMaxima.length <= maxPeriod) this.keyMaxima = new Int32Array(maxPeriod + 1);
+    const keyMaxima = this.keyMaxima;
+    let keyCount = 0;
+    let highest = 0;
+    while (tau <= maxPeriod) {
+      while (tau <= maxPeriod && nsdf[tau] <= 0) tau++;
+      let peakIndex = -1;
+      let peakValue = 0;
+      while (tau <= maxPeriod && nsdf[tau] > 0) {
+        if (nsdf[tau] > peakValue) {
+          peakValue = nsdf[tau];
+          peakIndex = tau;
         }
-      } else if (inPeak) {
-        // Exit peak
-        break;
+        tau++;
+      }
+      // A positive region cut off at maxPeriod may still be rising, so its maximum isn't a real peak
+      if (peakIndex >= minPeriod && peakIndex < maxPeriod) {
+        keyMaxima[keyCount++] = peakIndex;
+        highest = Math.max(highest, peakValue);
       }
     }
 
-    if (maxIndex <= 0 || maxValue < threshold) {
+    if (keyCount === 0 || highest < AudioEngine.CLARITY_THRESHOLD) {
       return null;
     }
+
+    // The first key maximum close to the highest is the fundamental; later ones are its multiples
+    let maxIndex = keyMaxima[0];
+    for (let i = 0; i < keyCount; i++) {
+      if (nsdf[keyMaxima[i]] >= AudioEngine.PEAK_RATIO * highest) {
+        maxIndex = keyMaxima[i];
+        break;
+      }
+    }
+    const maxValue = nsdf[maxIndex];
 
     // Parabolic interpolation around peak
     let period = maxIndex;

@@ -225,8 +225,64 @@ describe('AudioEngine lifecycle', () => {
     expect(contexts).toHaveLength(2);
   });
 
+  describe('pitch detection across the neck', () => {
+    // 2048 samples of a note built from harmonics; amplitudes[0] is the fundamental
+    const tone = (hz: number, amplitudes: number[]) => {
+      const total = amplitudes.reduce((sum, a) => sum + a, 0);
+      return Float32Array.from({ length: 2048 }, (_, i) =>
+        (0.4 / total) * amplitudes.reduce((sum, a, k) => sum + a * Math.sin((2 * Math.PI * hz * (k + 1) * i) / 48000), 0)
+      );
+    };
+
+    const detect = async (signal: Float32Array) => {
+      const onPitch = vi.fn();
+      const engine = new AudioEngine();
+      await engine.start('a', 'ch1', onPitch);
+      contexts[0].analysers[0].signal = signal;
+      onPitch.mockClear();
+      runFrame();
+      return onPitch.mock.calls[0][0] as { midiNote: number } | null;
+    };
+
+    it.each([
+      ['E2 (6ª corda solta)', 82.41, 40],
+      ['A2 (5ª corda solta)', 110, 45],
+      ['D3 (4ª corda solta)', 146.83, 50],
+      ['G3 (3ª corda solta)', 196, 55],
+      ['B3 (2ª corda solta)', 246.94, 59],
+      ['E4 (1ª corda solta)', 329.63, 64],
+      ['E5 (1ª corda, casa 12)', 659.26, 76],
+      ['B5 (1ª corda, casa 19)', 987.77, 83],
+      ['A1 (baixo, 4ª corda)', 55, 33],
+      ['E1 (baixo, 4ª corda solta)', 41.2, 28]
+    ])('detects a pure %s', async (_name, hz, midi) => {
+      expect(await detect(sine(hz))).toMatchObject({ midiNote: midi });
+    });
+
+    it.each([
+      ['E2', 82.41, 40],
+      ['A2', 110, 45],
+      ['D3', 146.83, 50]
+    ])('detects a harmonic-rich %s at its fundamental, not an octave up', async (_name, hz, midi) => {
+      // Sawtooth-like spectrum, close to a picked electric guitar
+      expect(await detect(tone(hz, [1, 1 / 2, 1 / 3, 1 / 4, 1 / 5, 1 / 6, 1 / 7, 1 / 8]))).toMatchObject({ midiNote: midi });
+    });
+
+    it('detects a low E whose fundamental is weaker than its harmonics', async () => {
+      expect(await detect(tone(82.41, [0.3, 1, 0.8, 0.5, 0.4, 0.3]))).toMatchObject({ midiNote: 40 });
+    });
+
+    it('reports no pitch for noise', async () => {
+      let seed = 12345;
+      const noise = Float32Array.from({ length: 2048 }, () => {
+        seed = (seed * 1103515245 + 12345) % 2147483648;
+        return (seed / 2147483648 - 0.5) * 0.6;
+      });
+      expect(await detect(noise)).toBeNull();
+    });
+  });
+
   describe('input channel modes', () => {
-    // The current NSDF misses pure sines below ~180 Hz (low strings), so these stay above that
     const A3 = sine(220);
     const E4 = sine(329.63);
 
