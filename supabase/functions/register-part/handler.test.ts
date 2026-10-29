@@ -33,6 +33,11 @@ type Route = Response | Error | 'hang';
 function setup(routes: Record<string, Route> = {}, options: { profile?: boolean; recent?: number; parts?: SongPart[] } = {}) {
   const parts = new Map((options.parts ?? []).map((part) => [`${part.songId}/${part.partId}`, part]));
   const inserted: NewSongPart[] = [];
+  const updated: NewSongPart[] = [];
+  const store = (part: NewSongPart): SongPart => {
+    const { registeredBy: _registeredBy, ...stored } = part;
+    return stored;
+  };
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const route = routes[String(input)];
     if (route === 'hang') {
@@ -53,12 +58,15 @@ function setup(routes: Record<string, Route> = {}, options: { profile?: boolean;
       countRegistrationsSince: async () => options.recent ?? 0,
       insertPart: async (part) => {
         inserted.push(part);
-        const { revisionId: _revisionId, registeredBy: _registeredBy, ...stored } = part;
-        return stored;
+        return store(part);
+      },
+      updatePart: async (part) => {
+        updated.push(part);
+        return store(part);
       }
     }
   };
-  return { handler: createRegisterPartHandler(deps), fetchMock, inserted, log };
+  return { handler: createRegisterPartHandler(deps), fetchMock, inserted, updated, log };
 }
 
 const ok = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } });
@@ -110,19 +118,23 @@ describe('register-part handler', () => {
       { status: 403, body: { error: 'profile_required' } });
   });
 
-  it.each(['not json', { songId: '77', partId: 0 }, { songId: 77, partId: 1.5 }, { songId: 77 }, { songId: 2 ** 31, partId: 0 }])(
-    'rejects the body %j', async (body) => {
-      expect(await call(setup().handler, post(body))).toMatchObject({ status: 400, body: { error: 'invalid_input' } });
-    });
+  it.each([
+    'not json', { songId: '77', partId: 0 }, { songId: 77, partId: 1.5 }, { songId: 77 }, { songId: 2 ** 31, partId: 0 },
+    { songId: 77, partId: 0, revisionId: -1 }, { songId: 77, partId: 0, revisionId: 1.5 }, { songId: 77, partId: 0, revisionId: '5' }
+  ])('rejects the body %j', async (body) => {
+    expect(await call(setup().handler, post(body))).toMatchObject({ status: 400, body: { error: 'invalid_input' } });
+  });
 
   it('returns an already registered part without calling Songsterr', async () => {
     const part: SongPart = {
-      songId: -1, partId: 0, title: 'Demo', artist: 'PRGB', trackName: 'Exercício', ...DEMO_COUNT
+      songId: -1, partId: 0, revisionId: 0, title: 'Demo', artist: 'PRGB', trackName: 'Exercício', ...DEMO_COUNT
     };
     const { handler, fetchMock } = setup({}, { parts: [part] });
     const { status, body, headers } = await call(handler, post({ songId: -1, partId: 0 }));
     expect([status, body]).toEqual([200, part]);
     expect(headers.get('Access-Control-Allow-Origin')).toBe(ORIGIN);
+    // Seeded parts are never recounted, whatever revision the app sends
+    expect(await call(handler, post({ songId: -1, partId: 0, revisionId: 9 }))).toMatchObject({ status: 200, body: part });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -135,9 +147,9 @@ describe('register-part handler', () => {
   it('counts a new part with the same parser and scoring as the game', async () => {
     const { handler, fetchMock, inserted } = setup({ [META_URL]: ok(META), [tabUrl(SONGSTERR_CDN_HOSTS[0])]: ok(rawDemo) });
     const { status, body } = await call(handler, post({ songId: 77, partId: 0 }));
-    const expected = { songId: 77, partId: 0, title: 'Song', artist: 'Band', trackName: 'Lead', ...DEMO_COUNT };
+    const expected = { songId: 77, partId: 0, revisionId: 5, title: 'Song', artist: 'Band', trackName: 'Lead', ...DEMO_COUNT };
     expect([status, body]).toEqual([200, expected]);
-    expect(inserted).toEqual([{ ...expected, revisionId: 5, registeredBy: USER }]);
+    expect(inserted).toEqual([{ ...expected, registeredBy: USER }]);
     expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([META_URL, tabUrl(SONGSTERR_CDN_HOSTS[0])]);
     const init = fetchMock.mock.calls[0][1];
     expect(new Headers(init?.headers).get('User-Agent')).toContain('Mozilla');
@@ -153,6 +165,36 @@ describe('register-part handler', () => {
     expect(await call(handler, post({ songId: 77, partId: 0 }))).toMatchObject({ status: 200, body: DEMO_COUNT });
   });
 
+  describe('tab revisions', () => {
+    const stored: SongPart = {
+      songId: 77, partId: 0, revisionId: 4, title: 'Song', artist: 'Band', trackName: 'Lead',
+      scorableNotes: 10, durationMs: 30_000, maxScore: maxPossibleScore(10)
+    };
+
+    it('does not fetch when the app has the stored revision or sends none', async () => {
+      const { handler, fetchMock } = setup({}, { parts: [stored] });
+      expect(await call(handler, post({ songId: 77, partId: 0, revisionId: 4 }))).toMatchObject({ status: 200, body: stored });
+      expect(await call(handler, post({ songId: 77, partId: 0 }))).toMatchObject({ status: 200, body: stored });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('recounts and updates when Songsterr has a newer revision', async () => {
+      const { handler, updated, inserted } = setup(
+        { [META_URL]: ok(META), [tabUrl(SONGSTERR_CDN_HOSTS[0])]: ok(rawDemo) }, { parts: [stored] });
+      const { status, body } = await call(handler, post({ songId: 77, partId: 0, revisionId: 5 }));
+      expect([status, body]).toEqual([200, { ...stored, revisionId: 5, ...DEMO_COUNT }]);
+      expect(updated).toEqual([{ ...stored, revisionId: 5, ...DEMO_COUNT, registeredBy: USER }]);
+      expect(inserted).toEqual([]);
+    });
+
+    it('keeps the stored count when Songsterr still serves that revision', async () => {
+      const { handler, fetchMock, updated } = setup({ [META_URL]: ok({ ...META, revisionId: 4 }) }, { parts: [stored] });
+      expect(await call(handler, post({ songId: 77, partId: 0, revisionId: 6 }))).toMatchObject({ status: 200, body: stored });
+      expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([META_URL]);
+      expect(updated).toEqual([]);
+    });
+  });
+
   it('limits new registrations per user and hour', async () => {
     const { handler, fetchMock } = setup({ [META_URL]: ok(META) }, { recent: REGISTRATIONS_PER_HOUR });
     expect(await call(handler, post({ songId: 77, partId: 0 }))).toMatchObject({ status: 429, body: { error: 'rate_limited' } });
@@ -163,6 +205,8 @@ describe('register-part handler', () => {
     ['an unknown song', {}, 404, 'song_not_found'],
     ['meta without tracks', { [META_URL]: ok({ songId: 77 }) }, 404, 'song_not_found'],
     ['a part the song does not have', { [META_URL]: ok({ ...META, tracks: [META.tracks[1]] }) }, 404, 'part_not_found'],
+    ['meta of another song', { [META_URL]: ok({ ...META, songId: 78 }) }, 502, 'songsterr_unavailable'],
+    ['meta without a revision', { [META_URL]: ok({ ...META, revisionId: 'x' }) }, 502, 'songsterr_unavailable'],
     ['Songsterr failing', { [META_URL]: new Response('', { status: 503 }) }, 502, 'songsterr_unavailable'],
     ['no network', { [META_URL]: new TypeError('fetch failed') }, 502, 'songsterr_unavailable'],
     ['a timeout', { [META_URL]: 'hang' }, 502, 'songsterr_unavailable'],
@@ -188,6 +232,9 @@ describe('register-part handler', () => {
         findPart: async () => null,
         countRegistrationsSince: async () => 0,
         insertPart: async () => {
+          throw new Error('unreachable');
+        },
+        updatePart: async () => {
           throw new Error('unreachable');
         }
       }

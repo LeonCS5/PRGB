@@ -64,13 +64,14 @@ describe('retention', () => {
     const orphanNew = await createUser(db, { createdAt: daysAgo(1) });
 
     await db.query(
-      `insert into public.song_parts (song_id, part_id, title, artist, track_name, scorable_notes, duration_ms, max_score,
-         registered_by, registered_at)
-       values (1, 0, 'Velha', 'Banda', 'Guitarra', 10, 60000, 4500, $1, now() - interval '8 days'),
-              (2, 0, 'Nova', 'Banda', 'Guitarra', 10, 60000, 4500, $1, now() - interval '1 day')`, [active]);
+      `insert into public.song_parts (song_id, part_id, revision_id, title, artist, track_name, scorable_notes, duration_ms,
+         max_score, registered_by, registered_at)
+       values (1, 0, 1, 'Velha', 'Banda', 'Guitarra', 10, 60000, 4500, $1, now() - interval '8 days'),
+              (2, 0, 1, 'Nova', 'Banda', 'Guitarra', 10, 60000, 4500, $1, now() - interval '1 day')`, [active]);
     await db.query(
-      `insert into public.play_sessions (user_id, song_id, part_id, started_at)
-       values ($1, 1, 0, now() - interval '8 days'), ($1, 1, 0, now() - interval '6 days')`, [active]);
+      `insert into public.play_sessions (user_id, song_id, part_id, revision_id, scorable_notes, duration_ms, max_score, started_at)
+       values ($1, 1, 0, 1, 10, 60000, 4500, now() - interval '8 days'),
+              ($1, 1, 0, 1, 10, 60000, 4500, now() - interval '6 days')`, [active]);
     await db.query(
       `insert into public.scores_weekly (user_id, song_id, part_id, week_start, score, accuracy, max_combo, perfect, good, miss)
        values ($1, 1, 0, public.current_week_start() - 56, 100, 100, 1, 1, 0, 0),
@@ -105,8 +106,8 @@ describe('retention', () => {
     const orphan = await createUser(db, { createdAt: daysAgo(3) });
     const owner = await player();
     await db.query(
-      `insert into public.play_sessions (user_id, song_id, part_id, started_at)
-       values ($1, 1, 0, now() - interval '8 days')`, [owner]);
+      `insert into public.play_sessions (user_id, song_id, part_id, revision_id, scorable_notes, duration_ms, max_score, started_at)
+       values ($1, 1, 0, 1, 10, 60000, 4500, now() - interval '8 days')`, [owner]);
 
     const after = await db.transaction(async (tx) => {
       // Make the session cleanup fail

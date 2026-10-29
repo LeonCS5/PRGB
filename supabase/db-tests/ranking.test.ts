@@ -349,11 +349,39 @@ describe('start_session', () => {
     const userId = await newPlayer();
     const part = await registerPart();
     await db.query(
-      `insert into public.play_sessions (user_id, song_id, part_id, started_at)
-       select $1, $2, 0, now() - interval '30 minutes' from generate_series(1, 60)`, [userId, part.songId]);
+      `insert into public.play_sessions (user_id, song_id, part_id, revision_id, scorable_notes, duration_ms, max_score, started_at)
+       select $1, $2, 0, 1, 20, 60000, 7500, now() - interval '30 minutes' from generate_series(1, 60)`, [userId, part.songId]);
     await expectError(startSession(userId, part.songId), 'rate_limited');
     await db.query("update public.play_sessions set started_at = now() - interval '61 minutes' where user_id = $1", [userId]);
     await expect(startSession(userId, part.songId)).resolves.toBeTruthy();
+  });
+});
+
+describe('tab revisions', () => {
+  it('copies the revision and its numbers into the session, refusing another revision from the app', async () => {
+    const userId = await newPlayer();
+    const part = await registerPart(); // revision 1, 20 notes, 60 s
+    await expectError(rpc(db, userId, 'public.start_session($1, 0, $2)', [part.songId, 2]), 'revision_mismatch');
+    const sessionId = await rpc<string>(db, userId, 'public.start_session($1, 0, $2)', [part.songId, 1]);
+    const { rows } = await db.query(
+      'select revision_id, scorable_notes, duration_ms, max_score from public.play_sessions where id = $1', [sessionId]);
+    expect(rows[0]).toEqual({ revision_id: 1, scorable_notes: 20, duration_ms: 60_000, max_score: maxPossibleScore(20) });
+  });
+
+  it('checks an open session against the revision it started with', async () => {
+    const userId = await newPlayer();
+    const part = await registerPart();
+    const before = await startSession(userId, part.songId);
+    // register-part recounts a new revision: half the notes
+    await callAs(db, 'service_role', null,
+      `update public.song_parts set revision_id = 2, scorable_notes = 10, duration_ms = 30000, max_score = $2
+       where song_id = $1`, [part.songId, maxPossibleScore(10)]);
+    const after = await startSession(userId, part.songId);
+    await backdate(before, '61 seconds');
+    await backdate(after, '61 seconds');
+    // 20 judged notes only fit the revision the first session started with
+    await expect(submit(userId, before)).resolves.toMatchObject({ accepted: true });
+    await expectError(submit(userId, after), 'score_implausible');
   });
 });
 
@@ -482,8 +510,8 @@ describe('export_my_data', () => {
     expect(data.scores_best).toEqual([expect.objectContaining({ song_id: mine.songId, score: 4200, title: 'Música' })]);
     expect(data.scores_weekly).toEqual([expect.objectContaining({ song_id: mine.songId, score: 4200, week_start: expect.any(String) })]);
     expect(data.play_sessions).toEqual([
-      { song_id: mine.songId, part_id: 0, started_at: expect.any(String), submitted_at: expect.any(String) },
-      { song_id: mine.songId, part_id: 0, started_at: expect.any(String), submitted_at: null }
+      { song_id: mine.songId, part_id: 0, revision_id: 1, started_at: expect.any(String), submitted_at: expect.any(String) },
+      { song_id: mine.songId, part_id: 0, revision_id: 1, started_at: expect.any(String), submitted_at: null }
     ]);
     expect(data.registered_parts).toEqual([
       { song_id: mine.songId, part_id: 0, title: 'Música', track_name: 'Guitarra', registered_at: expect.any(String) }

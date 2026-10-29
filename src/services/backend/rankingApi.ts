@@ -24,6 +24,7 @@ export type RankingErrorCode =
   | 'profile_required'
   // Ranked play
   | 'part_unregistered'
+  | 'revision_mismatch' // the server counted another tab revision: registerPart with yours, then start again
   | 'session_invalid'
   | 'session_too_short'
   | 'session_expired'
@@ -39,7 +40,8 @@ export type RankingErrorCode =
 // Codes the server sends: RPC exception messages and the Edge Function's { error } body
 const SERVER_CODES: ReadonlySet<string> = new Set<RankingErrorCode>([
   'not_authenticated', 'invalid_input', 'rate_limited', 'consent_required', 'nickname_invalid', 'nickname_blocked',
-  'nickname_taken', 'profile_exists', 'profile_required', 'part_unregistered', 'session_invalid', 'session_too_short',
+  'nickname_taken', 'profile_exists', 'profile_required', 'part_unregistered', 'revision_mismatch', 'session_invalid',
+  'session_too_short',
   'session_expired', 'already_submitted', 'score_implausible', 'song_not_found', 'part_not_found',
   'songsterr_unavailable', 'tab_invalid', 'tab_empty'
 ]);
@@ -118,10 +120,14 @@ export interface CreateProfileInput {
   consentVersion: string; // version of the text the player accepted: 1-32 of [0-9A-Za-z._-]
 }
 
-/** A Songsterr track as counted by the server (register-part). */
+/**
+ * A Songsterr track as counted by the server (register-part), for tab revision `revisionId`. If it differs
+ * from the revision the app loaded (SongsterrMeta.revisionId), reload the tab before a ranked run.
+ */
 export interface RegisteredPart {
   songId: number;
   partId: number;
+  revisionId: number;
   title: string;
   artist: string;
   trackName: string;
@@ -187,7 +193,13 @@ export interface RankingDataExport {
   } | null;
   scores_best: ExportedScore[];
   scores_weekly: (ExportedScore & { week_start: string })[];
-  play_sessions: { song_id: number; part_id: number; started_at: string; submitted_at: string | null }[];
+  play_sessions: {
+    song_id: number;
+    part_id: number;
+    revision_id: number;
+    started_at: string;
+    submitted_at: string | null;
+  }[];
   registered_parts: { song_id: number; part_id: number; title: string; track_name: string; registered_at: string }[];
 }
 
@@ -250,6 +262,7 @@ function parseRegisteredPart(data: unknown): RegisteredPart {
   return {
     songId: readNumber(record, 'songId'),
     partId: readNumber(record, 'partId'),
+    revisionId: readNumber(record, 'revisionId'),
     title: readString(record, 'title'),
     artist: readString(record, 'artist'),
     trackName: readString(record, 'trackName'),
@@ -375,22 +388,33 @@ export async function deleteMyAccount(): Promise<void> {
   await client.auth.signOut({ scope: 'local' });
 }
 
-/** Asks the server to count a track (or returns it when already counted). Needs a session and a profile. */
-export async function registerPart(songId: number, partId: number): Promise<RegisteredPart> {
-  assertIntegers([songId, partId]);
+/**
+ * Asks the server to count a track, or returns the stored count. Pass the revision of the tab you loaded
+ * (SongsterrMeta.revisionId): when it differs from the stored one the server checks Songsterr and recounts
+ * if there is a newer revision. Needs a session and a profile.
+ */
+export async function registerPart(songId: number, partId: number, revisionId?: number): Promise<RegisteredPart> {
+  assertIntegers(revisionId === undefined ? [songId, partId] : [songId, partId, revisionId]);
   const client = await requireClient();
   // Without a session the platform would refuse the request before the function runs
   if (!(await readSession(client))) throw new RankingError('not_authenticated');
-  const { data, error } = await client.functions.invoke('register-part', { body: { songId, partId }, timeout: 30_000 });
+  const body = revisionId === undefined ? { songId, partId } : { songId, partId, revisionId };
+  const { data, error } = await client.functions.invoke('register-part', { body, timeout: 30_000 });
   if (error) throw await toFunctionError(error);
   return parseRegisteredPart(data);
 }
 
-/** Starts a ranked run (only at 1x speed: shorter than 90% of the song is refused). Returns its id. */
-export async function startRankedSession(songId: number, partId: number): Promise<string> {
-  assertIntegers([songId, partId]);
+/**
+ * Starts a ranked run and returns its id. The app must lock it to 1x speed without seeking: the server only
+ * refuses runs shorter than 90% of the song. With `revisionId`, a different revision on the server is
+ * refused (revision_mismatch) instead of checking the run against other numbers.
+ */
+export async function startRankedSession(songId: number, partId: number, revisionId?: number): Promise<string> {
+  assertIntegers(revisionId === undefined ? [songId, partId] : [songId, partId, revisionId]);
   const client = await requireClient();
-  const data = await callRpc(client, 'start_session', { p_song_id: songId, p_part_id: partId });
+  const data = await callRpc(client, 'start_session', revisionId === undefined
+    ? { p_song_id: songId, p_part_id: partId }
+    : { p_song_id: songId, p_part_id: partId, p_revision_id: revisionId });
   if (typeof data !== 'string') throw invalidResponse();
   return data;
 }

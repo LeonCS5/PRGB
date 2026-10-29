@@ -43,6 +43,7 @@ describe('toRankingError', () => {
   it.each<[unknown, api.RankingErrorCode]>([
     [{ message: 'nickname_taken', code: 'P0001' }, 'nickname_taken'],
     [{ message: 'score_implausible', code: 'P0001' }, 'score_implausible'],
+    [{ message: 'revision_mismatch', code: 'P0001' }, 'revision_mismatch'],
     [{ message: 'permission denied for function create_profile', code: '42501' }, 'not_authenticated'],
     [{ message: 'JWT expired', code: 'PGRST301' }, 'not_authenticated'],
     [{ name: 'AuthRetryableFetchError', status: 0, message: 'Failed to fetch' }, 'network'],
@@ -157,18 +158,25 @@ describe('session and profile', () => {
 });
 
 describe('registerPart', () => {
-  const part = { songId: 7, partId: 0, title: 'Song', artist: 'Band', trackName: 'Lead', scorableNotes: 41, durationMs: 18667, maxScore: 20100 };
+  const part = {
+    songId: 7, partId: 0, revisionId: 5, title: 'Song', artist: 'Band', trackName: 'Lead',
+    scorableNotes: 41, durationMs: 18667, maxScore: 20100
+  };
   const httpError = (status: number, body: string) =>
     ({ name: 'FunctionsHttpError', context: new Response(body, { status }) });
 
-  it('invokes the Edge Function with the ids', async () => {
+  it('invokes the Edge Function with the ids and the loaded revision', async () => {
     client.functions.invoke.mockResolvedValue({ data: part, error: null });
     expect(await api.registerPart(7, 0)).toEqual(part);
-    expect(client.functions.invoke).toHaveBeenCalledWith('register-part', { body: { songId: 7, partId: 0 }, timeout: 30_000 });
+    expect(client.functions.invoke).toHaveBeenLastCalledWith('register-part', { body: { songId: 7, partId: 0 }, timeout: 30_000 });
+    expect(await api.registerPart(7, 0, 5)).toEqual(part);
+    expect(client.functions.invoke).toHaveBeenLastCalledWith(
+      'register-part', { body: { songId: 7, partId: 0, revisionId: 5 }, timeout: 30_000 });
   });
 
   it('needs a session and integer ids', async () => {
     await rejectsWith(api.registerPart(7.5, 0), 'invalid_input');
+    await rejectsWith(api.registerPart(7, 0, 1.5), 'invalid_input');
     useClient(fakeClient({ session: false }));
     await rejectsWith(api.registerPart(7, 0), 'not_authenticated');
     expect(client.functions.invoke).not.toHaveBeenCalled();
@@ -192,7 +200,9 @@ describe('ranked play', () => {
   it('starts a session and submits integers only', async () => {
     useClient(fakeClient({ rpc: { data: 'session-uuid', error: null, status: 200 } }));
     expect(await api.startRankedSession(7, 0)).toBe('session-uuid');
-    expect(client.rpc).toHaveBeenCalledWith('start_session', { p_song_id: 7, p_part_id: 0 });
+    expect(client.rpc).toHaveBeenLastCalledWith('start_session', { p_song_id: 7, p_part_id: 0 });
+    await api.startRankedSession(7, 0, 5);
+    expect(client.rpc).toHaveBeenLastCalledWith('start_session', { p_song_id: 7, p_part_id: 0, p_revision_id: 5 });
 
     await rejectsWith(
       api.submitScore({ sessionId: 'session-uuid', score: 10, perfect: 1, good: 0, miss: 0, maxCombo: 1, accuracy: 97.5 }),

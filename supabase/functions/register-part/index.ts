@@ -5,6 +5,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import {
   DEFAULT_ALLOWED_ORIGINS,
   createRegisterPartHandler,
+  type NewSongPart,
   type RegisterPartStore,
   type SongPart
 } from './handler.ts';
@@ -12,6 +13,7 @@ import {
 interface SongPartRow {
   song_id: number;
   part_id: number;
+  revision_id: number;
   title: string;
   artist: string;
   track_name: string;
@@ -20,7 +22,8 @@ interface SongPartRow {
   max_score: number;
 }
 
-const SONG_PART_COLUMNS = 'song_id, part_id, title, artist, track_name, scorable_notes, duration_ms, max_score';
+const SONG_PART_COLUMNS =
+  'song_id, part_id, revision_id, title, artist, track_name, scorable_notes, duration_ms, max_score';
 
 // The new secret key when the project has one; the legacy service_role key otherwise (Supabase retires
 // the legacy keys at the end of 2026)
@@ -51,6 +54,7 @@ const admin = createClient(supabaseUrl, secretKey, {
 const toSongPart = (row: SongPartRow): SongPart => ({
   songId: row.song_id,
   partId: row.part_id,
+  revisionId: row.revision_id,
   title: row.title,
   artist: row.artist,
   trackName: row.track_name,
@@ -94,24 +98,42 @@ const store: RegisterPartStore = {
   },
 
   async insertPart(part) {
-    const { error } = await admin.from('song_parts').upsert({
-      song_id: part.songId,
-      part_id: part.partId,
-      revision_id: part.revisionId,
-      title: part.title,
-      artist: part.artist,
-      track_name: part.trackName,
-      scorable_notes: part.scorableNotes,
-      duration_ms: part.durationMs,
-      max_score: part.maxScore,
-      registered_by: part.registeredBy
-    }, { onConflict: 'song_id,part_id', ignoreDuplicates: true });
+    const { error } = await admin.from('song_parts')
+      .upsert(toRow(part), { onConflict: 'song_id,part_id', ignoreDuplicates: true });
     if (error) throw new Error(`song_parts insert: ${error.code}`);
-    const stored = await store.findPart(part.songId, part.partId);
-    if (!stored) throw new Error('song_parts: row missing after insert');
-    return stored;
+    return readBack(part);
+  },
+
+  async updatePart(part) {
+    const { error } = await admin.from('song_parts')
+      .update({ ...toRow(part), registered_at: new Date().toISOString() })
+      .eq('song_id', part.songId)
+      .eq('part_id', part.partId);
+    if (error) throw new Error(`song_parts update: ${error.code}`);
+    return readBack(part);
   }
 };
+
+function toRow(part: NewSongPart) {
+  return {
+    song_id: part.songId,
+    part_id: part.partId,
+    revision_id: part.revisionId,
+    title: part.title,
+    artist: part.artist,
+    track_name: part.trackName,
+    scorable_notes: part.scorableNotes,
+    duration_ms: part.durationMs,
+    max_score: part.maxScore,
+    registered_by: part.registeredBy
+  };
+}
+
+async function readBack(part: NewSongPart): Promise<SongPart> {
+  const stored = await store.findPart(part.songId, part.partId);
+  if (!stored) throw new Error('song_parts: row missing after write');
+  return stored;
+}
 
 // Optional override, comma-separated (e.g. to allow a Vercel preview URL)
 const allowedOrigins = (Deno.env.get('ALLOWED_ORIGINS') ?? '')

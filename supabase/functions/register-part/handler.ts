@@ -31,10 +31,11 @@ const SONGSTERR_HEADERS = {
 const INT4_MAX = 2_147_483_647;
 const TEXT_MAX = 200;
 
-/** Response body on success. */
+/** Response body on success: the part as counted for the Songsterr tab revision `revisionId`. */
 export interface SongPart {
   songId: number;
   partId: number;
+  revisionId: number;
   title: string;
   artist: string;
   trackName: string;
@@ -44,7 +45,6 @@ export interface SongPart {
 }
 
 export interface NewSongPart extends SongPart {
-  revisionId: number | null;
   registeredBy: string;
 }
 
@@ -57,6 +57,8 @@ export interface RegisterPartStore {
   countRegistrationsSince(userId: string, since: Date): Promise<number>;
   /** Inserts unless the part already exists (a concurrent request won), then returns the stored row. */
   insertPart(part: NewSongPart): Promise<SongPart>;
+  /** Replaces the counts of an existing part with those of a newer revision, then returns the stored row. */
+  updatePart(part: NewSongPart): Promise<SongPart>;
 }
 
 /** Response body on failure: `{ error: code }`. */
@@ -112,16 +114,22 @@ function corsHeaders(origin: string | null, allowedOrigins: readonly string[]): 
 const json = (status: number, body: unknown, headers: Record<string, string>): Response =>
   new Response(JSON.stringify(body), { status, headers: { ...headers, 'Content-Type': 'application/json' } });
 
-async function readSongPartId(request: Request): Promise<{ songId: number; partId: number }> {
+const isRevision = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+
+/** Body: `{ songId, partId, revisionId? }`, revisionId being the revision of the tab the app loaded. */
+async function readRequest(request: Request): Promise<{ songId: number; partId: number; revisionId?: number }> {
   let body: unknown;
   try {
     body = await request.json();
   } catch {
     throw new HttpError(400, 'invalid_input');
   }
-  const { songId, partId } = (body ?? {}) as Record<string, unknown>;
+  const { songId, partId, revisionId } = (body ?? {}) as Record<string, unknown>;
   if (!isInt4(songId) || !isInt4(partId)) throw new HttpError(400, 'invalid_input');
-  return { songId, partId };
+  if (revisionId === undefined || revisionId === null) return { songId, partId };
+  if (!isRevision(revisionId)) throw new HttpError(400, 'invalid_input');
+  return { songId, partId, revisionId };
 }
 
 export function createRegisterPartHandler(deps: RegisterPartDeps): (request: Request) => Promise<Response> {
@@ -151,11 +159,15 @@ export function createRegisterPartHandler(deps: RegisterPartDeps): (request: Req
     if (response.status === 404) throw new HttpError(404, 'song_not_found');
     if (!response.ok) throw new HttpError(502, 'songsterr_unavailable');
     const data = await readJson(response, new HttpError(502, 'songsterr_unavailable'));
+    let meta: SongsterrMeta;
     try {
-      return normalizeSongMeta(data);
+      meta = normalizeSongMeta(data);
     } catch {
       throw new HttpError(404, 'song_not_found');
     }
+    // The ids end up in the CDN path and in the database
+    if (meta.songId !== songId || !isRevision(meta.revisionId)) throw new HttpError(502, 'songsterr_unavailable');
+    return meta;
   }
 
   // Same CDN path and fallback order as SongsterrApi.getTrackTabJson
@@ -173,8 +185,7 @@ export function createRegisterPartHandler(deps: RegisterPartDeps): (request: Req
     throw new HttpError(502, 'songsterr_unavailable');
   }
 
-  async function countPart(songId: number, partId: number, registeredBy: string): Promise<NewSongPart> {
-    const meta = await fetchMeta(songId);
+  async function countPart(meta: SongsterrMeta, partId: number, registeredBy: string): Promise<NewSongPart> {
     const trackIndex = meta.tracks.findIndex((track) => track.partId === partId);
     if (trackIndex < 0) throw new HttpError(404, 'part_not_found');
 
@@ -197,9 +208,9 @@ export function createRegisterPartHandler(deps: RegisterPartDeps): (request: Req
       throw new HttpError(422, 'tab_invalid');
     }
     return {
-      songId,
+      songId: meta.songId,
       partId,
-      revisionId: Number.isSafeInteger(meta.revisionId) ? meta.revisionId : null,
+      revisionId: meta.revisionId,
       title: shortText(meta.title),
       artist: shortText(meta.artist),
       trackName: shortText(tab.trackName),
@@ -222,18 +233,26 @@ export function createRegisterPartHandler(deps: RegisterPartDeps): (request: Req
       if (!userId) throw new HttpError(401, 'not_authenticated');
       if (!(await deps.store.hasProfile(userId))) throw new HttpError(403, 'profile_required');
 
-      const { songId, partId } = await readSongPartId(request);
+      const { songId, partId, revisionId } = await readRequest(request);
       const existing = await deps.store.findPart(songId, partId);
-      if (existing) return json(200, existing, cors);
       // Songsterr ids are positive; negative ones are reserved for parts seeded by migrations (the demo)
-      if (songId <= 0 || partId < 0) throw new HttpError(404, 'song_not_found');
+      const seeded = songId <= 0 || partId < 0;
+      // Counted already, and the app saw no other revision: nothing to fetch
+      if (existing && (seeded || revisionId === undefined || revisionId === existing.revisionId)) {
+        return json(200, existing, cors);
+      }
+      if (seeded) throw new HttpError(404, 'song_not_found');
 
       const since = new Date(now().getTime() - 3_600_000);
       if ((await deps.store.countRegistrationsSince(userId, since)) >= REGISTRATIONS_PER_HOUR) {
         throw new HttpError(429, 'rate_limited');
       }
 
-      const stored = await deps.store.insertPart(await countPart(songId, partId, userId));
+      // Songsterr decides the current revision; the one the app sent only triggers the check
+      const meta = await fetchMeta(songId);
+      if (existing && meta.revisionId === existing.revisionId) return json(200, existing, cors);
+      const counted = await countPart(meta, partId, userId);
+      const stored = existing ? await deps.store.updatePart(counted) : await deps.store.insertPart(counted);
       return json(200, stored, cors);
     } catch (error) {
       if (error instanceof HttpError) return json(error.status, { error: error.code }, cors);

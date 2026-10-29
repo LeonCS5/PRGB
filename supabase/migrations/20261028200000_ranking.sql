@@ -195,10 +195,13 @@ insert into public.moderation_allowlist (fragment) values
   ('computa'), ('deputa'), ('disputa'), ('imputa'), ('reputa'), ('badminton');
 
 -- One row per Songsterr track that can be ranked, counted on the server by the register-part Edge Function
+-- for the tab revision in revision_id. When Songsterr publishes a new revision the function recounts and
+-- updates the row in place; sessions keep a copy of the numbers they started with (see play_sessions), so
+-- a recount never changes how an open session is checked. Scores of all revisions share one leaderboard.
 create table public.song_parts (
   song_id integer not null,
   part_id integer not null,
-  revision_id bigint,
+  revision_id bigint not null check (revision_id >= 0),
   title text not null,
   artist text not null,
   track_name text not null,
@@ -218,11 +221,16 @@ insert into public.song_parts (
   song_id, part_id, revision_id, title, artist, track_name, scorable_notes, duration_ms, max_score
 ) values (-1, 0, 0, 'Pentatônica em Lá menor', 'Exercício PRGB', 'Exercício', 41, 18667, 20100);
 
+-- revision_id and the numbers are copied from song_parts when the session starts
 create table public.play_sessions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.profiles (id) on delete cascade,
   song_id integer not null,
   part_id integer not null,
+  revision_id bigint not null,
+  scorable_notes integer not null,
+  duration_ms integer not null,
+  max_score integer not null,
   started_at timestamptz not null default now(),
   submitted_at timestamptz,
   foreign key (song_id, part_id) references public.song_parts (song_id, part_id) on delete cascade
@@ -285,9 +293,9 @@ revoke all on table
 from public, anon, authenticated;
 
 -- The register-part Edge Function runs with the service role (bypasses RLS): it checks that the caller has
--- a profile and registers song parts. Explicit so it does not rely on Supabase's default privileges.
+-- a profile and registers or recounts song parts. Explicit so it does not rely on Supabase's defaults.
 grant select on table public.profiles to service_role;
-grant select, insert on table public.song_parts to service_role;
+grant select, insert, update on table public.song_parts to service_role;
 
 -- Internal helpers -------------------------------------------------------------------------------------
 
@@ -568,7 +576,7 @@ begin
     ), '[]'::jsonb),
     'play_sessions', coalesce((
       select jsonb_agg(jsonb_build_object(
-        'song_id', ps.song_id, 'part_id', ps.part_id,
+        'song_id', ps.song_id, 'part_id', ps.part_id, 'revision_id', ps.revision_id,
         'started_at', ps.started_at, 'submitted_at', ps.submitted_at
       ) order by ps.started_at)
       from public.play_sessions ps
@@ -602,7 +610,10 @@ $$;
 
 -- Ranked play ------------------------------------------------------------------------------------------
 
-create function public.start_session(p_song_id integer, p_part_id integer)
+-- p_revision_id: the Songsterr revision of the tab the app loaded. When given and different from the one the
+-- server counted, the run would be checked against other numbers, so it is refused (revision_mismatch): the
+-- app should call register-part with its revision (which recounts) and start again.
+create function public.start_session(p_song_id integer, p_part_id integer, p_revision_id bigint default null)
 returns uuid
 language plpgsql
 security definer
@@ -610,6 +621,7 @@ set search_path = ''
 as $$
 declare
   v_uid uuid := public.require_user();
+  v_part public.song_parts%rowtype;
   v_session_id uuid;
 begin
   -- Locking the profile row serializes concurrent starts of the same player, so the hourly limit holds
@@ -617,10 +629,12 @@ begin
   if not found then
     raise exception 'profile_required';
   end if;
-  if not exists (
-    select 1 from public.song_parts s where s.song_id = p_song_id and s.part_id = p_part_id
-  ) then
+  select * into v_part from public.song_parts s where s.song_id = p_song_id and s.part_id = p_part_id;
+  if not found then
     raise exception 'part_unregistered';
+  end if;
+  if p_revision_id is not null and p_revision_id <> v_part.revision_id then
+    raise exception 'revision_mismatch';
   end if;
   if (
     select count(*) from public.play_sessions ps
@@ -629,8 +643,8 @@ begin
     raise exception 'rate_limited';
   end if;
 
-  insert into public.play_sessions (user_id, song_id, part_id)
-  values (v_uid, p_song_id, p_part_id)
+  insert into public.play_sessions (user_id, song_id, part_id, revision_id, scorable_notes, duration_ms, max_score)
+  values (v_uid, p_song_id, p_part_id, v_part.revision_id, v_part.scorable_notes, v_part.duration_ms, v_part.max_score)
   returning id into v_session_id;
   update public.profiles set last_seen_at = now() where id = v_uid;
   return v_session_id;
@@ -657,7 +671,6 @@ declare
   v_uid uuid := public.require_user();
   v_week date := public.current_week_start();
   v_session public.play_sessions%rowtype;
-  v_part public.song_parts%rowtype;
   v_judged bigint;
   v_expected_accuracy integer;
   v_personal_best boolean;
@@ -679,11 +692,9 @@ begin
     raise exception 'session_expired';
   end if;
 
-  select * into v_part
-  from public.song_parts s
-  where s.song_id = v_session.song_id and s.part_id = v_session.part_id;
+  -- The numbers are those of the revision the session started with (copied by start_session).
   -- Ranking only counts 1x speed: the session must have lasted at least 90% of the song
-  if extract(epoch from now() - v_session.started_at) * 1000 < v_part.duration_ms * 0.9 then
+  if extract(epoch from now() - v_session.started_at) * 1000 < v_session.duration_ms * 0.9 then
     raise exception 'session_too_short';
   end if;
 
@@ -700,9 +711,9 @@ begin
     when v_judged > 0 then round((p_perfect::numeric + p_good) * 100 / v_judged)
     else 100
   end;
-  if v_judged > v_part.scorable_notes
+  if v_judged > v_session.scorable_notes
     or p_max_combo > p_perfect::bigint + p_good
-    or p_score > v_part.max_score
+    or p_score > v_session.max_score
     or p_score > (p_perfect::bigint * 150 + p_good::bigint * 100) * 4
     or abs(p_accuracy - v_expected_accuracy) > 1 then
     raise exception 'score_implausible';
@@ -893,7 +904,7 @@ revoke all on function
   public.touch_last_seen(),
   public.export_my_data(),
   public.delete_my_account(),
-  public.start_session(integer, integer),
+  public.start_session(integer, integer, bigint),
   public.submit_score(uuid, integer, integer, integer, integer, integer, integer),
   public.get_leaderboard(integer, integer, text, integer),
   public.get_my_position(integer, integer, text),
@@ -908,7 +919,7 @@ grant execute on function
   public.touch_last_seen(),
   public.export_my_data(),
   public.delete_my_account(),
-  public.start_session(integer, integer),
+  public.start_session(integer, integer, bigint),
   public.submit_score(uuid, integer, integer, integer, integer, integer, integer),
   public.get_my_position(integer, integer, text)
 to authenticated;
