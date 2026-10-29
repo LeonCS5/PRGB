@@ -18,6 +18,9 @@ import {
 } from 'lucide-react';
 import { getDemoSong, DEMO_SONG_ID } from './services/demoSong';
 import { ErrorNotice } from './components/ErrorNotice';
+import { ChallengeCard } from './components/ChallengeCard';
+import { LocalRecords } from './components/LocalRecords';
+import { CHALLENGE_PARAM, readChallengeFromSearch, type Challenge } from './services/challenge';
 import { BrandMark } from './components/BrandMark';
 import { getSongMetadata, loadSongTrack } from './context/uiErrors';
 import { PracticeGame } from './components/PracticeGame';
@@ -79,7 +82,15 @@ const PracticePreview: React.FC = () => (
 
 const demoPart = (): GamePart => ({ tab: getDemoSong(), partId: 0 });
 
-const soloSession = (part: GamePart): GameSession => ({ mode: 'solo', key: nextSessionKey(), part, challenge: null });
+const soloSession = (part: GamePart, challenge: Challenge | null = null): GameSession =>
+  ({ mode: 'solo', key: nextSessionKey(), part, challenge });
+
+// Drops ?desafio= from the address bar without reloading, keeping any other parameter
+const clearChallengeParam = () => {
+  const url = new URL(window.location.href);
+  url.searchParams.delete(CHALLENGE_PARAM);
+  window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+};
 
 const LandingPitch: React.FC = () => {
   const latestPitch = useLatestPitch();
@@ -120,6 +131,10 @@ const AppContent: React.FC = () => {
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [restoreAttempt, setRestoreAttempt] = useState(0);
   const [defaultError, setDefaultError] = useState<string | null>(null);
+  const [pendingChallenge, setPendingChallenge] = useState<Challenge | null>(() => readChallengeFromSearch(window.location.search));
+  const [openedWithChallenge] = useState(() => pendingChallenge !== null);
+  const [isLoadingChallenge, setIsLoadingChallenge] = useState(false);
+  const [challengeError, setChallengeError] = useState<string | null>(null);
   const songSelectionVersion = useRef(0);
 
   const sessionParts = useMemo<GamePart[]>(
@@ -132,7 +147,8 @@ const AppContent: React.FC = () => {
   }, [sessionParts, audioEngine]);
 
   useEffect(() => {
-    if (!savedSong || savedSong.songId === DEMO_SONG_ID || new URLSearchParams(window.location.search).has('demo')) return;
+    // A challenge link opens on the landing card instead of jumping into the last song
+    if (!savedSong || savedSong.songId === DEMO_SONG_ID || openedWithChallenge || new URLSearchParams(window.location.search).has('demo')) return;
     let cancelled = false;
     const version = songSelectionVersion.current;
     const restoreSong = async () => {
@@ -150,13 +166,51 @@ const AppContent: React.FC = () => {
     };
     void restoreSong();
     return () => { cancelled = true; };
-  }, [savedSong, restoreAttempt]);
+  }, [savedSong, restoreAttempt, openedWithChallenge]);
 
   const handleLoadDemo = () => {
     songSelectionVersion.current += 1;
     setRestoreError(null);
     setDefaultError(null);
     setSession(soloSession(demoPart()));
+  };
+
+  const handleAcceptChallenge = async (challenge: Challenge) => {
+    clearChallengeParam();
+    songSelectionVersion.current += 1;
+    const version = songSelectionVersion.current;
+    setRestoreError(null);
+    setDefaultError(null);
+    setChallengeError(null);
+    setIsLoadingChallenge(true);
+    if (!isAudioRunning) void handleStartAudio();
+    try {
+      let part: GamePart;
+      if (challenge.songId === DEMO_SONG_ID) {
+        part = demoPart();
+      } else {
+        const meta = await getSongMetadata(challenge.songId);
+        const trackIndex = meta.tracks.findIndex((track) => track.partId === challenge.partId);
+        if (trackIndex < 0) throw new Error('A faixa deste desafio não está mais disponível no Songsterr. Escolha outra música.');
+        part = { tab: await loadSongTrack(meta, trackIndex), partId: challenge.partId };
+      }
+      if (version !== songSelectionVersion.current) return;
+      setPendingChallenge(null);
+      setSession(soloSession(part, challenge));
+      if (part.tab.songId !== DEMO_SONG_ID) savePreferences({ lastSong: { songId: part.tab.songId, partId: part.partId } });
+    } catch (err) {
+      if (version === songSelectionVersion.current) {
+        setChallengeError(err instanceof Error ? err.message : 'Não foi possível carregar a música do desafio.');
+      }
+    } finally {
+      setIsLoadingChallenge(false);
+    }
+  };
+
+  const handleDismissChallenge = () => {
+    clearChallengeParam();
+    setPendingChallenge(null);
+    setChallengeError(null);
   };
 
   // Load default song (Metallica - Creeping Death)
@@ -210,6 +264,10 @@ const AppContent: React.FC = () => {
           <ErrorNotice message={defaultError} onDismiss={() => setDefaultError(null)}
             actionLabel="Tentar novamente" onAction={() => void handleLoadDefaultSong()} actionDisabled={isLoadingDefault} />
         )}
+        {challengeError && pendingChallenge && (
+          <ErrorNotice message={challengeError} onDismiss={() => setChallengeError(null)}
+            actionLabel="Tentar novamente" onAction={() => void handleAcceptChallenge(pendingChallenge)} actionDisabled={isLoadingChallenge} />
+        )}
       </div>
       {session ? (
         /* Practice mode */
@@ -247,6 +305,10 @@ const AppContent: React.FC = () => {
           <main id="main-content" className="pt-20">
             <section aria-labelledby="hero-title" className="relative isolate mx-auto max-w-7xl px-5 pb-14 pt-14 sm:px-8 sm:pt-20 lg:px-12 lg:pb-20 lg:pt-24">
               <div aria-hidden="true" className="pointer-events-none absolute -left-40 top-0 -z-10 size-96 rounded-full bg-amp-500/5 blur-3xl" />
+              {pendingChallenge && (
+                <ChallengeCard challenge={pendingChallenge} isLoading={isLoadingChallenge}
+                  onAccept={() => void handleAcceptChallenge(pendingChallenge)} onDismiss={handleDismissChallenge} />
+              )}
               <div className="grid items-center gap-12 lg:grid-cols-[1.05fr_1fr] lg:gap-12">
                 <div>
                   <p className="mb-6 inline-flex items-center gap-2 rounded-full border border-amp-500/25 bg-amp-500/5 px-3 py-1.5 text-xs font-medium text-amp-300">
@@ -299,6 +361,8 @@ const AppContent: React.FC = () => {
               </div>
               <div className="mt-4"><LandingPitch /></div>
             </section>
+
+            <LocalRecords />
 
             <section aria-labelledby="features-title" className="border-y border-ink-700/70 bg-ink-900/50">
               <div className="mx-auto max-w-7xl px-5 py-16 sm:px-8 lg:px-12 lg:py-20">

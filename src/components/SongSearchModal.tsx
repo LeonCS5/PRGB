@@ -1,10 +1,11 @@
 import { ModalFrame } from './ModalFrame';
-import React, { useState } from 'react';
-import { Search, Music, Disc, Loader2, Sparkles, X, ChevronRight } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Search, Music, Disc, Loader2, Sparkles, X, ChevronRight, Trophy } from 'lucide-react';
 import { SongsterrApi, type SongsterrSearchResult, type SongsterrMeta, type NormalizedSongTab } from '../services/songsterrApi';
 import type { SavedSong } from '../context/preferences';
 import { ErrorNotice } from './ErrorNotice';
 import { getSongMetadata, loadSongTrack } from '../context/uiErrors';
+import { getPersonalBest } from '../services/records';
 
 interface SongSearchModalProps {
   isOpen: boolean;
@@ -33,6 +34,11 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
   const [isLoadingTab, setIsLoadingTab] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState<(() => void) | null>(null);
+  // Personal best at 1× of each part; re-read whenever the modal opens, a run may have just ended
+  const trackBests = useMemo(
+    () => isOpen && selectedSongMeta ? selectedSongMeta.tracks.map((track) => getPersonalBest(selectedSongMeta.songId, track.partId, 1)) : [],
+    [isOpen, selectedSongMeta]
+  );
 
   if (!isOpen) return null;
 
@@ -183,6 +189,11 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
                         {track.instrument} • {track.tuning.length} cordas
                         {track.difficulty ? ` • Nível ${track.difficulty}/5` : ''}
                       </div>
+                      {trackBests[idx] && (
+                        <div className="mt-1 flex items-center gap-1 font-mono text-xs text-amp-300">
+                          <Trophy size={12} aria-hidden="true" /> Seu recorde: {trackBests[idx].score.toLocaleString('pt-BR')}
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 text-amp-400 font-semibold text-xs">
                       {isLoadingTab ? (
