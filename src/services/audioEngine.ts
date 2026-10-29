@@ -10,11 +10,18 @@ export interface DetectedPitch {
   volume: number; // 0 to 1 RMS level
   stringEstimate?: number; // estimated guitar string (1 to 6)
   fretEstimate?: number; // estimated fret
+  // Grows on each new attack (pick or change of note), stays the same while a note rings. Monotonic per
+  // player and never reused by the engine, so holding one note can't hit the repeated notes after it.
+  attackId: number;
 }
 
 import { Tone3000AmpEngine } from './tone3000Amp';
 
-export type InputChannelMode = 'ch1' | 'ch2' | 'both';
+// 'duo': two players on one interface, guitar 1 on channel 1 and guitar 2 on channel 2
+export type InputChannelMode = 'ch1' | 'ch2' | 'both' | 'duo';
+export type PlayerSlot = 0 | 1;
+// Single-player modes always report player 0
+export type PitchCallback = (pitch: DetectedPitch | null, player: PlayerSlot) => void;
 
 // MIDI notes per string, index 0 = string 1 (high E), same convention as Songsterr tabs
 export const STANDARD_TUNING = [64, 59, 55, 50, 45, 40];
@@ -43,36 +50,95 @@ export function estimateStringAndFret(
   return best;
 }
 
+/**
+ * Normalized Square Difference Function (McLeod) for lags 0..maxLag, written into `out`:
+ * nsdf(τ) = 2·Σ x[i]·x[i+τ] / m(τ), with m(τ) = Σ (x[i]² + x[i+τ]²) for i = 0..N−1−τ.
+ * m is kept as a running sum, m(τ+1) = m(τ) − x[N−1−τ]² − x[τ]², which halves the work per lag.
+ */
+export function computeNsdf(buffer: Float32Array, maxLag: number, out: Float64Array): void {
+  const length = buffer.length;
+  let divisor = 0;
+  for (let i = 0; i < length; i++) divisor += buffer[i] * buffer[i];
+  divisor *= 2;
+  for (let tau = 0; tau <= maxLag; tau++) {
+    let acf = 0;
+    for (let i = 0; i < length - tau; i++) acf += buffer[i] * buffer[i + tau];
+    out[tau] = divisor > 0 ? (2 * acf) / divisor : 0;
+    const last = buffer[length - 1 - tau];
+    const first = buffer[tau];
+    divisor -= last * last + first * first;
+  }
+}
+
+// Pitch detector of one player; duo mode has one per guitar
+interface PlayerInput {
+  slot: PlayerSlot;
+  analyser: AnalyserNode;
+  buffer: Float32Array<ArrayBuffer>;
+  rms: number; // level of the current frame, kept here so the loop doesn't allocate
+  // Attack tracking (see trackAttack)
+  previousRms: number;
+  attackId: number;
+  framesSinceAttack: number;
+  lastMidi: number; // note of the last detection, -1 = none yet
+  stableMidi: number; // last note found by two detections in a row, -1 = none yet
+}
+
 export class AudioEngine {
   private audioContext: AudioContext | null = null;
   private mediaStream: MediaStream | null = null;
   private sourceNode: MediaStreamAudioSourceNode | null = null;
   private splitterNode: ChannelSplitterNode | null = null;
   private mergerNode: ChannelMergerNode | null = null;
-  private analyserNode: AnalyserNode | null = null;
+  private playerInputs: PlayerInput[] = [];
   private tone3000: Tone3000AmpEngine | null = null;
   // Lives as long as the AudioContext; fades the amp input so (re)connections don't click
   private monitorGain: GainNode | null = null;
-  private buffer: Float32Array<ArrayBuffer> | null = null;
+  // NSDF scratch space, reused every frame and by both players
+  private nsdf: Float64Array<ArrayBuffer> | null = null;
+  private keyMaxima: Int32Array<ArrayBuffer> | null = null;
   private isRunning = false;
   private animationFrameId: number | null = null;
-  private onPitchCallback: ((pitch: DetectedPitch | null) => void) | null = null;
+  private onPitchCallback: PitchCallback | null = null;
   private pending: Promise<void> = Promise.resolve();
+  // Shared by both players and kept across reconnections, so an attack id is never handed out twice
+  private lastAttackId = 0;
+  // Duo mode: ring of the last frames in which both channels played, 1 = they carried the same signal
+  private mirrorHistory: Uint8Array<ArrayBuffer>;
+  private mirrorFrames = 0; // frames recorded since start, up to MIRROR_FRAMES
+  private mirrorIndex = 0;
 
   private selectedDeviceId = '';
   private channelMode: InputChannelMode = 'both';
-  private tuning: number[] = STANDARD_TUNING;
+  private tunings: [number[], number[]] = [STANDARD_TUNING, STANDARD_TUNING];
 
-  // Guitar frequency bounds (E1 ~ 41 Hz for 4-string bass up to B5 ~ 987 Hz for guitar)
+  // Guitar frequency bounds (E1 ~ 41 Hz for 4-string bass up to E6 ~ 1319 Hz, fret 24 of the high E)
   private readonly MIN_FREQ = 40;
-  private readonly MAX_FREQ = 1100;
+  private readonly MAX_FREQ = 1400;
   private readonly BUFFER_SIZE = 2048;
 
   private static readonly NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
   private static readonly FADE_SEC = 0.015;
+  // A frame counts as pitched when its best key maximum reaches this NSDF value
+  private static readonly CLARITY_THRESHOLD = 0.55;
+  // MPM's k: the period is the first key maximum within this fraction of the highest one
+  private static readonly PEAK_RATIO = 0.9;
+  // Below this RMS a channel is silent: no pitch is detected
+  private static readonly GATE_RMS = 0.01;
+  // A new attack: the level reaches ATTACK_MIN_RMS from silence or grows by ATTACK_RISE in one frame
+  private static readonly ATTACK_MIN_RMS = 0.02;
+  private static readonly ATTACK_RISE = 1.3;
+  // A pick takes a few frames to fill the 43 ms analyser window, so attacks this close are one attack
+  private static readonly ATTACK_DEBOUNCE_FRAMES = 3;
+  // Duo mode: channels count as mirrored (one input copied to both) when, over the last MIRROR_FRAMES
+  // frames in which both played, at least MIRROR_MIN_SHARE of them differ by less than MIRROR_MAX_DIFFERENCE
+  private static readonly MIRROR_FRAMES = 60;
+  private static readonly MIRROR_MAX_DIFFERENCE = 0.02;
+  private static readonly MIRROR_MIN_SHARE = 0.9;
 
   constructor() {
     // Audio engine initialized in idle state
+    this.mirrorHistory = new Uint8Array(AudioEngine.MIRROR_FRAMES);
   }
 
   /**
@@ -105,7 +171,7 @@ export class AudioEngine {
   start(
     deviceId?: string,
     channelMode: InputChannelMode = 'both',
-    onPitch?: (pitch: DetectedPitch | null) => void
+    onPitch?: PitchCallback
   ): Promise<void> {
     return this.enqueue(() => this.startNow(deviceId, channelMode, onPitch));
   }
@@ -113,7 +179,7 @@ export class AudioEngine {
   private async startNow(
     deviceId: string | undefined,
     channelMode: InputChannelMode,
-    onPitch: ((pitch: DetectedPitch | null) => void) | undefined
+    onPitch: PitchCallback | undefined
   ): Promise<void> {
     if (this.isRunning) await this.stopNow();
 
@@ -165,14 +231,9 @@ export class AudioEngine {
     }
     this.sourceNode = this.audioContext.createMediaStreamSource(this.mediaStream);
 
-    // Channel Routing (Input 1 / Input 2 / Stereo)
+    // Channel Routing (Input 1 / Input 2 / Stereo / Duo)
     this.splitterNode = this.audioContext.createChannelSplitter(2);
     this.mergerNode = this.audioContext.createChannelMerger(1);
-
-    this.analyserNode = this.audioContext.createAnalyser();
-    this.analyserNode.fftSize = this.BUFFER_SIZE;
-    this.analyserNode.smoothingTimeConstant = 0.1;
-    this.buffer = new Float32Array(this.analyserNode.fftSize);
 
     this.sourceNode.connect(this.splitterNode);
 
@@ -183,12 +244,23 @@ export class AudioEngine {
       // Route only channel 2 (Right)
       this.splitterNode.connect(this.mergerNode, 1, 0);
     } else {
-      // Mix both channels
+      // Mix both channels (in duo mode too: both guitars are heard through the amp)
       this.splitterNode.connect(this.mergerNode, 0, 0);
       this.splitterNode.connect(this.mergerNode, 1, 0);
     }
 
-    this.mergerNode.connect(this.analyserNode);
+    if (this.channelMode === 'duo') {
+      // One detector per guitar, fed straight from its channel: channel 1 → player 0, channel 2 → player 1
+      const players = [this.createPlayerInput(this.audioContext, 0), this.createPlayerInput(this.audioContext, 1)];
+      for (const input of players) this.splitterNode.connect(input.analyser, input.slot);
+      this.playerInputs = players;
+      this.mirrorFrames = 0;
+      this.mirrorIndex = 0;
+    } else {
+      const input = this.createPlayerInput(this.audioContext, 0);
+      this.mergerNode.connect(input.analyser);
+      this.playerInputs = [input];
+    }
 
     // Initialize and route to TONE3000 Amp Modeler for live low-latency guitar monitoring
     if (!this.tone3000) {
@@ -204,6 +276,23 @@ export class AudioEngine {
 
     this.isRunning = true;
     this.loopDetection();
+  }
+
+  private createPlayerInput(ctx: AudioContext, slot: PlayerSlot): PlayerInput {
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = this.BUFFER_SIZE;
+    analyser.smoothingTimeConstant = 0.1;
+    return {
+      slot,
+      analyser,
+      buffer: new Float32Array(analyser.fftSize),
+      rms: 0,
+      previousRms: 0,
+      attackId: this.lastAttackId,
+      framesSinceAttack: AudioEngine.ATTACK_DEBOUNCE_FRAMES,
+      lastMidi: -1,
+      stableMidi: -1
+    };
   }
 
   /**
@@ -234,12 +323,12 @@ export class AudioEngine {
     this.sourceNode?.disconnect();
     this.splitterNode?.disconnect();
     this.mergerNode?.disconnect();
-    this.analyserNode?.disconnect();
+    for (const input of this.playerInputs) input.analyser.disconnect();
 
     this.sourceNode = null;
     this.splitterNode = null;
     this.mergerNode = null;
-    this.analyserNode = null;
+    this.playerInputs = [];
   }
 
   /**
@@ -297,47 +386,108 @@ export class AudioEngine {
 
   /**
    * Tuning used for string/fret estimates (MIDI per string, string 1 first). Defaults to standard.
+   * Set per player: in duo mode each guitarist may read a part in a different tuning.
    */
-  setTuning(tuning: number[]): void {
-    this.tuning = tuning.length > 0 ? [...tuning] : STANDARD_TUNING;
+  setTuning(tuning: number[], player: PlayerSlot = 0): void {
+    this.tunings[player] = tuning.length > 0 ? [...tuning] : STANDARD_TUNING;
   }
 
   /**
-   * Continuous pitch detection loop
+   * Continuous pitch detection loop, one detection per player
    */
   private loopDetection = () => {
-    if (!this.isRunning || !this.analyserNode || !this.buffer || !this.audioContext) return;
-
-    this.analyserNode.getFloatTimeDomainData(this.buffer);
+    if (!this.isRunning || this.playerInputs.length === 0 || !this.audioContext) return;
 
     // Calculate RMS volume level
-    let sumSquares = 0;
-    for (let i = 0; i < this.buffer.length; i++) {
-      sumSquares += this.buffer[i] * this.buffer[i];
+    let loudest = 0;
+    for (const input of this.playerInputs) {
+      const buffer = input.buffer;
+      input.analyser.getFloatTimeDomainData(buffer);
+      // Remove the DC offset some interfaces add: it inflates the RMS and keeps the NSDF positive at
+      // every lag, so no period was found
+      let sum = 0;
+      for (let i = 0; i < buffer.length; i++) sum += buffer[i];
+      const mean = sum / buffer.length;
+      let sumSquares = 0;
+      for (let i = 0; i < buffer.length; i++) {
+        buffer[i] -= mean;
+        sumSquares += buffer[i] * buffer[i];
+      }
+      input.rms = Math.sqrt(sumSquares / buffer.length);
+      loudest = Math.max(loudest, input.rms);
     }
-    const rms = Math.sqrt(sumSquares / this.buffer.length);
+    if (this.channelMode === 'duo' && this.playerInputs.length === 2) {
+      this.trackMirroring(this.playerInputs[0], this.playerInputs[1]);
+    }
 
-    // Real-time TONE3000 noise gate processing
+    // Real-time TONE3000 noise gate processing; the amp is shared, so the louder guitar opens it
     if (this.tone3000) {
-      this.tone3000.processGate(rms);
+      this.tone3000.processGate(loudest);
     }
 
-    // Minimum noise gate threshold for pitch detection
-    if (rms < 0.01) {
-      if (this.onPitchCallback) this.onPitchCallback(null);
-      this.animationFrameId = requestAnimationFrame(this.loopDetection);
-      return;
-    }
+    for (const input of this.playerInputs) {
+      // Minimum noise gate threshold for pitch detection, per channel so a quiet guitar skips the costly NSDF
+      const pitch = input.rms < AudioEngine.GATE_RMS
+        ? null
+        : this.detectPitchNSDF(input.buffer, this.audioContext.sampleRate, input.rms, this.tunings[input.slot]);
+      this.trackAttack(input, pitch);
 
-    // Normalized Square Difference Function (NSDF) / MPM Algorithm
-    const pitch = this.detectPitchNSDF(this.buffer, this.audioContext.sampleRate, rms);
-
-    if (this.onPitchCallback) {
-      this.onPitchCallback(pitch);
+      if (this.onPitchCallback) {
+        this.onPitchCallback(pitch, input.slot);
+      }
     }
 
     this.animationFrameId = requestAnimationFrame(this.loopDetection);
   };
+
+  /**
+   * Count a new attack when the level jumps up (a pick) or the note changes from the last stable one
+   * (hammer-ons, pull-offs and slides make no level jump), then stamp the pitch with the current id.
+   * A note is stable once two detections in a row agree, so one stray detection is not a new note.
+   */
+  private trackAttack(input: PlayerInput, pitch: DetectedPitch | null): void {
+    const rms = input.rms;
+    const levelJump = rms >= AudioEngine.ATTACK_MIN_RMS
+      && (input.previousRms < AudioEngine.GATE_RMS || rms > input.previousRms * AudioEngine.ATTACK_RISE);
+    let noteChanged = false;
+    if (pitch) {
+      const midi = pitch.midiNote;
+      if (midi === input.lastMidi && midi !== input.stableMidi) {
+        // The first note ever is not a change: its level jump is its attack
+        noteChanged = input.stableMidi !== -1;
+        input.stableMidi = midi;
+      }
+      input.lastMidi = midi;
+    }
+    input.previousRms = rms;
+    input.framesSinceAttack = Math.min(input.framesSinceAttack + 1, AudioEngine.ATTACK_DEBOUNCE_FRAMES);
+    if ((levelJump || noteChanged) && input.framesSinceAttack >= AudioEngine.ATTACK_DEBOUNCE_FRAMES) {
+      input.attackId = ++this.lastAttackId;
+      input.framesSinceAttack = 0;
+    }
+    if (pitch) pitch.attackId = input.attackId;
+  }
+
+  /**
+   * Duo mode: record whether both channels carry the same signal in this frame. Only frames where both
+   * are above the gate count. The difference is ‖a − b‖ / √((‖a‖² + ‖b‖²) / 2): 0 for identical buffers.
+   */
+  private trackMirroring(first: PlayerInput, second: PlayerInput): void {
+    if (first.rms < AudioEngine.GATE_RMS || second.rms < AudioEngine.GATE_RMS) return;
+    const a = first.buffer;
+    const b = second.buffer;
+    let differenceSquares = 0;
+    for (let i = 0; i < a.length; i++) {
+      const difference = a[i] - b[i];
+      differenceSquares += difference * difference;
+    }
+    // Each buffer's mean square is its rms², so this is the mean of both energies
+    const energy = (a.length * (first.rms * first.rms + second.rms * second.rms)) / 2;
+    const mirrored = Math.sqrt(differenceSquares / energy) < AudioEngine.MIRROR_MAX_DIFFERENCE;
+    this.mirrorHistory[this.mirrorIndex] = mirrored ? 1 : 0;
+    this.mirrorIndex = (this.mirrorIndex + 1) % AudioEngine.MIRROR_FRAMES;
+    this.mirrorFrames = Math.min(this.mirrorFrames + 1, AudioEngine.MIRROR_FRAMES);
+  }
 
   /**
    * Normalized Square Difference Function (NSDF) with parabolic interpolation
@@ -345,47 +495,58 @@ export class AudioEngine {
   private detectPitchNSDF(
     buffer: Float32Array,
     sampleRate: number,
-    volume: number
+    volume: number,
+    tuning: number[]
   ): DetectedPitch | null {
     const minPeriod = Math.floor(sampleRate / this.MAX_FREQ);
     const maxPeriod = Math.floor(sampleRate / this.MIN_FREQ);
 
-    const length = buffer.length;
-    const nsdf = new Float32Array(maxPeriod + 1);
+    // Every lag up to maxPeriod is rewritten below, so the scratch array can be reused as is
+    if (!this.nsdf || this.nsdf.length <= maxPeriod) this.nsdf = new Float64Array(maxPeriod + 1);
+    const nsdf = this.nsdf;
+    computeNsdf(buffer, maxPeriod, nsdf);
 
-    // Compute autocorrelation & squared sum
-    for (let tau = 0; tau <= maxPeriod; tau++) {
-      let acf = 0;
-      let divisor = 0;
-      for (let i = 0; i < length - tau; i++) {
-        acf += buffer[i] * buffer[i + tau];
-        divisor += buffer[i] * buffer[i] + buffer[i + tau] * buffer[i + tau];
+    // McLeod (MPM) peak picking. The lobe around lag 0 is always high and says nothing about the period,
+    // so key maxima only count after the NSDF first turns negative. Searching inside that lobe picked lag
+    // minPeriod (~1.1 kHz, then discarded) for every note below ~175 Hz: the open low strings went undetected.
+    let tau = 1;
+    while (tau <= maxPeriod && nsdf[tau] > 0) tau++;
+
+    if (!this.keyMaxima || this.keyMaxima.length <= maxPeriod) this.keyMaxima = new Int32Array(maxPeriod + 1);
+    const keyMaxima = this.keyMaxima;
+    let keyCount = 0;
+    let highest = 0;
+    while (tau <= maxPeriod) {
+      while (tau <= maxPeriod && nsdf[tau] <= 0) tau++;
+      let peakIndex = -1;
+      let peakValue = 0;
+      while (tau <= maxPeriod && nsdf[tau] > 0) {
+        if (nsdf[tau] > peakValue) {
+          peakValue = nsdf[tau];
+          peakIndex = tau;
+        }
+        tau++;
       }
-      nsdf[tau] = divisor > 0 ? (2 * acf) / divisor : 0;
+      // A positive region cut off at maxPeriod may still be rising, so its maximum isn't a real peak
+      if (peakIndex >= minPeriod && peakIndex < maxPeriod) {
+        keyMaxima[keyCount++] = peakIndex;
+        highest = Math.max(highest, peakValue);
+      }
     }
 
-    // Find first key peak above threshold
-    let maxIndex = -1;
-    let maxValue = -1;
-    let inPeak = false;
-    const threshold = 0.55; // 55% peak clarity threshold for guitar harmonics
+    if (keyCount === 0 || highest < AudioEngine.CLARITY_THRESHOLD) {
+      return null;
+    }
 
-    for (let tau = minPeriod; tau <= maxPeriod; tau++) {
-      if (nsdf[tau] > threshold) {
-        inPeak = true;
-        if (nsdf[tau] > maxValue) {
-          maxValue = nsdf[tau];
-          maxIndex = tau;
-        }
-      } else if (inPeak) {
-        // Exit peak
+    // The first key maximum close to the highest is the fundamental; later ones are its multiples
+    let maxIndex = keyMaxima[0];
+    for (let i = 0; i < keyCount; i++) {
+      if (nsdf[keyMaxima[i]] >= AudioEngine.PEAK_RATIO * highest) {
+        maxIndex = keyMaxima[i];
         break;
       }
     }
-
-    if (maxIndex <= 0 || maxValue < threshold) {
-      return null;
-    }
+    const maxValue = nsdf[maxIndex];
 
     // Parabolic interpolation around peak
     let period = maxIndex;
@@ -410,7 +571,7 @@ export class AudioEngine {
     const cents = Math.round((midiFloat - midiNote) * 100);
 
     const noteName = AudioEngine.getNoteName(midiNote);
-    const position = estimateStringAndFret(midiNote, this.tuning);
+    const position = estimateStringAndFret(midiNote, tuning);
 
     return {
       frequency: Math.round(frequency * 10) / 10,
@@ -420,7 +581,8 @@ export class AudioEngine {
       clarity: Math.min(1, Math.round(maxValue * 100) / 100),
       volume: Math.min(1, Math.round(volume * 100) / 100),
       stringEstimate: position?.string,
-      fretEstimate: position?.fret
+      fretEstimate: position?.fret,
+      attackId: 0 // stamped by trackAttack
     };
   }
 
@@ -439,6 +601,29 @@ export class AudioEngine {
    */
   getSelectedDeviceId(): string {
     return this.selectedDeviceId;
+  }
+
+  /**
+   * Channels the input actually delivers (duo mode needs 2); 0 when stopped. 1 when the browser
+   * doesn't say: the source node's channelCount is always 2 and says nothing about the input.
+   */
+  getInputChannelCount(): number {
+    if (!this.isRunning || !this.mediaStream) return 0;
+    const track = this.mediaStream.getAudioTracks()[0];
+    return track?.getSettings().channelCount ?? 1;
+  }
+
+  /**
+   * Duo mode only: true when the interface seems to copy one input to both channels, so both players
+   * would be scored on the same guitar. That is: over the last 60 frames in which both channels were
+   * above the gate, at least 90% carried the same signal (difference under 2%). False outside duo mode,
+   * when stopped, and until 60 such frames were heard since start().
+   */
+  areDuoChannelsMirrored(): boolean {
+    if (!this.isRunning || this.channelMode !== 'duo' || this.mirrorFrames < AudioEngine.MIRROR_FRAMES) return false;
+    let mirrored = 0;
+    for (let i = 0; i < this.mirrorHistory.length; i++) mirrored += this.mirrorHistory[i];
+    return mirrored / AudioEngine.MIRROR_FRAMES >= AudioEngine.MIRROR_MIN_SHARE;
   }
 
   getTone3000(): Tone3000AmpEngine | null {
