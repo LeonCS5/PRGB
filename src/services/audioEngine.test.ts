@@ -116,7 +116,7 @@ class FakeAudioContext {
     return node;
   }
   createGain() { return this.keep(this.gains, gainNode()); }
-  // Web Audio's default channelCount, which getInputChannelCount() falls back to
+  // Web Audio's default channelCount, whatever the input delivers
   createMediaStreamSource() { return { ...audioNode(), channelCount: 2 }; }
   createChannelSplitter() { return this.keep(this.splitters, audioNode()); }
   createChannelMerger() { return this.keep(this.mergers, audioNode()); }
@@ -450,9 +450,10 @@ describe('AudioEngine lifecycle', () => {
       trackChannels = 1; // e.g. a USB microphone
       await engine.start('mic');
       expect(engine.getInputChannelCount()).toBe(1);
-      trackChannels = undefined; // not reported by the browser: falls back to the source node
+      // Not reported by the browser: 1, not the source node's channelCount (always 2)
+      trackChannels = undefined;
       await engine.start('a');
-      expect(engine.getInputChannelCount()).toBe(2);
+      expect(engine.getInputChannelCount()).toBe(1);
       await engine.stop();
       expect(engine.getInputChannelCount()).toBe(0);
     });

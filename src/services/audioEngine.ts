@@ -510,12 +510,13 @@ export class AudioEngine {
   }
 
   /**
-   * Channels the input actually delivers (duo mode needs 2); 0 when stopped
+   * Channels the input actually delivers (duo mode needs 2); 0 when stopped. 1 when the browser
+   * doesn't say: the source node's channelCount is always 2 and says nothing about the input.
    */
   getInputChannelCount(): number {
     if (!this.isRunning || !this.mediaStream) return 0;
     const track = this.mediaStream.getAudioTracks()[0];
-    return track?.getSettings().channelCount ?? this.sourceNode?.channelCount ?? 1;
+    return track?.getSettings().channelCount ?? 1;
   }
 
   getTone3000(): Tone3000AmpEngine | null {
