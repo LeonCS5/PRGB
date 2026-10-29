@@ -1,18 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CHORD_WINDOW_MS,
   GOOD_POINTS,
   MAX_MULTIPLIER,
   PERFECT_POINTS,
   accuracyPercent,
   applyJudgement,
   bendTargetMidi,
+  canUseAttack,
   comboMultiplier,
+  consumeAttack,
   countScorableNotes,
+  createAttackLedger,
   createScoreState,
   isScorable,
   judgeNote,
   maxPossibleScore,
+  type AttackLedger,
   type Judgement,
+  type NoteOutcome,
   type ScoreState
 } from './scoring';
 import type { NoteEvent } from './songsterrApi';
@@ -30,7 +36,7 @@ const note = (extra: Partial<NoteEvent> = {}): NoteEvent => ({
   ...extra
 });
 
-const heard = (midiNote: number, volume = 0.5) => ({ midiNote, volume });
+const heard = (midiNote: number, volume = 0.5, attackId = 0) => ({ midiNote, volume, attackId });
 
 const play = (judgements: readonly Judgement[], from: ScoreState = createScoreState()) =>
   judgements.reduce(applyJudgement, from);
@@ -177,6 +183,101 @@ describe('judgeNote', () => {
       expect(judgeNote(unscored, -131, inTune)).toBe('skip');
       expect(judgeNote(unscored, -131, null)).toBe('skip');
     }
+  });
+});
+
+describe('attack ledger', () => {
+  it('starts with no attack spent', () => {
+    expect(createAttackLedger()).toEqual({ attackId: -1, noteTimeMs: -Infinity });
+    expect(canUseAttack(createAttackLedger(), 0, 0)).toBe(true);
+  });
+
+  it('lets a spent attack hit only the notes of the same chord', () => {
+    const ledger: AttackLedger = { attackId: 7, noteTimeMs: 1000 };
+    expect(CHORD_WINDOW_MS).toBe(30);
+    expect(canUseAttack(ledger, 8, 1150)).toBe(true); // new attack
+    expect([1000, 1030, 970].map((time) => canUseAttack(ledger, 7, time))).toEqual([true, true, true]);
+    expect([1031, 969, 1150].map((time) => canUseAttack(ledger, 7, time))).toEqual([false, false, false]);
+  });
+
+  it('records a hit in a new ledger and keeps the chord anchored at its first note', () => {
+    const start = Object.freeze(createAttackLedger());
+    const first = consumeAttack(start, 3, 1000);
+    expect(first).toEqual({ attackId: 3, noteTimeMs: 1000 });
+    expect(start).toEqual(createAttackLedger());
+    const sameChord = consumeAttack(Object.freeze(first), 3, 1020);
+    expect(sameChord).toEqual({ attackId: 3, noteTimeMs: 1000 });
+    // Notes 20 ms apart can't chain one attack through a run of notes
+    expect(canUseAttack(sameChord, 3, 1040)).toBe(false);
+    expect(consumeAttack(sameChord, 4, 1040)).toEqual({ attackId: 4, noteTimeMs: 1040 });
+  });
+});
+
+describe('judgeNote with an attack ledger', () => {
+  const E2 = 40;
+
+  /**
+   * Plays notes the way the game loop does: every 16 ms frame, each pending note is judged against the
+   * pitch heard, and each hit spends its attack. Returns the outcome of every note.
+   */
+  const play = (
+    notes: NoteEvent[],
+    pitchAt: (timeMs: number) => ReturnType<typeof heard> | null,
+    withLedger = true
+  ): (NoteOutcome | undefined)[] => {
+    const outcomes = new Map<string, NoteOutcome>();
+    let ledger = createAttackLedger();
+    const end = Math.max(...notes.map((current) => current.timeMs)) + 300;
+    for (let time = 0; time <= end; time += 16) {
+      const pitch = pitchAt(time);
+      for (const current of notes) {
+        if (outcomes.has(current.id)) continue;
+        const outcome = judgeNote(current, current.timeMs - time, pitch, withLedger ? ledger : undefined);
+        if (!outcome) continue;
+        outcomes.set(current.id, outcome);
+        if (pitch && (outcome === 'perfect' || outcome === 'good')) {
+          ledger = consumeAttack(ledger, pitch.attackId, current.timeMs);
+        }
+      }
+    }
+    return notes.map((current) => outcomes.get(current.id));
+  };
+
+  // The E2 riff of Creeping Death: the same note picked over and over, 150 ms apart
+  const riff = Array.from({ length: 8 }, (_, i) =>
+    note({ id: `note-${i}`, timeMs: 1000 + i * 150, string: 6, fret: 0, midiNote: E2, noteName: 'E2' }));
+
+  it('does not let one held note hit the repeated notes after it', () => {
+    const held = (time: number) => (time >= 950 ? heard(E2, 0.5, 1) : null);
+    expect(play(riff, held)).toEqual(['perfect', ...Array(7).fill('miss')]);
+    // Without a ledger the old behavior stays: holding the note hits them all
+    expect(play(riff, held, false).every((outcome) => outcome === 'perfect' || outcome === 'good')).toBe(true);
+  });
+
+  it('hits every repeated note that is picked again', () => {
+    // A new attack 50 ms before each note
+    const picked = (time: number) => (time >= 950 ? heard(E2, 0.5, Math.floor((time - 950) / 150) + 1) : null);
+    expect(play(riff, picked)).toEqual(Array(8).fill('perfect'));
+  });
+
+  it('hits the notes of a chord (same time) with one attack', () => {
+    const chord = [
+      note({ id: 'note-1', timeMs: 1000, string: 6, fret: 0, midiNote: E2 }),
+      note({ id: 'note-2', timeMs: 1000, string: 5, fret: 0, midiNote: E2 + 1 }), // a semitone off: good
+      note({ id: 'note-3', timeMs: 1000 + CHORD_WINDOW_MS, string: 4, fret: 0, midiNote: E2 }), // strummed
+      note({ id: 'note-4', timeMs: 1300, string: 6, fret: 0, midiNote: E2 }) // the next beat, not picked again
+    ];
+    const once = (time: number) => (time >= 990 ? heard(E2, 0.5, 5) : null);
+    expect(play(chord, once)).toEqual(['perfect', 'good', 'perfect', 'miss']);
+  });
+
+  it('still never judges dead or grace notes, and lets ghost notes pass unplayed', () => {
+    const spent: AttackLedger = { attackId: 2, noteTimeMs: 500 };
+    expect(judgeNote(note({ dead: true }), 0, heard(57, 0.5, 2), spent)).toBeNull();
+    expect(judgeNote(note({ ghost: true }), 0, heard(57, 0.5, 2), spent)).toBeNull();
+    expect(judgeNote(note({ ghost: true }), -131, heard(57, 0.5, 2), spent)).toBe('skip');
+    expect(judgeNote(note(), -131, heard(57, 0.5, 2), spent)).toBe('miss');
+    expect(judgeNote(note(), 0, heard(57, 0.5, 3), spent)).toBe('perfect');
   });
 });
 
