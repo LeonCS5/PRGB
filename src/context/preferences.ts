@@ -1,4 +1,5 @@
 import type { InputChannelMode } from '../services/audioEngine';
+import { validateNickname } from '../services/nickname';
 import { AMP_PRESETS, type Tone3000Settings } from '../services/tone3000Amp';
 
 export interface SavedSong {
@@ -11,6 +12,7 @@ export interface Preferences {
   channelMode: InputChannelMode;
   tone3000: Tone3000Settings | null;
   lastSong: SavedSong | null;
+  nickname: string | null; // local only, used to sign challenge links
 }
 
 const STORAGE_KEY = 'prgb:prefs:v1';
@@ -34,13 +36,19 @@ const isToneSettings = (value: unknown): value is Tone3000Settings => {
     && ['4x12_vintage', '2x12_british', '1x12_tweed', '4x12_metal', 'bypass'].includes(value.cabSim);
 };
 
+const readNickname = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const result = validateNickname(value);
+  return result.ok ? result.value : null;
+};
+
 const isSavedSong = (value: unknown): value is SavedSong =>
   isRecord(value) && inRange(value.songId, 1, Number.MAX_SAFE_INTEGER)
   && Number.isInteger(value.songId) && inRange(value.partId, 0, Number.MAX_SAFE_INTEGER)
   && Number.isInteger(value.partId);
 
 export const readPreferences = (): Preferences => {
-  const defaults: Preferences = { deviceId: '', channelMode: 'ch1', tone3000: null, lastSong: null };
+  const defaults: Preferences = { deviceId: '', channelMode: 'ch1', tone3000: null, lastSong: null, nickname: null };
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     const value: unknown = raw ? JSON.parse(raw) : null;
@@ -50,7 +58,8 @@ export const readPreferences = (): Preferences => {
       channelMode: value.channelMode === 'ch1' || value.channelMode === 'ch2' || value.channelMode === 'both'
         ? value.channelMode : defaults.channelMode,
       tone3000: isToneSettings(value.tone3000) ? value.tone3000 : null,
-      lastSong: isSavedSong(value.lastSong) ? value.lastSong : null
+      lastSong: isSavedSong(value.lastSong) ? value.lastSong : null,
+      nickname: readNickname(value.nickname)
     };
   } catch {
     return defaults;
@@ -62,5 +71,13 @@ export const savePreferences = (changes: Partial<Preferences>): void => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...readPreferences(), ...changes }));
   } catch {
     // Preferences are optional when storage is blocked or full.
+  }
+};
+
+export const clearPreferences = (): void => {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Nothing to clear when storage is blocked.
   }
 };
