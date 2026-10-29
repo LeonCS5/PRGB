@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   Music,
   Play,
@@ -22,6 +22,8 @@ import { ErrorNotice } from './components/ErrorNotice';
 import { ChallengeCard } from './components/ChallengeCard';
 import { LocalRecords } from './components/LocalRecords';
 import { DuoSetupModal } from './components/DuoSetupModal';
+import { LegalPage } from './components/LegalPage';
+import { readHash, resolveLegalRoute, subscribeToHash } from './context/legalRoute';
 import { gameDevPreset, readDevScene } from './components/devScenes';
 import { CHALLENGE_PARAM, readChallengeFromSearch, type Challenge } from './services/challenge';
 import { BrandMark } from './components/BrandMark';
@@ -158,6 +160,8 @@ const AppContent: React.FC = () => {
   const [isLoadingChallenge, setIsLoadingChallenge] = useState(false);
   const [challengeError, setChallengeError] = useState<string | null>(null);
   const songSelectionVersion = useRef(0);
+  const hash = useSyncExternalStore(subscribeToHash, readHash);
+  const legalRoute = useMemo(() => resolveLegalRoute(hash), [hash]);
 
   const sessionParts = useMemo<GamePart[]>(
     () => !session ? [] : session.mode === 'solo' ? [session.part] : session.parts,
@@ -336,6 +340,8 @@ const AppContent: React.FC = () => {
             onOpenTone3000Rack={() => setIsTone3000RackOpen(true)}
           />
         </>
+      ) : legalRoute ? (
+        <LegalPage document={legalRoute.document} sectionId={legalRoute.sectionId} />
       ) : (
         <div className="h-full overflow-y-auto overflow-x-hidden">
           <header className="fixed inset-x-0 top-0 z-40 border-b border-ink-700/70 bg-ink-950/95 backdrop-blur-xl">
@@ -469,7 +475,14 @@ const AppContent: React.FC = () => {
             <div className="mx-auto flex max-w-7xl flex-col gap-6 px-5 py-9 sm:px-8 lg:px-12">
               <div className="flex flex-wrap items-center justify-between gap-4"><BrandMark size={28} /><span className="font-mono text-[10px] tracking-widest text-ink-300">PLAY REAL GUITAR IN BROWSER</span></div>
               <p className="max-w-3xl text-xs leading-6 text-ink-300">Tablaturas e metadados via Songsterr. PRGB não é afiliado ao Songsterr, Metallica ou outros artistas; todas as marcas pertencem aos seus donos.</p>
-              <div className="flex flex-wrap items-center justify-between gap-4 border-t border-ink-700 pt-5 text-xs text-ink-300"><span>© {currentYear} PRGB</span><a href={supportHref} target="_blank" rel="noopener noreferrer" className="rounded py-2 hover:text-amp-300">{supportLabel} ↗</a></div>
+              <div className="flex flex-wrap items-center justify-between gap-4 border-t border-ink-700 pt-5 text-xs text-ink-300">
+                <span>© {currentYear} PRGB</span>
+                <nav aria-label="Documentos legais" className="flex gap-5">
+                  <a href="#privacidade" className="rounded py-2 hover:text-amp-300">Privacidade</a>
+                  <a href="#termos" className="rounded py-2 hover:text-amp-300">Termos</a>
+                </nav>
+                <a href={supportHref} target="_blank" rel="noopener noreferrer" className="rounded py-2 hover:text-amp-300">{supportLabel} ↗</a>
+              </div>
             </div>
           </footer>
         </div>
