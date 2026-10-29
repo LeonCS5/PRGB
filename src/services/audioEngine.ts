@@ -103,6 +103,10 @@ export class AudioEngine {
   private pending: Promise<void> = Promise.resolve();
   // Shared by both players and kept across reconnections, so an attack id is never handed out twice
   private lastAttackId = 0;
+  // Duo mode: ring of the last frames in which both channels played, 1 = they carried the same signal
+  private mirrorHistory: Uint8Array<ArrayBuffer>;
+  private mirrorFrames = 0; // frames recorded since start, up to MIRROR_FRAMES
+  private mirrorIndex = 0;
 
   private selectedDeviceId = '';
   private channelMode: InputChannelMode = 'both';
@@ -126,9 +130,15 @@ export class AudioEngine {
   private static readonly ATTACK_RISE = 1.3;
   // A pick takes a few frames to fill the 43 ms analyser window, so attacks this close are one attack
   private static readonly ATTACK_DEBOUNCE_FRAMES = 3;
+  // Duo mode: channels count as mirrored (one input copied to both) when, over the last MIRROR_FRAMES
+  // frames in which both played, at least MIRROR_MIN_SHARE of them differ by less than MIRROR_MAX_DIFFERENCE
+  private static readonly MIRROR_FRAMES = 60;
+  private static readonly MIRROR_MAX_DIFFERENCE = 0.02;
+  private static readonly MIRROR_MIN_SHARE = 0.9;
 
   constructor() {
     // Audio engine initialized in idle state
+    this.mirrorHistory = new Uint8Array(AudioEngine.MIRROR_FRAMES);
   }
 
   /**
@@ -244,6 +254,8 @@ export class AudioEngine {
       const players = [this.createPlayerInput(this.audioContext, 0), this.createPlayerInput(this.audioContext, 1)];
       for (const input of players) this.splitterNode.connect(input.analyser, input.slot);
       this.playerInputs = players;
+      this.mirrorFrames = 0;
+      this.mirrorIndex = 0;
     } else {
       const input = this.createPlayerInput(this.audioContext, 0);
       this.mergerNode.connect(input.analyser);
@@ -404,6 +416,9 @@ export class AudioEngine {
       input.rms = Math.sqrt(sumSquares / buffer.length);
       loudest = Math.max(loudest, input.rms);
     }
+    if (this.channelMode === 'duo' && this.playerInputs.length === 2) {
+      this.trackMirroring(this.playerInputs[0], this.playerInputs[1]);
+    }
 
     // Real-time TONE3000 noise gate processing; the amp is shared, so the louder guitar opens it
     if (this.tone3000) {
@@ -451,6 +466,27 @@ export class AudioEngine {
       input.framesSinceAttack = 0;
     }
     if (pitch) pitch.attackId = input.attackId;
+  }
+
+  /**
+   * Duo mode: record whether both channels carry the same signal in this frame. Only frames where both
+   * are above the gate count. The difference is ‖a − b‖ / √((‖a‖² + ‖b‖²) / 2): 0 for identical buffers.
+   */
+  private trackMirroring(first: PlayerInput, second: PlayerInput): void {
+    if (first.rms < AudioEngine.GATE_RMS || second.rms < AudioEngine.GATE_RMS) return;
+    const a = first.buffer;
+    const b = second.buffer;
+    let differenceSquares = 0;
+    for (let i = 0; i < a.length; i++) {
+      const difference = a[i] - b[i];
+      differenceSquares += difference * difference;
+    }
+    // Each buffer's mean square is its rms², so this is the mean of both energies
+    const energy = (a.length * (first.rms * first.rms + second.rms * second.rms)) / 2;
+    const mirrored = Math.sqrt(differenceSquares / energy) < AudioEngine.MIRROR_MAX_DIFFERENCE;
+    this.mirrorHistory[this.mirrorIndex] = mirrored ? 1 : 0;
+    this.mirrorIndex = (this.mirrorIndex + 1) % AudioEngine.MIRROR_FRAMES;
+    this.mirrorFrames = Math.min(this.mirrorFrames + 1, AudioEngine.MIRROR_FRAMES);
   }
 
   /**
@@ -575,6 +611,19 @@ export class AudioEngine {
     if (!this.isRunning || !this.mediaStream) return 0;
     const track = this.mediaStream.getAudioTracks()[0];
     return track?.getSettings().channelCount ?? 1;
+  }
+
+  /**
+   * Duo mode only: true when the interface seems to copy one input to both channels, so both players
+   * would be scored on the same guitar. That is: over the last 60 frames in which both channels were
+   * above the gate, at least 90% carried the same signal (difference under 2%). False outside duo mode,
+   * when stopped, and until 60 such frames were heard since start().
+   */
+  areDuoChannelsMirrored(): boolean {
+    if (!this.isRunning || this.channelMode !== 'duo' || this.mirrorFrames < AudioEngine.MIRROR_FRAMES) return false;
+    let mirrored = 0;
+    for (let i = 0; i < this.mirrorHistory.length; i++) mirrored += this.mirrorHistory[i];
+    return mirrored / AudioEngine.MIRROR_FRAMES >= AudioEngine.MIRROR_MIN_SHARE;
   }
 
   getTone3000(): Tone3000AmpEngine | null {

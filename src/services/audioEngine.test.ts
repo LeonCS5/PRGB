@@ -537,6 +537,83 @@ describe('AudioEngine lifecycle', () => {
       ]);
     });
 
+    describe('areDuoChannelsMirrored', () => {
+      // Runs one frame per pair of signals on the two duo channels
+      const startDuo = async () => {
+        const engine = new AudioEngine();
+        await engine.start('a', 'duo');
+        const [first, second] = contexts[0].analysers;
+        const play = (frames: number, signal1: Float32Array | null, signal2: Float32Array | null) => {
+          for (let i = 0; i < frames; i++) {
+            first.signal = signal1;
+            second.signal = signal2;
+            runFrame();
+          }
+        };
+        return { engine, play };
+      };
+
+      it('detects an interface that copies one input to both channels, after 60 frames of playing', async () => {
+        const { engine, play } = await startDuo();
+        expect(engine.areDuoChannelsMirrored()).toBe(false);
+        play(59, A3, A3);
+        expect(engine.areDuoChannelsMirrored()).toBe(false);
+        play(1, A3, A3);
+        expect(engine.areDuoChannelsMirrored()).toBe(true);
+      });
+
+      it('allows a gain difference under 2% but not a real second guitar', async () => {
+        const { engine, play } = await startDuo();
+        play(60, sine(220, 0.5), sine(220, 0.495)); // 1% quieter: still the same signal
+        expect(engine.areDuoChannelsMirrored()).toBe(true);
+        play(60, sine(220, 0.5), sine(220, 0.45)); // 10% quieter
+        expect(engine.areDuoChannelsMirrored()).toBe(false);
+        play(60, A3, E4); // two guitars
+        expect(engine.areDuoChannelsMirrored()).toBe(false);
+      });
+
+      it('needs at least 90% of the last 60 frames to match', async () => {
+        const { engine, play } = await startDuo();
+        play(54, A3, A3);
+        play(6, A3, E4);
+        expect(engine.areDuoChannelsMirrored()).toBe(true);
+        play(1, A3, E4); // 53 of the last 60
+        expect(engine.areDuoChannelsMirrored()).toBe(false);
+      });
+
+      it('only counts frames in which both channels play', async () => {
+        const { engine, play } = await startDuo();
+        play(100, A3, null); // player 2 silent: says nothing about the interface
+        play(100, null, null);
+        expect(engine.areDuoChannelsMirrored()).toBe(false);
+        play(60, A3, A3);
+        expect(engine.areDuoChannelsMirrored()).toBe(true);
+        play(100, A3, null); // still the last 60 frames with both playing
+        expect(engine.areDuoChannelsMirrored()).toBe(true);
+      });
+
+      it('is false outside duo mode, when stopped, and starts over on each start()', async () => {
+        const { engine, play } = await startDuo();
+        play(60, A3, A3);
+        expect(engine.areDuoChannelsMirrored()).toBe(true);
+        await engine.start('a', 'duo');
+        expect(engine.areDuoChannelsMirrored()).toBe(false);
+        const [, , first, second] = contexts[0].analysers;
+        for (let i = 0; i < 60; i++) {
+          first.signal = A3;
+          second.signal = A3;
+          runFrame();
+        }
+        expect(engine.areDuoChannelsMirrored()).toBe(true);
+        await engine.stop();
+        expect(engine.areDuoChannelsMirrored()).toBe(false);
+        await engine.start('a', 'both');
+        contexts[0].analysers[4].signal = A3;
+        for (let i = 0; i < 60; i++) runFrame();
+        expect(engine.areDuoChannelsMirrored()).toBe(false);
+      });
+    });
+
     it('reports how many channels the input delivers', async () => {
       const engine = new AudioEngine();
       expect(engine.getInputChannelCount()).toBe(0);
