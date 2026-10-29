@@ -2,7 +2,7 @@ import React, { useEffect, useId, useRef, useState } from 'react';
 import { AlertTriangle, ArrowLeft, Cable, Check, Music, Play, Users, X } from 'lucide-react';
 import { ModalFrame } from './ModalFrame';
 import { ErrorNotice } from './ErrorNotice';
-import type { AudioEngine, PlayerSlot } from '../services/audioEngine';
+import type { PlayerSlot } from '../services/audioEngine';
 import { NICKNAME_ERROR_MESSAGES, validateNickname } from '../services/nickname';
 import { useAudioSession, useLatestPitch } from '../context/AudioSessionContext';
 import { DEFAULT_PLAYER_NAMES } from '../context/gameSession';
@@ -17,10 +17,6 @@ const TITLE_ID = 'duo-setup-title';
 const PLAYER_COLORS: [string, string] = ['text-signal-300', 'text-note-violet'];
 const primaryButton = 'flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-amp-400 px-5 font-bold text-ink-950 transition hover:bg-amp-300 disabled:cursor-not-allowed disabled:opacity-50';
 const secondaryButton = 'flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-600 px-4 text-sm font-semibold text-ink-100 transition hover:border-ink-400 disabled:opacity-50';
-
-// Interfaces that copy one input to both channels can't tell the guitars apart
-const channelsMirrored = (engine: AudioEngine): boolean =>
-  (engine as { areDuoChannelsMirrored?: () => boolean }).areDuoChannelsMirrored?.() ?? false;
 
 const StepHeading: React.FC<{ step: number; label: string; title: string }> = ({ step, label, title }) => {
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -66,12 +62,13 @@ const ConnectStep: React.FC<{ onCancel: () => void; onNext: () => void }> = ({ o
   const deviceSelectId = useId();
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [isConnecting, setIsConnecting] = useState(false);
-  // Re-rendering on every note of either guitar keeps the channel checks below current
+  // Re-rendering on every note of either guitar keeps the channel checks below current (the mirror
+  // check needs both guitars playing for about a second before it can say anything)
   useLatestPitch(0);
   useLatestPitch(1);
   const isDuoLive = isAudioRunning && channelMode === 'duo';
   const channelCount = isDuoLive ? audioEngine.getInputChannelCount() : 0;
-  const isMirrored = isDuoLive && channelCount >= 2 && channelsMirrored(audioEngine);
+  const isMirrored = isDuoLive && channelCount >= 2 && audioEngine.areDuoChannelsMirrored();
   const canContinue = isDuoLive && channelCount >= 2 && !isMirrored;
 
   useEffect(() => {
@@ -127,7 +124,7 @@ const ConnectStep: React.FC<{ onCancel: () => void; onNext: () => void }> = ({ o
       {isMirrored && (
         <p role="alert" className="mt-4 flex gap-2 rounded-xl border border-miss/40 bg-miss/5 p-3 text-sm text-ink-100">
           <AlertTriangle size={18} className="shrink-0 text-miss" aria-hidden="true" />
-          Os dois canais estão recebendo o mesmo sinal, então não dá para separar as guitarras. Confira se cada guitarra está na sua entrada e se a interface não está em modo mono ou espelhado.
+          Sua interface está copiando o mesmo sinal para os dois canais, então o jogo não consegue separar as duas guitarras. Confira se cada guitarra está na sua entrada (1 e 2) e desligue qualquer modo mono ou de espelhamento da interface.
         </p>
       )}
       {isDuoLive && channelCount >= 2 && (

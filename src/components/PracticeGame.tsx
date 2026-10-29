@@ -34,7 +34,16 @@ import type { Challenge } from '../services/challenge';
 import { useAudioSession } from '../context/AudioSessionContext';
 import { DEFAULT_PLAYER_NAMES, type GamePart, type PersonalBestOutcome, type RunSummary } from '../context/gameSession';
 import { MetronomeScheduler, SoundFX } from '../services/synthAudio';
-import { accuracyPercent, applyJudgement, createScoreState, judgeNote, type ScoreState } from '../services/scoring';
+import {
+  accuracyPercent,
+  applyJudgement,
+  consumeAttack,
+  createAttackLedger,
+  createScoreState,
+  judgeNote,
+  type AttackLedger,
+  type ScoreState
+} from '../services/scoring';
 import { getPersonalBest, recordRun } from '../services/records';
 import {
   Tone3000AmpEngine,
@@ -64,9 +73,13 @@ interface Lane {
 // Judging state of one player during a run (scoring rules that need memory per player live here)
 interface PlayerRun {
   score: ScoreState;
+  attacks: AttackLedger; // the guitar attack last spent on a hit
 }
 
-const freshPlayers = (): PlayerRun[] => [{ score: createScoreState() }, { score: createScoreState() }];
+const freshPlayers = (): PlayerRun[] => [
+  { score: createScoreState(), attacks: createAttackLedger() },
+  { score: createScoreState(), attacks: createAttackLedger() }
+];
 
 const synthKey = (laneIndex: number, noteId: string) => `${laneIndex}:${noteId}`;
 
@@ -123,7 +136,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   const [metronomeEnabled, setMetronomeEnabled] = useState(false);
 
   // Scoring: playersRef is read and written by the canvas loop, `scores` mirrors it for the HUD
-  const [initialPlayers] = useState<PlayerRun[]>(() => devPreset ? devPreset.scores.map((score) => ({ score })) : freshPlayers());
+  const [initialPlayers] = useState<PlayerRun[]>(() => devPreset ? devPreset.scores.map((score) => ({ score, attacks: createAttackLedger() })) : freshPlayers());
   const playersRef = useRef(initialPlayers);
   const [scores, setScores] = useState<ScoreState[]>(() => initialPlayers.map((run) => run.score));
 
@@ -231,11 +244,16 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
 
   // Every judgement of a pending note goes through here, with the full pitch of the note's player
   const judgePendingNote = (player: PlayerSlot, note: NoteEvent, timeDiffMs: number, pitch: DetectedPitch | null, y: number): NoteState => {
-    const outcome = judgeNote(note, timeDiffMs, pitch);
+    const run = playersRef.current[player];
+    const outcome = judgeNote(note, timeDiffMs, pitch, run.attacks);
     if (outcome === null) return 'pending';
     if (outcome === 'skip') return 'skipped';
     const players = playersRef.current.slice();
-    players[player] = { ...players[player], score: applyJudgement(players[player].score, outcome) };
+    players[player] = {
+      score: applyJudgement(run.score, outcome),
+      // A hit spends the attack, so a held note can't also hit the repeated notes after it
+      attacks: outcome !== 'miss' && pitch ? consumeAttack(run.attacks, pitch.attackId, note.timeMs) : run.attacks
+    };
     playersRef.current = players;
     setScores(players.map((run) => run.score));
     playHitFeedback(outcome, note, y, palette, effectsRef.current);
