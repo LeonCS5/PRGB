@@ -77,9 +77,9 @@ export class AudioEngine {
   private channelMode: InputChannelMode = 'both';
   private tunings: [number[], number[]] = [STANDARD_TUNING, STANDARD_TUNING];
 
-  // Guitar frequency bounds (E1 ~ 41 Hz for 4-string bass up to B5 ~ 987 Hz for guitar)
+  // Guitar frequency bounds (E1 ~ 41 Hz for 4-string bass up to E6 ~ 1319 Hz, fret 24 of the high E)
   private readonly MIN_FREQ = 40;
-  private readonly MAX_FREQ = 1100;
+  private readonly MAX_FREQ = 1400;
   private readonly BUFFER_SIZE = 2048;
 
   private static readonly NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];

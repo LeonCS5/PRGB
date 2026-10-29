@@ -253,6 +253,8 @@ describe('AudioEngine lifecycle', () => {
       ['E4 (1ª corda solta)', 329.63, 64],
       ['E5 (1ª corda, casa 12)', 659.26, 76],
       ['B5 (1ª corda, casa 19)', 987.77, 83],
+      ['D6 (1ª corda, casa 22)', 1174.66, 86],
+      ['E6 (1ª corda, casa 24)', 1318.51, 88],
       ['A1 (baixo, 4ª corda)', 55, 33],
       ['E1 (baixo, 4ª corda solta)', 41.2, 28]
     ])('detects a pure %s', async (_name, hz, midi) => {
