@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { AudioEngine, type DetectedPitch, type InputChannelMode } from '../services/audioEngine';
+import { AudioEngine, type DetectedPitch, type InputChannelMode, type PlayerSlot } from '../services/audioEngine';
 import type { Tone3000AmpEngine } from '../services/tone3000Amp';
 import { readPreferences, savePreferences } from './preferences';
 import { getAudioErrorMessage } from './uiErrors';
@@ -10,7 +10,7 @@ export interface AudioSessionValue {
   isAudioRunning: boolean;
   audioError: string | null;
   dismissAudioError: () => void;
-  getLatestPitch: () => DetectedPitch | null;
+  getLatestPitch: (player?: PlayerSlot) => DetectedPitch | null;
   selectedDeviceId: string;
   channelMode: InputChannelMode;
   startAudio: (deviceId?: string, mode?: InputChannelMode) => Promise<void>;
@@ -18,35 +18,36 @@ export interface AudioSessionValue {
   changeChannelMode: (mode: InputChannelMode) => Promise<void>;
 }
 
+// Latest pitch per player: single-player modes only use slot 0, duo mode fills both
 interface PitchStore {
-  getSnapshot: () => DetectedPitch | null;
+  getSnapshot: (player?: PlayerSlot) => DetectedPitch | null;
   subscribe: (listener: () => void) => () => void;
-  publish: (pitch: DetectedPitch | null) => void;
+  publish: (pitch: DetectedPitch | null, player?: PlayerSlot) => void;
 }
 
 const PitchContext = createContext<PitchStore | null>(null);
 
 const createPitchStore = (): PitchStore => {
-  let latestPitch: DetectedPitch | null = null;
+  const latestPitch: [DetectedPitch | null, DetectedPitch | null] = [null, null];
   const listeners = new Set<() => void>();
   return {
-    getSnapshot: () => latestPitch,
+    getSnapshot: (player = 0) => latestPitch[player],
     subscribe: (listener) => {
       listeners.add(listener);
       return () => { listeners.delete(listener); };
     },
-    publish: (pitch) => {
-      if (Object.is(latestPitch, pitch)) return;
-      latestPitch = pitch;
+    publish: (pitch, player = 0) => {
+      if (Object.is(latestPitch[player], pitch)) return;
+      latestPitch[player] = pitch;
       listeners.forEach((listener) => listener());
     }
   };
 };
 
-export const useLatestPitch = (): DetectedPitch | null => {
+export const useLatestPitch = (player: PlayerSlot = 0): DetectedPitch | null => {
   const store = useContext(PitchContext);
   if (!store) throw new Error('useLatestPitch must be used within AudioSessionProvider');
-  return useSyncExternalStore(store.subscribe, store.getSnapshot);
+  return useSyncExternalStore(store.subscribe, () => store.getSnapshot(player));
 };
 
 const AudioSessionContext = createContext<AudioSessionValue | null>(null);
@@ -69,6 +70,8 @@ export const AudioSessionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setAudioError(null);
       try {
         await audioEngine.start(deviceId, mode, pitchStore.publish);
+        // Player 2 only exists in duo mode; don't leave its last note behind
+        if (mode !== 'duo') pitchStore.publish(null, 1);
         const amp = audioEngine.getTone3000();
         if (amp && initializedAmp.current !== amp) {
           const settings = readPreferences().tone3000 ?? preferences.tone3000;
@@ -94,7 +97,8 @@ export const AudioSessionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         setIsAudioRunning(true);
       } catch (err) {
         setIsAudioRunning(false);
-        pitchStore.publish(null);
+        pitchStore.publish(null, 0);
+        pitchStore.publish(null, 1);
         setAudioError(getAudioErrorMessage(err));
       }
     },
@@ -119,8 +123,9 @@ export const AudioSessionProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   useEffect(() => () => void audioEngine.dispose(), [audioEngine]);
 
+  // Duo is a temporary session mode: the saved channel stays the one to go back to afterwards
   useEffect(() => {
-    savePreferences({ deviceId: selectedDeviceId, channelMode });
+    savePreferences(channelMode === 'duo' ? { deviceId: selectedDeviceId } : { deviceId: selectedDeviceId, channelMode });
   }, [selectedDeviceId, channelMode]);
 
   useEffect(() => {
