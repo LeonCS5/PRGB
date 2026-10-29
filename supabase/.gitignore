@@ -1,0 +1,10 @@
+# Supabase CLI state (created by `supabase link` / `supabase start`)
+.branches
+.temp
+
+# Local secrets
+.env
+.env.keys
+.env.local
+.env.*.local
+functions/.env
