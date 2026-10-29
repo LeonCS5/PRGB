@@ -338,6 +338,101 @@ describe('AudioEngine lifecycle', () => {
     });
   });
 
+  describe('attack tracking', () => {
+    interface Heard { midiNote: number; attackId: number }
+
+    // Plays one signal per frame on channel 1 and returns what was heard in each frame
+    const playFrames = async (signals: (Float32Array | null)[]) => {
+      const heard: (Heard | null)[] = [];
+      const engine = new AudioEngine();
+      await engine.start('a', 'ch1', (pitch) => heard.push(pitch));
+      heard.length = 0;
+      for (const signal of signals) {
+        contexts[0].analysers[0].signal = signal;
+        runFrame();
+      }
+      return heard;
+    };
+
+    const E2 = 82.41;
+    const A2 = 110;
+
+    it('keeps the attack of a note that rings while it fades', async () => {
+      const heard = await playFrames(Array.from({ length: 20 }, (_, frame) => sine(E2, 0.5 * 0.9 ** frame)));
+      expect(heard.every((pitch) => pitch?.midiNote === 40)).toBe(true);
+      expect(new Set(heard.map((pitch) => pitch?.attackId)).size).toBe(1);
+    });
+
+    it('counts a new attack when the same note is picked again', async () => {
+      const heard = await playFrames([
+        ...Array.from({ length: 8 }, (_, frame) => sine(E2, 0.5 * 0.85 ** frame)), // fades to ~0.16
+        sine(E2, 0.5), // picked again: 3× louder in one frame
+        sine(E2, 0.45)
+      ]);
+      const ids = heard.map((pitch) => pitch?.attackId);
+      expect(new Set(ids.slice(0, 8)).size).toBe(1);
+      expect(ids[8]).toBeGreaterThan(ids[0] ?? Infinity);
+      expect(ids[9]).toBe(ids[8]);
+    });
+
+    it('counts a new attack after silence', async () => {
+      const heard = await playFrames([sine(E2, 0.3), sine(E2, 0.3), null, null, sine(E2, 0.3)]);
+      expect(heard[2]).toBeNull();
+      expect(heard[4]?.attackId).toBeGreaterThan(heard[0]?.attackId ?? Infinity);
+    });
+
+    it('counts a new attack when the note changes without a pick (hammer-on, slide)', async () => {
+      const heard = await playFrames([...Array(5).fill(sine(E2, 0.3)), sine(A2, 0.3), sine(A2, 0.3), sine(A2, 0.3)]);
+      expect(heard.map((pitch) => pitch?.midiNote)).toEqual([40, 40, 40, 40, 40, 45, 45, 45]);
+      const ids = heard.map((pitch) => pitch?.attackId);
+      // Two detections in a row make the new note stable, so one stray detection is not an attack
+      expect(ids[5]).toBe(ids[0]);
+      expect(ids[6]).toBeGreaterThan(ids[0] ?? Infinity);
+      expect(ids[7]).toBe(ids[6]);
+    });
+
+    it('ignores a single stray detection of another note', async () => {
+      const heard = await playFrames([sine(E2, 0.3), sine(E2, 0.3), sine(E2, 0.3), sine(A2, 0.3), sine(E2, 0.3),
+        sine(E2, 0.3)]);
+      expect(new Set(heard.map((pitch) => pitch?.attackId)).size).toBe(1);
+    });
+
+    it('merges attacks less than 3 frames apart', async () => {
+      const heard = await playFrames([
+        sine(E2, 0.05), sine(E2, 0.15), sine(E2, 0.45), // the window fills over a few frames: one pick
+        sine(E2, 0.45), sine(E2, 0.45),
+        sine(E2, 0.9) // a real new pick
+      ]);
+      const ids = heard.map((pitch) => pitch?.attackId);
+      expect(new Set(ids.slice(0, 5)).size).toBe(1);
+      expect(ids[5]).toBeGreaterThan(ids[0] ?? Infinity);
+    });
+
+    it('never hands out an attack id twice, across players and reconnections', async () => {
+      const seen: [number[], number[]] = [[], []];
+      const engine = new AudioEngine();
+      await engine.start('a', 'duo', (pitch, player) => {
+        if (pitch) seen[player].push(pitch.attackId);
+      });
+      const [first, second] = contexts[0].analysers;
+      for (const amplitude of [0.1, 0.1, 0.1, 0.1, 0.5, 0.5]) {
+        first.signal = sine(E2, amplitude);
+        second.signal = sine(A2, amplitude);
+        runFrame();
+      }
+      await engine.start('a', 'ch1');
+      contexts[0].analysers[2].signal = sine(E2, 0.3);
+      runFrame();
+      const [player1, player2] = seen;
+      // Each player's ids only grow
+      for (const ids of seen) expect(ids).toEqual([...ids].sort((a, b) => a - b));
+      expect(new Set(player1.slice(0, 6)).size).toBe(2); // first sound, then the jump to 0.5
+      expect(new Set([...player1.slice(0, 6), ...player2]).size).toBe(4);
+      // After reconnecting, the first attack is newer than every id before it
+      expect(player1[6]).toBeGreaterThan(Math.max(...player1.slice(0, 6), ...player2));
+    });
+  });
+
   describe('input channel modes', () => {
     const A3 = sine(220);
     const E4 = sine(329.63);

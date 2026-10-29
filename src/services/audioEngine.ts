@@ -10,6 +10,9 @@ export interface DetectedPitch {
   volume: number; // 0 to 1 RMS level
   stringEstimate?: number; // estimated guitar string (1 to 6)
   fretEstimate?: number; // estimated fret
+  // Grows on each new attack (pick or change of note), stays the same while a note rings. Monotonic per
+  // player and never reused by the engine, so holding one note can't hit the repeated notes after it.
+  attackId: number;
 }
 
 import { Tone3000AmpEngine } from './tone3000Amp';
@@ -73,6 +76,12 @@ interface PlayerInput {
   analyser: AnalyserNode;
   buffer: Float32Array<ArrayBuffer>;
   rms: number; // level of the current frame, kept here so the loop doesn't allocate
+  // Attack tracking (see trackAttack)
+  previousRms: number;
+  attackId: number;
+  framesSinceAttack: number;
+  lastMidi: number; // note of the last detection, -1 = none yet
+  stableMidi: number; // last note found by two detections in a row, -1 = none yet
 }
 
 export class AudioEngine {
@@ -92,6 +101,8 @@ export class AudioEngine {
   private animationFrameId: number | null = null;
   private onPitchCallback: PitchCallback | null = null;
   private pending: Promise<void> = Promise.resolve();
+  // Shared by both players and kept across reconnections, so an attack id is never handed out twice
+  private lastAttackId = 0;
 
   private selectedDeviceId = '';
   private channelMode: InputChannelMode = 'both';
@@ -108,6 +119,13 @@ export class AudioEngine {
   private static readonly CLARITY_THRESHOLD = 0.55;
   // MPM's k: the period is the first key maximum within this fraction of the highest one
   private static readonly PEAK_RATIO = 0.9;
+  // Below this RMS a channel is silent: no pitch is detected
+  private static readonly GATE_RMS = 0.01;
+  // A new attack: the level reaches ATTACK_MIN_RMS from silence or grows by ATTACK_RISE in one frame
+  private static readonly ATTACK_MIN_RMS = 0.02;
+  private static readonly ATTACK_RISE = 1.3;
+  // A pick takes a few frames to fill the 43 ms analyser window, so attacks this close are one attack
+  private static readonly ATTACK_DEBOUNCE_FRAMES = 3;
 
   constructor() {
     // Audio engine initialized in idle state
@@ -252,7 +270,17 @@ export class AudioEngine {
     const analyser = ctx.createAnalyser();
     analyser.fftSize = this.BUFFER_SIZE;
     analyser.smoothingTimeConstant = 0.1;
-    return { slot, analyser, buffer: new Float32Array(analyser.fftSize), rms: 0 };
+    return {
+      slot,
+      analyser,
+      buffer: new Float32Array(analyser.fftSize),
+      rms: 0,
+      previousRms: 0,
+      attackId: this.lastAttackId,
+      framesSinceAttack: AudioEngine.ATTACK_DEBOUNCE_FRAMES,
+      lastMidi: -1,
+      stableMidi: -1
+    };
   }
 
   /**
@@ -384,9 +412,10 @@ export class AudioEngine {
 
     for (const input of this.playerInputs) {
       // Minimum noise gate threshold for pitch detection, per channel so a quiet guitar skips the costly NSDF
-      const pitch = input.rms < 0.01
+      const pitch = input.rms < AudioEngine.GATE_RMS
         ? null
         : this.detectPitchNSDF(input.buffer, this.audioContext.sampleRate, input.rms, this.tunings[input.slot]);
+      this.trackAttack(input, pitch);
 
       if (this.onPitchCallback) {
         this.onPitchCallback(pitch, input.slot);
@@ -395,6 +424,34 @@ export class AudioEngine {
 
     this.animationFrameId = requestAnimationFrame(this.loopDetection);
   };
+
+  /**
+   * Count a new attack when the level jumps up (a pick) or the note changes from the last stable one
+   * (hammer-ons, pull-offs and slides make no level jump), then stamp the pitch with the current id.
+   * A note is stable once two detections in a row agree, so one stray detection is not a new note.
+   */
+  private trackAttack(input: PlayerInput, pitch: DetectedPitch | null): void {
+    const rms = input.rms;
+    const levelJump = rms >= AudioEngine.ATTACK_MIN_RMS
+      && (input.previousRms < AudioEngine.GATE_RMS || rms > input.previousRms * AudioEngine.ATTACK_RISE);
+    let noteChanged = false;
+    if (pitch) {
+      const midi = pitch.midiNote;
+      if (midi === input.lastMidi && midi !== input.stableMidi) {
+        // The first note ever is not a change: its level jump is its attack
+        noteChanged = input.stableMidi !== -1;
+        input.stableMidi = midi;
+      }
+      input.lastMidi = midi;
+    }
+    input.previousRms = rms;
+    input.framesSinceAttack = Math.min(input.framesSinceAttack + 1, AudioEngine.ATTACK_DEBOUNCE_FRAMES);
+    if ((levelJump || noteChanged) && input.framesSinceAttack >= AudioEngine.ATTACK_DEBOUNCE_FRAMES) {
+      input.attackId = ++this.lastAttackId;
+      input.framesSinceAttack = 0;
+    }
+    if (pitch) pitch.attackId = input.attackId;
+  }
 
   /**
    * Normalized Square Difference Function (NSDF) with parabolic interpolation
@@ -488,7 +545,8 @@ export class AudioEngine {
       clarity: Math.min(1, Math.round(maxValue * 100) / 100),
       volume: Math.min(1, Math.round(volume * 100) / 100),
       stringEstimate: position?.string,
-      fretEstimate: position?.fret
+      fretEstimate: position?.fret,
+      attackId: 0 // stamped by trackAttack
     };
   }
 
