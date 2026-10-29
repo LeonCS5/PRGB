@@ -110,7 +110,8 @@ export function judgeNote(
       Math.abs(pitch.midiNote - bendTargetMidi(note))
     );
     if (midiDiff > 1) return null;
-    return absDiff <= PERFECT_WINDOW_MS ? 'perfect' : 'good';
+    // A semitone off (wrong fret, out of tune) still counts, but is never perfect
+    return absDiff <= PERFECT_WINDOW_MS && midiDiff === 0 ? 'perfect' : 'good';
   }
 
   if (timeDiffMs < -HIT_WINDOW_MS) return note.ghost ? 'skip' : 'miss';

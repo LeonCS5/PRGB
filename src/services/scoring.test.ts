@@ -145,13 +145,20 @@ describe('judgeNote', () => {
     expect(judgeNote(a3, 0, null)).toBeNull();
     expect(judgeNote(a3, 0, heard(57, 0.02))).toBeNull(); // must be louder than MIN_PITCH_VOLUME
     expect(judgeNote(a3, 0, heard(57, 0.021))).toBe('perfect');
-    expect([56, 58].map((midi) => judgeNote(a3, 0, heard(midi)))).toEqual(['perfect', 'perfect']);
+    expect([56, 58].map((midi) => judgeNote(a3, 0, heard(midi)))).toEqual(['good', 'good']);
     expect([55, 59].map((midi) => judgeNote(a3, 0, heard(midi)))).toEqual([null, null]);
   });
 
-  it('accepts the written pitch or the bend target on bends', () => {
+  it('gives perfect only for the exact note: a semitone off is at most good', () => {
+    expect([0, 30, -55].map((diff) => judgeNote(a3, diff, heard(57)))).toEqual(['perfect', 'perfect', 'perfect']);
+    expect([0, 30, -55, 100].map((diff) => judgeNote(a3, diff, heard(58)))).toEqual(['good', 'good', 'good', 'good']);
+    expect([0, 100].map((diff) => judgeNote(a3, diff, heard(56)))).toEqual(['good', 'good']);
+  });
+
+  it('accepts the written pitch or the bend target on bends, perfect only when exact', () => {
     const bend = note({ bendSemitones: 2 }); // A3 bent up to B3
-    expect([56, 57, 58, 59, 60].map((midi) => judgeNote(bend, 0, heard(midi)))).toEqual(Array(5).fill('perfect'));
+    expect([56, 57, 58, 59, 60].map((midi) => judgeNote(bend, 0, heard(midi))))
+      .toEqual(['good', 'perfect', 'good', 'perfect', 'good']);
     expect([55, 61].map((midi) => judgeNote(bend, 0, heard(midi)))).toEqual([null, null]);
   });
 
