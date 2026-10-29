@@ -29,17 +29,17 @@ describe('NICKNAME_PATTERN', () => {
   });
 
   it('rejects symbols, emoji, invisible characters and unnormalized spaces', () => {
-    for (const nickname of ['Leo!', 'a@b', 'Leo🎸', 'Le​o', 'a  b', ' ab', 'ab ', 'a\tb', '']) {
+    for (const nickname of ['Leo!', 'a@b', 'Leo🎸', 'Le\u200Bo', 'a  b', ' ab', 'ab ', 'a\tb', '']) {
       expect(NICKNAME_PATTERN.test(nickname), nickname).toBe(false);
     }
   });
 
   it('rejects other scripts, so look-alike letters and blank letters cannot pass', () => {
     for (const nickname of [
-      'РRGВ', 'аdmin', // Cyrillic Р, В and а
-      'Adμin', // Greek μ
+      '\u0420RG\u0412', '\u0430dmin', // Cyrillic \u0420, \u0412 and \u0430
+      'Ad\u03BCin', // Greek \u03BC
       '日本語', '𝐀𝐝𝐦𝐢𝐧', // other scripts; styled math letters are not Latin
-      'ㅤㅤㅤ', 'ﾠﾠﾠ', 'ᅟᅟᅟ', 'aᅠb' // Hangul fillers print as blanks
+      '\u3164\u3164\u3164', '\uFFA0\uFFA0\uFFA0', '\u115F\u115F\u115F', 'a\u1160b' // Hangul fillers print as blanks
     ]) {
       expect(NICKNAME_PATTERN.test(nickname), nickname).toBe(false);
     }
@@ -70,8 +70,8 @@ describe('validateNickname', () => {
   });
 
   it('rejects characters outside the pattern', () => {
-    for (const nickname of ['Leo!', 'Leo🎸', 'Le​o', 'a<b>c', 'РRGВ', 'аdmin', 'ㅤㅤㅤ',
-      'ﾠﾠﾠ', 'ᅟᅟᅟ', 'ᅠᅠᅠ']) {
+    for (const nickname of ['Leo!', 'Leo🎸', 'Le\u200Bo', 'a<b>c', '\u0420RG\u0412', '\u0430dmin', '\u3164\u3164\u3164',
+      '\uFFA0\uFFA0\uFFA0', '\u115F\u115F\u115F', '\u1160\u1160\u1160']) {
       expect(validateNickname(nickname), nickname).toEqual({ ok: false, error: 'chars' });
     }
   });

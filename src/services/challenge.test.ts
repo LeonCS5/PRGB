@@ -96,7 +96,7 @@ describe('encodeChallenge and decodeChallenge', () => {
       }
     }
     // Checked after cleaning: removing an invisible character must not reveal a domain
-    expect(() => encodeChallenge(challenge({ title: 'golpe​.com' }))).toThrow(RangeError);
+    expect(() => encodeChallenge(challenge({ title: 'golpe\u200B.com' }))).toThrow(RangeError);
     // Text beyond the 120 characters that go into the link is not checked: it is not in the link
     expect(decodeChallenge(encodeChallenge(challenge({ title: `${'x'.repeat(120)} golpe.com` })))?.title)
       .toBe('x'.repeat(120));
@@ -201,8 +201,8 @@ describe('decodeChallenge strictness', () => {
   });
 
   it('rejects invisible characters: zero-width, bidi marks, word joiners, BOM and Hangul fillers', () => {
-    const invisible = ['​', '‌', '‍', '‎', '‏', '؜', '﻿', '⁠', '⁡',
-      '⁢', '⁣', '⁤', 'ㅤ', 'ﾠ', 'ᅟ', 'ᅠ'];
+    const invisible = ['\u200B', '\u200C', '\u200D', '\u200E', '\u200F', '\u061C', '\uFEFF', '\u2060', '\u2061',
+      '\u2062', '\u2063', '\u2064', '\u3164', '\uFFA0', '\u115F', '\u1160'];
     for (const char of invisible) {
       const label = `U+${char.codePointAt(0)?.toString(16).toUpperCase()}`;
       for (const index of [3, 4, 5]) {

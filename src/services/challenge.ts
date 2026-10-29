@@ -29,7 +29,7 @@ const BASE64URL = /^[A-Za-z0-9_-]+$/;
 // Control characters, lone surrogates, bidi marks, overrides and isolates (they garble the text around
 // them) and invisible characters: zero-width ones, word joiner to invisible plus, BOM and Hangul fillers
 const UNSAFE_CHAR =
-  /[\p{Cc}\p{Cs}؜ᅟᅠ​-‏‪-‮⁠-⁤⁦-⁩ㅤ﻿ﾠ]/u;
+  /[\p{Cc}\p{Cs}\u061C\u115F\u1160\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\u3164\uFEFF\uFFA0]/u;
 const UNSAFE_CHARS = new RegExp(UNSAFE_CHAR.source, 'gu');
 // The link opens under our domain, so its text must not carry a link that passes a scam off as PRGB's
 const LINK = /https?:|www\.|@|\b[a-z0-9-]+\.(?:com|net|org|br|io|app|xyz|me|link|gg|info|biz|site|online|shop|store)\b/i;
