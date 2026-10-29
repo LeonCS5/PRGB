@@ -1,17 +1,24 @@
 import { ModalFrame } from './ModalFrame';
 import React, { useMemo, useState } from 'react';
-import { Search, Music, Disc, Loader2, Sparkles, X, ChevronRight, Trophy } from 'lucide-react';
+import { Search, Music, Disc, Loader2, Sparkles, X, ChevronRight, Trophy, User, Users } from 'lucide-react';
 import { SongsterrApi, type SongsterrSearchResult, type SongsterrMeta, type NormalizedSongTab } from '../services/songsterrApi';
 import type { SavedSong } from '../context/preferences';
 import { ErrorNotice } from './ErrorNotice';
 import { getSongMetadata, loadSongTrack } from '../context/uiErrors';
 import { getPersonalBest } from '../services/records';
+import type { GamePart } from '../context/gameSession';
 
 interface SongSearchModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectSong: (tab: NormalizedSongTab, song: SavedSong) => void;
+  // Duo: set when the players are ready (names); each picks a part of the chosen song
+  duoNames?: [string, string] | null;
+  onChooseMode?: (mode: 'solo' | 'duo') => void;
+  onSelectDuo?: (parts: [GamePart, GamePart]) => void;
 }
+
+const modeButton = 'flex min-h-10 cursor-pointer items-center gap-2 rounded-lg px-4 text-xs font-bold transition';
 
 const FEATURED_SONGS = [
   { title: 'Creeping Death', artist: 'Metallica', id: 5194 },
@@ -25,7 +32,10 @@ const FEATURED_SONGS = [
 export const SongSearchModal: React.FC<SongSearchModalProps> = ({
   isOpen,
   onClose,
-  onSelectSong
+  onSelectSong,
+  duoNames = null,
+  onChooseMode,
+  onSelectDuo
 }) => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SongsterrSearchResult[]>([]);
@@ -34,6 +44,7 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
   const [isLoadingTab, setIsLoadingTab] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState<(() => void) | null>(null);
+  const [duoTracks, setDuoTracks] = useState<[number, number]>([0, 0]);
   // Personal best at 1× of each part; re-read whenever the modal opens, a run may have just ended
   const trackBests = useMemo(
     () => isOpen && selectedSongMeta ? selectedSongMeta.tracks.map((track) => getPersonalBest(selectedSongMeta.songId, track.partId, 1)) : [],
@@ -73,6 +84,7 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
     try {
       const meta = await getSongMetadata(songId);
       setSelectedSongMeta(meta);
+      setDuoTracks([0, 0]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Não foi possível obter os dados da música no Songsterr.');
       setRetry(() => () => void handleSelectSong(songId));
@@ -101,6 +113,29 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
     }
   };
 
+  const handleStartDuo = async () => {
+    if (!selectedSongMeta || !onSelectDuo) return;
+    const [first, second] = duoTracks;
+    setIsLoadingTab(true);
+    setError(null);
+    setRetry(null);
+    try {
+      const firstTab = await loadSongTrack(selectedSongMeta, first);
+      // Same part for both (competition): one download, one tab
+      const secondTab = second === first ? firstTab : await loadSongTrack(selectedSongMeta, second);
+      onSelectDuo([
+        { tab: firstTab, partId: selectedSongMeta.tracks[first].partId },
+        { tab: secondTab, partId: selectedSongMeta.tracks[second].partId }
+      ]);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Não foi possível carregar as tablaturas. Escolha outras faixas.');
+      setRetry(() => () => void handleStartDuo());
+    } finally {
+      setIsLoadingTab(false);
+    }
+  };
+
   return (
     <ModalFrame titleId="SongSearchModal-title" onClose={onClose} className="max-w-2xl flex flex-col">
         <button
@@ -122,6 +157,26 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
             </p>
           </div>
         </div>
+
+        {onChooseMode && (
+          <div className="mb-4">
+            <div role="group" aria-label="Modo de jogo" className="inline-flex rounded-xl border border-ink-700 bg-ink-850 p-1">
+              <button type="button" aria-pressed={!duoNames} onClick={() => onChooseMode('solo')}
+                className={modeButton + (duoNames ? ' text-ink-300 hover:text-ink-100' : ' bg-amp-400 text-ink-950')}>
+                <User size={14} aria-hidden="true" /> Solo
+              </button>
+              <button type="button" aria-pressed={Boolean(duoNames)} onClick={() => onChooseMode('duo')}
+                className={modeButton + (duoNames ? ' bg-amp-400 text-ink-950' : ' text-ink-300 hover:text-ink-100')}>
+                <Users size={14} aria-hidden="true" /> Dupla
+              </button>
+            </div>
+            {duoNames && (
+              <p className="mt-2 text-xs text-ink-300">
+                <span className="text-signal-300">{duoNames[0]}</span> (canal 1) e <span className="text-note-violet">{duoNames[1]}</span> (canal 2): escolham a música e a parte de cada um.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Search Bar */}
         <form onSubmit={handleSearch} className="relative mb-4">
@@ -169,6 +224,38 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
                 </button>
               </div>
 
+              {duoNames ? (
+                <div className="space-y-4">
+                  {([0, 1] as const).map((player) => (
+                    <label key={player} className="block">
+                      <span className={'text-xs font-semibold ' + (player === 0 ? 'text-signal-300' : 'text-note-violet')}>
+                        Parte de {duoNames[player]} (canal {player + 1})
+                      </span>
+                      <select value={duoTracks[player]} disabled={isLoadingTab}
+                        onChange={(event) => {
+                          const index = Number(event.target.value);
+                          setDuoTracks(player === 0 ? [index, duoTracks[1]] : [duoTracks[0], index]);
+                        }}
+                        className="mt-1.5 min-h-11 w-full rounded-xl border border-ink-700 bg-ink-800 px-3 text-sm text-ink-100 focus:border-amp-500 focus:outline-none">
+                        {selectedSongMeta.tracks.map((track, idx) => (
+                          <option key={idx} value={idx}>{track.name || track.instrument} · {track.instrument} · {track.tuning.length} cordas</option>
+                        ))}
+                      </select>
+                    </label>
+                  ))}
+                  <p className="text-xs text-ink-300">
+                    {duoTracks[0] === duoTracks[1]
+                      ? 'Mesma parte: vocês competem nas mesmas notas.'
+                      : 'Partes diferentes: cada um toca a sua, e o placar da equipe soma as duas.'}
+                  </p>
+                  <button type="button" onClick={() => void handleStartDuo()} disabled={isLoadingTab}
+                    className="flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-amp-400 px-4 font-bold text-ink-950 transition hover:bg-amp-300 disabled:cursor-wait disabled:opacity-70">
+                    {isLoadingTab ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Users size={16} aria-hidden="true" />}
+                    Começar dupla
+                  </button>
+                </div>
+              ) : (
+              <>
               <div className="text-xs font-semibold uppercase tracking-wider text-ink-300">
                 Escolha o Instrumento / Pista para Tocar:
               </div>
@@ -207,6 +294,8 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
                   </button>
                 ))}
               </div>
+              </>
+              )}
             </div>
           ) : results.length > 0 ? (
             /* Search Results */

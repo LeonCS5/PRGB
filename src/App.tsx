@@ -14,12 +14,15 @@ import {
   Target,
   Volume2,
   Zap,
-  Loader2
+  Loader2,
+  Users
 } from 'lucide-react';
 import { getDemoSong, DEMO_SONG_ID } from './services/demoSong';
 import { ErrorNotice } from './components/ErrorNotice';
 import { ChallengeCard } from './components/ChallengeCard';
 import { LocalRecords } from './components/LocalRecords';
+import { DuoSetupModal } from './components/DuoSetupModal';
+import { gameDevPreset, readDevScene } from './components/devScenes';
 import { CHALLENGE_PARAM, readChallengeFromSearch, type Challenge } from './services/challenge';
 import { BrandMark } from './components/BrandMark';
 import { getSongMetadata, loadSongTrack } from './context/uiErrors';
@@ -30,7 +33,7 @@ import { Tone3000AmpRack } from './components/Tone3000AmpRack';
 import { AudioSessionProvider, useAudioSession, useLatestPitch } from './context/AudioSessionContext';
 import { ModalsProvider, useModals } from './context/ModalsContext';
 import { readPreferences, savePreferences } from './context/preferences';
-import { nextSessionKey, type GamePart, type GameSession } from './context/gameSession';
+import { DEFAULT_PLAYER_NAMES, nextSessionKey, type GamePart, type GameSession } from './context/gameSession';
 
 const supportUrl = import.meta.env.VITE_SUPPORT_URL?.trim();
 const supportHref = supportUrl || 'https://github.com/LeonCS5/PRGB';
@@ -85,6 +88,20 @@ const demoPart = (): GamePart => ({ tab: getDemoSong(), partId: 0 });
 const soloSession = (part: GamePart, challenge: Challenge | null = null): GameSession =>
   ({ mode: 'solo', key: nextSessionKey(), part, challenge });
 
+const duoSession = (parts: [GamePart, GamePart], names: [string, string]): GameSession =>
+  ({ mode: 'duo', key: nextSessionKey(), parts, names });
+
+const initialSession = (devScene: ReturnType<typeof readDevScene>): GameSession | null => {
+  if (devScene === 'dupla' || devScene === 'dupla-resultado') {
+    const demo = demoPart();
+    return duoSession([demo, demo], ['Ana', 'Beto']);
+  }
+  if (devScene === 'resultado' || devScene === 'desafio' || new URLSearchParams(window.location.search).has('demo')) {
+    return soloSession(demoPart());
+  }
+  return null;
+};
+
 // Drops ?desafio= from the address bar without reloading, keeping any other parameter
 const clearChallengeParam = () => {
   const url = new URL(window.location.href);
@@ -125,7 +142,12 @@ const AppContent: React.FC = () => {
     setTone3000RackOpen: setIsTone3000RackOpen
   } = useModals();
 
-  const [session, setSession] = useState<GameSession | null>(() => new URLSearchParams(window.location.search).has('demo') ? soloSession(demoPart()) : null);
+  const [devScene] = useState(readDevScene);
+  const [session, setSession] = useState<GameSession | null>(() => initialSession(devScene));
+  const [devSessionKey] = useState(() => session?.key ?? null);
+  const [isDuoSetupOpen, setIsDuoSetupOpen] = useState(() => devScene === 'dupla-assistente');
+  // Player names while the duo picks a song in the search modal (it's in duo mode while set)
+  const [duoSearchNames, setDuoSearchNames] = useState<[string, string] | null>(null);
   const [isLoadingDefault, setIsLoadingDefault] = useState(false);
   const [savedSong] = useState(() => readPreferences().lastSong);
   const [restoreError, setRestoreError] = useState<string | null>(null);
@@ -148,7 +170,7 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     // A challenge link opens on the landing card instead of jumping into the last song
-    if (!savedSong || savedSong.songId === DEMO_SONG_ID || openedWithChallenge || new URLSearchParams(window.location.search).has('demo')) return;
+    if (!savedSong || savedSong.songId === DEMO_SONG_ID || openedWithChallenge || devScene || new URLSearchParams(window.location.search).has('demo')) return;
     let cancelled = false;
     const version = songSelectionVersion.current;
     const restoreSong = async () => {
@@ -166,12 +188,33 @@ const AppContent: React.FC = () => {
     };
     void restoreSong();
     return () => { cancelled = true; };
-  }, [savedSong, restoreAttempt, openedWithChallenge]);
+  }, [savedSong, restoreAttempt, openedWithChallenge, devScene]);
+
+  // Duo is a session mode: leaving it restores the input channel saved in the preferences
+  const soloChannelMode = () => channelMode === 'duo' ? readPreferences().channelMode : channelMode;
+
+  const exitDuoAudio = () => {
+    if (channelMode === 'duo') void handleChannelModeChange(readPreferences().channelMode);
+  };
+
+  // Solo songs connect the audio if needed, in the solo channel mode
+  const ensureSoloAudio = () => {
+    if (!isAudioRunning || channelMode === 'duo') void handleStartAudio(undefined, soloChannelMode());
+  };
+
+  const startDuo = (parts: [GamePart, GamePart], names: [string, string]) => {
+    songSelectionVersion.current += 1;
+    setRestoreError(null);
+    setDefaultError(null);
+    setDuoSearchNames(null);
+    setSession(duoSession(parts, names));
+  };
 
   const handleLoadDemo = () => {
     songSelectionVersion.current += 1;
     setRestoreError(null);
     setDefaultError(null);
+    exitDuoAudio();
     setSession(soloSession(demoPart()));
   };
 
@@ -183,7 +226,7 @@ const AppContent: React.FC = () => {
     setDefaultError(null);
     setChallengeError(null);
     setIsLoadingChallenge(true);
-    if (!isAudioRunning) void handleStartAudio();
+    ensureSoloAudio();
     try {
       let part: GamePart;
       if (challenge.songId === DEMO_SONG_ID) {
@@ -221,8 +264,8 @@ const AppContent: React.FC = () => {
     setIsLoadingDefault(true);
     try {
       // Connect audio if not running
-      if (!isAudioRunning) {
-        await handleStartAudio();
+      if (!isAudioRunning || channelMode === 'duo') {
+        await handleStartAudio(undefined, soloChannelMode());
       }
 
       const songId = 5194; // Creeping Death
@@ -277,8 +320,17 @@ const AppContent: React.FC = () => {
             parts={sessionParts}
             playerNames={session.mode === 'duo' ? session.names : null}
             challenge={session.mode === 'solo' ? session.challenge : null}
-            onExit={() => { songSelectionVersion.current += 1; setSession(null); window.history.replaceState(null, '', window.location.pathname + window.location.hash); }}
-            onOpenSearch={() => setIsSearchOpen(true)}
+            devPreset={import.meta.env.DEV && devScene && session.key === devSessionKey ? gameDevPreset(devScene, Math.max(...sessionParts.map((part) => part.tab.totalDurationMs))) : null}
+            onExit={() => {
+              songSelectionVersion.current += 1;
+              if (session.mode === 'duo') exitDuoAudio();
+              setSession(null);
+              window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+            }}
+            onOpenSearch={() => {
+              setDuoSearchNames(session.mode === 'duo' ? session.names : null);
+              setIsSearchOpen(true);
+            }}
             onOpenAudioSettings={() => setIsSettingsOpen(true)}
             tone3000={tone3000}
             onOpenTone3000Rack={() => setIsTone3000RackOpen(true)}
@@ -327,13 +379,16 @@ const AppContent: React.FC = () => {
                       <span className="text-left"><span className="block text-base font-bold">{isLoadingDefault ? 'Carregando música…' : 'Tocar agora'}</span><span className="mt-0.5 block text-xs font-medium">Creeping Death - Metallica</span></span>
                     </button>
                     <button onClick={() => {
-                      if (!isAudioRunning) void handleStartAudio();
+                      ensureSoloAudio();
                       setIsSearchOpen(true);
                     }} className="flex min-h-16 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-600 bg-ink-900 px-6 py-3 text-sm font-semibold text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
                       <Music size={18} aria-hidden="true" /> Buscar música
                     </button>
                     <button onClick={handleLoadDemo} className="flex min-h-16 cursor-pointer items-center justify-center gap-3 rounded-xl border border-signal-500/30 bg-signal-500/5 px-5 py-3 text-signal-300 transition hover:bg-signal-500/10">
                       <Play size={18} aria-hidden="true" /><span className="text-left"><span className="block text-sm font-bold">Experimentar demo</span><span className="mt-1 block text-xs text-ink-300">Exercício offline - ~20 s</span></span>
+                    </button>
+                    <button onClick={() => setIsDuoSetupOpen(true)} className="flex min-h-16 cursor-pointer items-center justify-center gap-3 rounded-xl border border-ink-600 bg-ink-900 px-5 py-3 text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
+                      <Users size={18} className="text-amp-300" aria-hidden="true" /><span className="text-left"><span className="block text-sm font-bold">Jogar em dupla</span><span className="mt-1 block text-xs text-ink-300">Duas guitarras, um computador</span></span>
                     </button>
                   </div>
                   <p className="mt-5 flex items-center gap-2 text-xs text-ink-300"><Check size={14} className="text-hit" aria-hidden="true" /> Sem cadastro. O palco é seu.</p>
@@ -423,16 +478,51 @@ const AppContent: React.FC = () => {
       {/* Songsterr Search Modal */}
       <SongSearchModal
         isOpen={isSearchOpen}
-        onClose={() => setIsSearchOpen(false)}
+        onClose={() => {
+          setIsSearchOpen(false);
+          // Gave up picking a duo song from the landing: back to the solo input
+          if (duoSearchNames && session?.mode !== 'duo') exitDuoAudio();
+          setDuoSearchNames(null);
+        }}
+        duoNames={duoSearchNames}
+        onChooseMode={(mode) => {
+          if (mode === 'solo') {
+            setDuoSearchNames(null);
+          } else if (!duoSearchNames) {
+            // The duo needs its connection check and names first
+            setIsSearchOpen(false);
+            setIsDuoSetupOpen(true);
+          }
+        }}
+        onSelectDuo={(parts) => startDuo(parts, duoSearchNames ?? DEFAULT_PLAYER_NAMES)}
         onSelectSong={(tab, song) => {
           songSelectionVersion.current += 1;
           setRestoreError(null);
           setDefaultError(null);
-          if (!isAudioRunning) handleStartAudio();
+          ensureSoloAudio();
           setSession(soloSession({ tab, partId: song.partId }));
           if (song.songId !== DEMO_SONG_ID) savePreferences({ lastSong: song });
         }}
       />
+
+      {isDuoSetupOpen && (
+        <DuoSetupModal
+          onCancel={() => {
+            setIsDuoSetupOpen(false);
+            if (session?.mode !== 'duo') exitDuoAudio();
+          }}
+          onPlayDemo={(names) => {
+            setIsDuoSetupOpen(false);
+            const demo = demoPart();
+            startDuo([demo, demo], names);
+          }}
+          onSearchSong={(names) => {
+            setIsDuoSetupOpen(false);
+            setDuoSearchNames(names);
+            setIsSearchOpen(true);
+          }}
+        />
+      )}
 
       {/* Audio Interface Settings Modal */}
       <AudioSettingsModal
