@@ -88,6 +88,20 @@ describe('encodeChallenge and decodeChallenge', () => {
     expect(emoji.startsWith(decoded?.title ?? 'x')).toBe(true);
   });
 
+  it('throws RangeError when the song text holds a link, a domain or a blocked term', () => {
+    for (const text of ['Visite golpe.com', 'https://x.y', 'http://x', 'www.premio', 'pix@golpe', 'PRGB Oficial',
+      'Nazi Punks', 'FilhoDaPuta']) {
+      for (const field of ['title', 'artist', 'trackName'] as const) {
+        expect(() => encodeChallenge(challenge({ [field]: text })), `${field}: ${text}`).toThrow(RangeError);
+      }
+    }
+    // Checked after cleaning: removing an invisible character must not reveal a domain
+    expect(() => encodeChallenge(challenge({ title: 'golpe​.com' }))).toThrow(RangeError);
+    // Text beyond the 120 characters that go into the link is not checked: it is not in the link
+    expect(decodeChallenge(encodeChallenge(challenge({ title: `${'x'.repeat(120)} golpe.com` })))?.title)
+      .toBe('x'.repeat(120));
+  });
+
   it('throws RangeError for numbers outside the rules', () => {
     const invalid: Partial<Challenge>[] = [
       { score: -1 }, { score: 10_000_001 }, { score: 1.5 }, { accuracy: 101 }, { accuracy: 92.5 },
@@ -184,6 +198,55 @@ describe('decodeChallenge strictness', () => {
       expect(decodeChallenge(codeFor(JSON.stringify(tuple({ 3: text })))), JSON.stringify(text)).toBeNull();
     }
     expect(decodeChallenge(codeFor(JSON.stringify(tuple({ 3: '🎸'.repeat(120) }))))?.title).toBe('🎸'.repeat(120));
+  });
+
+  it('rejects invisible characters: zero-width, bidi marks, word joiners, BOM and Hangul fillers', () => {
+    const invisible = ['​', '‌', '‍', '‎', '‏', '؜', '﻿', '⁠', '⁡',
+      '⁢', '⁣', '⁤', 'ㅤ', 'ﾠ', 'ᅟ', 'ᅠ'];
+    for (const char of invisible) {
+      const label = `U+${char.codePointAt(0)?.toString(16).toUpperCase()}`;
+      for (const index of [3, 4, 5]) {
+        expect(decodeChallenge(codeFor(JSON.stringify(tuple({ [index]: `a${char}b` })))), label).toBeNull();
+      }
+      // The encoder removes them instead
+      expect(decodeChallenge(encodeChallenge(challenge({ title: `a${char}b` })))?.title, label).toBe('ab');
+    }
+  });
+
+  it('rejects the whole challenge when the song text holds a link or a domain', () => {
+    for (const text of ['https://golpe.example', 'http://x', 'HTTPS://X', 'www.premio', 'WWW.Premio', 'pix@golpe',
+      'Ganhe em golpe.com', 'golpe.net', 'golpe.org', 'golpe.br', 'site.com.br', 'x.io', 'x.app', 'x.xyz', 'x.me',
+      'x.link', 'x.gg', 'x.info', 'x.biz', 'x.site', 'x.online', 'x.shop', 'x.store', 'Ação.COM', 'meu-premio.com',
+      'ｇｏｌｐｅ．ｃｏｍ']) {
+      for (const index of [3, 4, 5]) {
+        expect(decodeChallenge(codeFor(JSON.stringify(tuple({ [index]: text })))), `${index}: ${text}`).toBeNull();
+      }
+    }
+  });
+
+  it('rejects the whole challenge when the song text holds a blocked term', () => {
+    for (const text of ['Puta', 'FilhoDaPuta', 'PRGB Oficial', 'Admin', 'Nazi Punks']) {
+      for (const index of [3, 4, 5]) {
+        expect(decodeChallenge(codeFor(JSON.stringify(tuple({ [index]: text })))), `${index}: ${text}`).toBeNull();
+      }
+    }
+  });
+
+  it('keeps song text with dots, abbreviations and words that only look like terms', () => {
+    for (const text of ["Sgt. Pepper's", 'Vol. 1', 'St. Anger', 'AC/DC', 'Mr. Big', 'Disputa', 'Spice Girls',
+      'Bostaph', 'The Com Truise', 'Brasil.Rock']) {
+      expect(decodeChallenge(codeFor(JSON.stringify(tuple({ 3: text }))))?.title, text).toBe(text);
+    }
+  });
+
+  it('drops a nickname that is a domain but keeps the challenge', () => {
+    for (const nickname of ['golpe.com', 'www.premio', 'pix.com.br']) {
+      const decoded = decodeChallenge(codeFor(JSON.stringify(tuple({ 8: nickname }))));
+      expect(decoded, nickname).not.toBeNull();
+      expect(decoded?.nickname, nickname).toBeNull();
+      expect(decodeChallenge(encodeChallenge(challenge({ nickname })))?.nickname, nickname).toBeNull();
+    }
+    expect(decodeChallenge(codeFor(JSON.stringify(tuple({ 8: 'joao.silva' }))))?.nickname).toBe('joao.silva');
   });
 
   it('drops an offensive or invalid nickname but keeps the challenge', () => {

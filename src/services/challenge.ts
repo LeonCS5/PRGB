@@ -2,7 +2,7 @@
 // The link is forgeable by design: anyone can write any score into it. That is fine for a challenge
 // between friends; only the online ranking needs scores checked by the server.
 
-import { validateNickname } from './nickname';
+import { containsBlockedTerm, validateNickname } from './nickname';
 
 export interface Challenge {
   v: 1;
@@ -26,9 +26,13 @@ const MAX_CODE_LENGTH = 2000;
 const MAX_SCORE = 10_000_000;
 const TEXT_MAX = 120;
 const BASE64URL = /^[A-Za-z0-9_-]+$/;
-// Control characters, lone surrogates and bidi overrides/isolates (they garble the text around them)
-const UNSAFE_CHAR = /[\p{Cc}\p{Cs}‪-‮⁦-⁩]/u;
-const UNSAFE_CHARS = /[\p{Cc}\p{Cs}‪-‮⁦-⁩]/gu;
+// Control characters, lone surrogates, bidi marks, overrides and isolates (they garble the text around
+// them) and invisible characters: zero-width ones, word joiner to invisible plus, BOM and Hangul fillers
+const UNSAFE_CHAR =
+  /[\p{Cc}\p{Cs}؜ᅟᅠ​-‏‪-‮⁠-⁤⁦-⁩ㅤ﻿ﾠ]/u;
+const UNSAFE_CHARS = new RegExp(UNSAFE_CHAR.source, 'gu');
+// The link opens under our domain, so its text must not carry a link that passes a scam off as PRGB's
+const LINK = /https?:|www\.|@|\b[a-z0-9-]+\.(?:com|net|org|br|io|app|xyz|me|link|gg|info|biz|site|online|shop|store)\b/i;
 
 const isInteger = (value: unknown, min: number, max: number): value is number =>
   typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max;
@@ -40,9 +44,15 @@ const isPartId = (value: unknown): value is number => isInteger(value, 0, Number
 const isText = (value: unknown): value is string =>
   typeof value === 'string' && Array.from(value).length <= TEXT_MAX && !UNSAFE_CHAR.test(value);
 
+// NFKC first, so full-width letters and look-alike dots ("ｇｏｌｐｅ．ｃｏｍ") read as a plain domain
+const hasLink = (text: string): boolean => LINK.test(text.normalize('NFKC'));
+
+const isAllowedText = (text: string): boolean => !hasLink(text) && !containsBlockedTerm(text);
+
 const checkNickname = (nickname: string): string | null => {
   const result = validateNickname(nickname);
-  return result.ok ? result.value : null;
+  // The nickname rules allow "." and letters, so a domain ("golpe.com") gets past them
+  return result.ok && !hasLink(result.value) ? result.value : null;
 };
 
 const toBase64Url = (bytes: Uint8Array): string => {
@@ -64,6 +74,8 @@ const parseTuple = (data: unknown): Challenge | null => {
     || !isInteger(score, 0, MAX_SCORE) || !isInteger(accuracy, 0, 100)) {
     return null;
   }
+  // A link or an offensive term in the song text costs the whole challenge: its text is shown as it is
+  if (![title, artist, trackName].every(isAllowedText)) return null;
   if (nickname !== null && typeof nickname !== 'string') return null;
   // An offensive or malformed nickname costs only the nickname, not the challenge
   const checkedNickname = nickname === null ? null : checkNickname(nickname);
@@ -73,7 +85,8 @@ const parseTuple = (data: unknown): Challenge | null => {
 /**
  * Encode a challenge for a link. Text is cleaned (unsafe characters removed, at most 120 characters,
  * shortened further if multi-byte text would overflow the link limit) and an invalid nickname becomes
- * null, so the result always decodes. Throws RangeError if songId, partId, score or accuracy break the rules.
+ * null, so the result always decodes. Throws RangeError if songId, partId, score or accuracy break the
+ * rules, or if the song text (as it goes into the link) holds a link, a domain or a blocked term.
  */
 export function encodeChallenge(challenge: Challenge): string {
   const { songId, partId, score, accuracy } = challenge;
@@ -83,16 +96,22 @@ export function encodeChallenge(challenge: Challenge): string {
   const nickname = typeof challenge.nickname === 'string' ? checkNickname(challenge.nickname) : null;
   const texts = [challenge.title, challenge.artist, challenge.trackName]
     .map((text) => Array.from(text.replace(UNSAFE_CHARS, '')));
-  const build = (limit: number): string => {
-    const [title, artist, trackName] = texts.map((chars) => chars.slice(0, limit).join(''));
+  const shorten = (limit: number): string[] => texts.map((chars) => chars.slice(0, limit).join(''));
+  const build = ([title, artist, trackName]: string[]): string => {
     const tuple: ChallengeTuple = [1, songId, partId, title, artist, trackName, score, accuracy, nickname];
     return toBase64Url(new TextEncoder().encode(JSON.stringify(tuple)));
   };
   let limit = TEXT_MAX;
-  let code = build(limit);
+  let fields = shorten(limit);
+  let code = build(fields);
   while (code.length > MAX_CODE_LENGTH && limit > 0) {
     limit = Math.max(0, limit - 10);
-    code = build(limit);
+    fields = shorten(limit);
+    code = build(fields);
+  }
+  // Checked on the text that goes into the link, which is what the decoder checks
+  if (!fields.every(isAllowedText)) {
+    throw new RangeError('Invalid challenge: song text with a link or a blocked term');
   }
   return code;
 }
