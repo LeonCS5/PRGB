@@ -187,9 +187,13 @@ describe('maxPossibleScore', () => {
     expect(play(Array<Judgement>(37).fill('perfect')).score).toBe(maxPossibleScore(37));
   });
 
-  it('treats the count as a whole, non-negative number', () => {
-    expect(maxPossibleScore(-3)).toBe(0);
-    expect(maxPossibleScore(6.9)).toBe(maxPossibleScore(6));
+  it('throws RangeError for a count that is not a whole, non-negative, safe number', () => {
+    for (const count of [-1, -3, 6.9, 0.5, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY,
+      Number.MAX_SAFE_INTEGER + 1]) {
+      expect(() => maxPossibleScore(count), String(count)).toThrow(RangeError);
+    }
+    expect(maxPossibleScore(-0)).toBe(0);
+    expect(Number.isFinite(maxPossibleScore(Number.MAX_SAFE_INTEGER))).toBe(true);
   });
 
   it('is never beaten by any sequence of judgements over n scorable notes', () => {

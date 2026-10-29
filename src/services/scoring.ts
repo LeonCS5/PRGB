@@ -70,10 +70,14 @@ export function countScorableNotes(notes: readonly NoteEvent[]): number {
 /**
  * Score of hitting every scorable note perfectly in one combo. Nothing can score more: each note is
  * judged at most once and the combo before the k-th hit is at most k. This is the anti-cheat
- * ceiling for submitted scores.
+ * ceiling for submitted scores, so a count that is not a whole, non-negative, safe number throws
+ * RangeError instead of being rounded into some ceiling.
  */
 export function maxPossibleScore(scorableCount: number): number {
-  const notes = Math.max(0, Math.floor(scorableCount));
+  if (!Number.isSafeInteger(scorableCount) || scorableCount < 0) {
+    throw new RangeError(`Invalid scorable note count: ${scorableCount}`);
+  }
+  const notes = scorableCount;
   // Hits before the multiplier tops out: COMBO_STEP at ×1, COMBO_STEP at ×2, ... up to ×(MAX - 1)
   const rampHits = (MAX_MULTIPLIER - 1) * COMBO_STEP;
   const ramp = Math.min(notes, rampHits);
