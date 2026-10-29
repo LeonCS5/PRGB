@@ -47,6 +47,26 @@ export function estimateStringAndFret(
   return best;
 }
 
+/**
+ * Normalized Square Difference Function (McLeod) for lags 0..maxLag, written into `out`:
+ * nsdf(τ) = 2·Σ x[i]·x[i+τ] / m(τ), with m(τ) = Σ (x[i]² + x[i+τ]²) for i = 0..N−1−τ.
+ * m is kept as a running sum, m(τ+1) = m(τ) − x[N−1−τ]² − x[τ]², which halves the work per lag.
+ */
+export function computeNsdf(buffer: Float32Array, maxLag: number, out: Float64Array): void {
+  const length = buffer.length;
+  let divisor = 0;
+  for (let i = 0; i < length; i++) divisor += buffer[i] * buffer[i];
+  divisor *= 2;
+  for (let tau = 0; tau <= maxLag; tau++) {
+    let acf = 0;
+    for (let i = 0; i < length - tau; i++) acf += buffer[i] * buffer[i + tau];
+    out[tau] = divisor > 0 ? (2 * acf) / divisor : 0;
+    const last = buffer[length - 1 - tau];
+    const first = buffer[tau];
+    divisor -= last * last + first * first;
+  }
+}
+
 // Pitch detector of one player; duo mode has one per guitar
 interface PlayerInput {
   slot: PlayerSlot;
@@ -66,7 +86,7 @@ export class AudioEngine {
   // Lives as long as the AudioContext; fades the amp input so (re)connections don't click
   private monitorGain: GainNode | null = null;
   // NSDF scratch space, reused every frame and by both players
-  private nsdf: Float32Array<ArrayBuffer> | null = null;
+  private nsdf: Float64Array<ArrayBuffer> | null = null;
   private keyMaxima: Int32Array<ArrayBuffer> | null = null;
   private isRunning = false;
   private animationFrameId: number | null = null;
@@ -388,21 +408,10 @@ export class AudioEngine {
     const minPeriod = Math.floor(sampleRate / this.MAX_FREQ);
     const maxPeriod = Math.floor(sampleRate / this.MIN_FREQ);
 
-    const length = buffer.length;
     // Every lag up to maxPeriod is rewritten below, so the scratch array can be reused as is
-    if (!this.nsdf || this.nsdf.length <= maxPeriod) this.nsdf = new Float32Array(maxPeriod + 1);
+    if (!this.nsdf || this.nsdf.length <= maxPeriod) this.nsdf = new Float64Array(maxPeriod + 1);
     const nsdf = this.nsdf;
-
-    // Compute autocorrelation & squared sum
-    for (let tau = 0; tau <= maxPeriod; tau++) {
-      let acf = 0;
-      let divisor = 0;
-      for (let i = 0; i < length - tau; i++) {
-        acf += buffer[i] * buffer[i + tau];
-        divisor += buffer[i] * buffer[i] + buffer[i + tau] * buffer[i + tau];
-      }
-      nsdf[tau] = divisor > 0 ? (2 * acf) / divisor : 0;
-    }
+    computeNsdf(buffer, maxPeriod, nsdf);
 
     // McLeod (MPM) peak picking. The lobe around lag 0 is always high and says nothing about the period,
     // so key maxima only count after the NSDF first turns negative. Searching inside that lobe picked lag

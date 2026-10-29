@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AudioEngine, STANDARD_TUNING, estimateStringAndFret, type InputChannelMode } from './audioEngine';
+import { AudioEngine, STANDARD_TUNING, computeNsdf, estimateStringAndFret, type InputChannelMode } from './audioEngine';
 
 vi.mock('./tone3000Amp', () => ({
   Tone3000AmpEngine: class {
@@ -25,6 +25,54 @@ describe('estimateStringAndFret', () => {
   it('returns null outside the neck range', () => {
     expect(estimateStringAndFret(39)).toBeNull();
     expect(estimateStringAndFret(64 + 25)).toBeNull();
+  });
+});
+
+describe('computeNsdf', () => {
+  // Textbook NSDF, every sum computed from scratch for each lag
+  const naiveNsdf = (buffer: Float32Array, maxLag: number): number[] =>
+    Array.from({ length: maxLag + 1 }, (_, tau) => {
+      let acf = 0;
+      let divisor = 0;
+      for (let i = 0; i < buffer.length - tau; i++) {
+        acf += buffer[i] * buffer[i + tau];
+        divisor += buffer[i] * buffer[i] + buffer[i + tau] * buffer[i + tau];
+      }
+      return divisor > 0 ? (2 * acf) / divisor : 0;
+    });
+
+  it('matches the textbook formula within 1e-9 relative, also on a fading note', () => {
+    let seed = 7;
+    const noise = () => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed / 2147483648 - 0.5;
+    };
+    const signals = [
+      // Low E with harmonics and some noise
+      Float32Array.from({ length: 2048 }, (_, i) =>
+        0.3 * Math.sin((2 * Math.PI * 82.41 * i) / 48000) + 0.2 * Math.sin((2 * Math.PI * 164.82 * i) / 48000) + 0.05 * noise()),
+      // A note fading fast: late lags divide by little energy, where a running sum loses precision first
+      Float32Array.from({ length: 2048 }, (_, i) => Math.exp(-i / 200) * Math.sin((2 * Math.PI * 440 * i) / 48000))
+    ];
+    const maxLag = 1200; // 48 kHz / 40 Hz
+    for (const signal of signals) {
+      const fast = new Float64Array(maxLag + 1);
+      computeNsdf(signal, maxLag, fast);
+      const naive = naiveNsdf(signal, maxLag);
+      let worst = 0;
+      for (let tau = 0; tau <= maxLag; tau++) {
+        // Relative to the NSDF scale (|nsdf| ≤ 1), so values crossing zero are not divided by ~0
+        worst = Math.max(worst, Math.abs(fast[tau] - naive[tau]) / Math.max(Math.abs(naive[tau]), 1e-3));
+      }
+      expect(worst).toBeLessThan(1e-9);
+      expect(fast[0]).toBeCloseTo(1, 12);
+    }
+  });
+
+  it('writes zeros for silence', () => {
+    const out = new Float64Array(11).fill(5);
+    computeNsdf(new Float32Array(64), 10, out);
+    expect(Array.from(out)).toEqual(Array(11).fill(0));
   });
 });
 
