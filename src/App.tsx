@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Music,
   Play,
@@ -17,7 +17,6 @@ import {
   Loader2
 } from 'lucide-react';
 import { getDemoSong, DEMO_SONG_ID } from './services/demoSong';
-import type { NormalizedSongTab } from './services/songsterrApi';
 import { ErrorNotice } from './components/ErrorNotice';
 import { BrandMark } from './components/BrandMark';
 import { getSongMetadata, loadSongTrack } from './context/uiErrors';
@@ -28,6 +27,7 @@ import { Tone3000AmpRack } from './components/Tone3000AmpRack';
 import { AudioSessionProvider, useAudioSession, useLatestPitch } from './context/AudioSessionContext';
 import { ModalsProvider, useModals } from './context/ModalsContext';
 import { readPreferences, savePreferences } from './context/preferences';
+import { nextSessionKey, type GamePart, type GameSession } from './context/gameSession';
 
 const supportUrl = import.meta.env.VITE_SUPPORT_URL?.trim();
 const supportHref = supportUrl || 'https://github.com/LeonCS5/PRGB';
@@ -77,6 +77,10 @@ const PracticePreview: React.FC = () => (
   </figure>
 );
 
+const demoPart = (): GamePart => ({ tab: getDemoSong(), partId: 0 });
+
+const soloSession = (part: GamePart): GameSession => ({ mode: 'solo', key: nextSessionKey(), part, challenge: null });
+
 const LandingPitch: React.FC = () => {
   const latestPitch = useLatestPitch();
   if (!latestPitch) return null;
@@ -110,7 +114,7 @@ const AppContent: React.FC = () => {
     setTone3000RackOpen: setIsTone3000RackOpen
   } = useModals();
 
-  const [activeTab, setActiveTab] = useState<NormalizedSongTab | null>(() => new URLSearchParams(window.location.search).has('demo') ? getDemoSong() : null);
+  const [session, setSession] = useState<GameSession | null>(() => new URLSearchParams(window.location.search).has('demo') ? soloSession(demoPart()) : null);
   const [isLoadingDefault, setIsLoadingDefault] = useState(false);
   const [savedSong] = useState(() => readPreferences().lastSong);
   const [restoreError, setRestoreError] = useState<string | null>(null);
@@ -118,9 +122,14 @@ const AppContent: React.FC = () => {
   const [defaultError, setDefaultError] = useState<string | null>(null);
   const songSelectionVersion = useRef(0);
 
+  const sessionParts = useMemo<GamePart[]>(
+    () => !session ? [] : session.mode === 'solo' ? [session.part] : session.parts,
+    [session]
+  );
+
   useEffect(() => {
-    if (activeTab) audioEngine.setTuning(activeTab.tuning);
-  }, [activeTab, audioEngine]);
+    sessionParts.forEach((part, player) => audioEngine.setTuning(part.tab.tuning, player === 0 ? 0 : 1));
+  }, [sessionParts, audioEngine]);
 
   useEffect(() => {
     if (!savedSong || savedSong.songId === DEMO_SONG_ID || new URLSearchParams(window.location.search).has('demo')) return;
@@ -132,7 +141,7 @@ const AppContent: React.FC = () => {
         const trackIndex = meta.tracks.findIndex((track) => track.partId === savedSong.partId);
         if (trackIndex < 0) throw new Error('A faixa salva não está mais disponível.');
         const normalized = await loadSongTrack(meta, trackIndex);
-        if (!cancelled && version === songSelectionVersion.current) setActiveTab(normalized);
+        if (!cancelled && version === songSelectionVersion.current) setSession(soloSession({ tab: normalized, partId: savedSong.partId }));
       } catch (err) {
         if (!cancelled && version === songSelectionVersion.current) {
           setRestoreError(`Não foi possível restaurar a última música. ${err instanceof Error ? err.message : 'Busque uma música para continuar.'}`);
@@ -147,7 +156,7 @@ const AppContent: React.FC = () => {
     songSelectionVersion.current += 1;
     setRestoreError(null);
     setDefaultError(null);
-    setActiveTab(getDemoSong());
+    setSession(soloSession(demoPart()));
   };
 
   // Load default song (Metallica - Creeping Death)
@@ -169,7 +178,7 @@ const AppContent: React.FC = () => {
       const track = meta.tracks[trackIndex];
 
       const normalized = await loadSongTrack(meta, trackIndex);
-      setActiveTab(normalized);
+      setSession(soloSession({ tab: normalized, partId: track.partId }));
       savePreferences({ lastSong: { songId: meta.songId, partId: track.partId } });
     } catch (err) {
       setDefaultError(err instanceof Error ? err.message : 'Não foi possível carregar a música padrão. Busque outra música.');
@@ -202,12 +211,15 @@ const AppContent: React.FC = () => {
             actionLabel="Tentar novamente" onAction={() => void handleLoadDefaultSong()} actionDisabled={isLoadingDefault} />
         )}
       </div>
-      {activeTab ? (
+      {session ? (
         /* Practice mode */
         <>
           <PracticeGame
-            tab={activeTab}
-            onExit={() => { songSelectionVersion.current += 1; setActiveTab(null); window.history.replaceState(null, '', window.location.pathname + window.location.hash); }}
+            key={session.key}
+            parts={sessionParts}
+            playerNames={session.mode === 'duo' ? session.names : null}
+            challenge={session.mode === 'solo' ? session.challenge : null}
+            onExit={() => { songSelectionVersion.current += 1; setSession(null); window.history.replaceState(null, '', window.location.pathname + window.location.hash); }}
             onOpenSearch={() => setIsSearchOpen(true)}
             onOpenAudioSettings={() => setIsSettingsOpen(true)}
             tone3000={tone3000}
@@ -353,7 +365,7 @@ const AppContent: React.FC = () => {
           setRestoreError(null);
           setDefaultError(null);
           if (!isAudioRunning) handleStartAudio();
-          setActiveTab(tab);
+          setSession(soloSession({ tab, partId: song.partId }));
           if (song.songId !== DEMO_SONG_ID) savePreferences({ lastSong: song });
         }}
       />
