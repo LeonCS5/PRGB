@@ -272,6 +272,12 @@ describe('AudioEngine lifecycle', () => {
       expect(await detect(tone(82.41, [0.3, 1, 0.8, 0.5, 0.4, 0.3]))).toMatchObject({ midiNote: 40 });
     });
 
+    it('removes a DC offset before measuring the level and the pitch', async () => {
+      const withOffset = sine(82.41).map((sample) => sample + 0.3);
+      // The level is the sine's alone: amplitude / √2
+      expect(await detect(withOffset)).toMatchObject({ midiNote: 40, volume: 0.35 });
+    });
+
     it('reports no pitch for noise', async () => {
       let seed = 12345;
       const noise = Float32Array.from({ length: 2048 }, () => {

@@ -343,8 +343,14 @@ export class AudioEngine {
     for (const input of this.playerInputs) {
       const buffer = input.buffer;
       input.analyser.getFloatTimeDomainData(buffer);
+      // Remove the DC offset some interfaces add: it inflates the RMS and keeps the NSDF positive at
+      // every lag, so no period was found
+      let sum = 0;
+      for (let i = 0; i < buffer.length; i++) sum += buffer[i];
+      const mean = sum / buffer.length;
       let sumSquares = 0;
       for (let i = 0; i < buffer.length; i++) {
+        buffer[i] -= mean;
         sumSquares += buffer[i] * buffer[i];
       }
       input.rms = Math.sqrt(sumSquares / buffer.length);
