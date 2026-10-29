@@ -31,7 +31,7 @@ const StepHeading: React.FC<{ step: number; label: string; title: string }> = ({
   return (
     <>
       <p className="font-mono text-xs tracking-widest text-amp-300">PASSO {step} DE 3 · {label}</p>
-      <h2 id={TITLE_ID} ref={headingRef} tabIndex={-1} className="mt-2 pr-10 font-display text-2xl font-bold focus:outline-none">{title}</h2>
+      <h2 id={TITLE_ID} ref={headingRef} tabIndex={-1} className="mt-2 pr-10 font-display text-2xl font-bold focus:outline-none!">{title}</h2>
     </>
   );
 };

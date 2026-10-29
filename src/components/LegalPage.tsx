@@ -39,7 +39,7 @@ export const LegalPage: React.FC<LegalPageProps> = ({ document, sectionId }) => 
 
       <main className="mx-auto max-w-3xl px-5 py-10 sm:px-8 sm:py-14">
         <p className="font-mono text-xs tracking-widest text-amp-300">PRGB · DOCUMENTO LEGAL</p>
-        <h1 ref={headingRef} tabIndex={-1} className="mt-3 font-display text-4xl font-bold tracking-tight focus:outline-none sm:text-5xl">{document.title}</h1>
+        <h1 ref={headingRef} tabIndex={-1} className="mt-3 font-display text-4xl font-bold tracking-tight focus:outline-none! sm:text-5xl">{document.title}</h1>
         <p className="mt-3 text-sm text-ink-300">Última atualização: <time dateTime={document.updatedAt}>{formatLegalDate(document.updatedAt)}</time></p>
 
         <section aria-labelledby="legal-summary" className="mt-8 rounded-2xl border border-amp-500/25 bg-amp-500/5 p-5 sm:p-6">

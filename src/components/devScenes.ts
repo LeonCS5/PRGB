@@ -31,13 +31,13 @@ export const gameDevPreset = (scene: DevScene, durationMs: number): GameDevPrese
   const second = sampleScore('pgpgppmpppgpppmppgpppppgpmppppgpp');
   switch (scene) {
     case 'resultado':
-      return { positionMs: Math.max(0, durationMs - 300), playing: true, scores: [solo, createScoreState()] };
+      return { positionMs: durationMs, playing: true, scores: [solo, createScoreState()] };
     case 'desafio':
-      return { positionMs: Math.max(0, durationMs - 300), playing: true, scores: [solo, createScoreState()], shareOpen: true };
+      return { positionMs: durationMs, playing: true, scores: [solo, createScoreState()], shareOpen: true };
     case 'dupla':
       return { positionMs: 9000, playing: false, scores: [sampleScore('ppppgpppppppgpp'), sampleScore('pgpppmppgpp')] };
     case 'dupla-resultado':
-      return { positionMs: Math.max(0, durationMs - 300), playing: true, scores: [solo, second] };
+      return { positionMs: durationMs, playing: true, scores: [solo, second] };
     default:
       return null;
   }
