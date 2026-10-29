@@ -17,7 +17,7 @@
 2. **Ouvir o som processado** em tempo real pelo motor DSP **TONE3000** (emulação de amplificador valvulado, gabinete, noise gate, reverb)
 3. **Tocar junto com tablaturas** baixadas da API do Songsterr (1M+ músicas), com detecção de pitch e gamificação (score, combo, acertos Perfect/Good/Miss)
 
-**O app é 100% client-side** — sem backend, sem login, sem banco de dados. Todo o processamento de áudio acontece via Web Audio API no navegador.
+**Sem servidor próprio.** O jogo roda 100% no navegador (todo o áudio via Web Audio API, nunca enviado); ranking e salas online, opcionais e só com consentimento 18+, usam Supabase gerenciado (região São Paulo). Regras em AGENTS.md › Regras INVIOLÁVEIS 1 e 11.
 
 ---
 
@@ -168,7 +168,7 @@ O backlog fica **só** no `AGENTS.md` (seção "Problemas Conhecidos"), com dono
 - **Nunca alterar a cadeia DSP do TONE3000** sem entender o signal routing completo (seção 4)
 - **Nunca instalar ESLint** — o projeto usa oxlint exclusivamente
 - **Nunca migrar de Tailwind CSS** para outra solução de styling
-- **Nunca adicionar backend/servidor** — o app é 100% client-side
+- **Nunca adicionar servidor próprio** — só Supabase gerenciado, para ranking/salas, e o jogo funciona sem ele
 - **Manter toda a UI em Português Brasileiro**
 - **Preservar a API de proxy do Vite** (`/api/songsterr`, `/cdn/songsterr`)
 

@@ -15,7 +15,7 @@ Um app web (React + TypeScript + Vite) de prática de guitarra open-source e gra
 - Carrega tablaturas de 1M+ músicas da API do Songsterr
 - Renderiza um jogo de prática estilo "rails" em Canvas 2D com detecção de pitch e scoring
 
-**Zero backend. Zero login. 100% client-side.**
+**Sem servidor próprio.** O jogo roda 100% no navegador, sem conta e até offline. Ranking e salas online (opcionais, 18+, com consentimento) usam **Supabase** gerenciado na região São Paulo.
 
 ---
 
@@ -154,7 +154,8 @@ Guitarra → USB Interface → getUserMedia(48kHz, raw, sem noise suppress)
 
 ## Regras INVIOLÁVEIS
 
-1. **Não adicionar backend/servidor.** O app é 100% client-side.
+1. **Não adicionar servidor próprio.** O único backend permitido é o **Supabase gerenciado** (Postgres com RLS, Auth anônimo, Edge Functions, Realtime), e só para ranking e salas online. O jogo precisa continuar funcionando sem conta, sem Supabase configurado e offline.
+11. **LGPD por padrão.** Só o apelido é dado pessoal; nenhuma conta antes do consentimento (18+ autodeclarado + aceite com `LEGAL_VERSION`); tabelas sem acesso direto (só RPC `security definer` com `search_path=''`); exportar, corrigir e excluir sempre disponíveis; qualquer dado novo exige atualizar `src/content/legal.ts`.
 2. **Não instalar ESLint.** O projeto usa oxlint.
 3. **Não trocar Tailwind CSS** por outra solução de styling.
 4. **Não usar `any`** sem justificativa em comentário adjacente.
@@ -167,9 +168,11 @@ Guitarra → USB Interface → getUserMedia(48kHz, raw, sem noise suppress)
 
 ---
 
-## Colaboração entre Agentes (Claude + Codex)
+## Colaboração entre Agentes (Claude, subagentes e Codex)
 
 Mais de um agente trabalha neste repositório. O humano coordena; os agentes seguem este protocolo.
+
+> Quando o Codex está indisponível, o Claude se divide em **subagentes** (worktrees em `.claude/worktrees/`, ignorados pelo git), cada um com escopo de arquivos exclusivo, e um subagente revisor faz a revisão cruzada no lugar do Codex.
 
 1. **Uma tarefa por agente, atribuída pelo humano.** Antes de começar, confira no backlog abaixo se o item está marcado com o seu nome (`@claude` ou `@codex`). Não pegue item sem dono nem item de outro agente.
 2. **Worktree próprio, nunca a pasta principal.** `PRGB/` é reservada para `main` e merges.

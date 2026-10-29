@@ -72,18 +72,34 @@ describe('encodeChallenge and decodeChallenge', () => {
 
   it('keeps worst-case multi-byte challenges under the link limit', () => {
     const emoji = '🎸'.repeat(120);
+    // Latin-1 letters take 2 bytes in UTF-8, the most a character of a valid nickname can take
+    const longestNickname = 'Ç'.repeat(20);
     const huge = challenge({
-      songId: Number.MAX_SAFE_INTEGER, title: emoji, artist: emoji, trackName: emoji, nickname: '𝐀'.repeat(20)
+      songId: Number.MAX_SAFE_INTEGER, title: emoji, artist: emoji, trackName: emoji, nickname: longestNickname
     });
     const code = encodeChallenge(huge);
     expect(code.length).toBeLessThanOrEqual(2000);
     const decoded = decodeChallenge(code);
-    expect(decoded).toMatchObject({ songId: Number.MAX_SAFE_INTEGER, score: 123456, nickname: '𝐀'.repeat(20) });
+    expect(decoded).toMatchObject({ songId: Number.MAX_SAFE_INTEGER, score: 123456, nickname: longestNickname });
     // Shortened to fit, never emptied
     const titleLength = Array.from(decoded?.title ?? '').length;
     expect(titleLength).toBeGreaterThan(0);
     expect(titleLength).toBeLessThan(120);
     expect(emoji.startsWith(decoded?.title ?? 'x')).toBe(true);
+  });
+
+  it('throws RangeError when the song text holds a link, a domain or a blocked term', () => {
+    for (const text of ['Visite golpe.com', 'https://x.y', 'http://x', 'www.premio', 'pix@golpe', 'PRGB Oficial',
+      'Nazi Punks', 'FilhoDaPuta']) {
+      for (const field of ['title', 'artist', 'trackName'] as const) {
+        expect(() => encodeChallenge(challenge({ [field]: text })), `${field}: ${text}`).toThrow(RangeError);
+      }
+    }
+    // Checked after cleaning: removing an invisible character must not reveal a domain
+    expect(() => encodeChallenge(challenge({ title: 'golpe\u200B.com' }))).toThrow(RangeError);
+    // Text beyond the 120 characters that go into the link is not checked: it is not in the link
+    expect(decodeChallenge(encodeChallenge(challenge({ title: `${'x'.repeat(120)} golpe.com` })))?.title)
+      .toBe('x'.repeat(120));
   });
 
   it('throws RangeError for numbers outside the rules', () => {
@@ -111,7 +127,7 @@ describe('decodeChallenge strictness', () => {
     }
     // Valid content, but a code longer than 2000 characters is refused before decoding
     const giant = codeFor(JSON.stringify(tuple({
-      1: Number.MAX_SAFE_INTEGER, 3: '🎸'.repeat(120), 4: '🎸'.repeat(120), 5: '🎸'.repeat(120), 8: '𝐀'.repeat(20)
+      1: Number.MAX_SAFE_INTEGER, 3: '🎸'.repeat(120), 4: '🎸'.repeat(120), 5: '🎸'.repeat(120), 8: 'Ç'.repeat(20)
     })));
     expect(giant.length).toBeGreaterThan(2000);
     expect(decodeChallenge(giant)).toBeNull();
@@ -182,6 +198,55 @@ describe('decodeChallenge strictness', () => {
       expect(decodeChallenge(codeFor(JSON.stringify(tuple({ 3: text })))), JSON.stringify(text)).toBeNull();
     }
     expect(decodeChallenge(codeFor(JSON.stringify(tuple({ 3: '🎸'.repeat(120) }))))?.title).toBe('🎸'.repeat(120));
+  });
+
+  it('rejects invisible characters: zero-width, bidi marks, word joiners, BOM and Hangul fillers', () => {
+    const invisible = ['\u200B', '\u200C', '\u200D', '\u200E', '\u200F', '\u061C', '\uFEFF', '\u2060', '\u2061',
+      '\u2062', '\u2063', '\u2064', '\u3164', '\uFFA0', '\u115F', '\u1160'];
+    for (const char of invisible) {
+      const label = `U+${char.codePointAt(0)?.toString(16).toUpperCase()}`;
+      for (const index of [3, 4, 5]) {
+        expect(decodeChallenge(codeFor(JSON.stringify(tuple({ [index]: `a${char}b` })))), label).toBeNull();
+      }
+      // The encoder removes them instead
+      expect(decodeChallenge(encodeChallenge(challenge({ title: `a${char}b` })))?.title, label).toBe('ab');
+    }
+  });
+
+  it('rejects the whole challenge when the song text holds a link or a domain', () => {
+    for (const text of ['https://golpe.example', 'http://x', 'HTTPS://X', 'www.premio', 'WWW.Premio', 'pix@golpe',
+      'Ganhe em golpe.com', 'golpe.net', 'golpe.org', 'golpe.br', 'site.com.br', 'x.io', 'x.app', 'x.xyz', 'x.me',
+      'x.link', 'x.gg', 'x.info', 'x.biz', 'x.site', 'x.online', 'x.shop', 'x.store', 'Ação.COM', 'meu-premio.com',
+      'ｇｏｌｐｅ．ｃｏｍ']) {
+      for (const index of [3, 4, 5]) {
+        expect(decodeChallenge(codeFor(JSON.stringify(tuple({ [index]: text })))), `${index}: ${text}`).toBeNull();
+      }
+    }
+  });
+
+  it('rejects the whole challenge when the song text holds a blocked term', () => {
+    for (const text of ['Puta', 'FilhoDaPuta', 'PRGB Oficial', 'Admin', 'Nazi Punks']) {
+      for (const index of [3, 4, 5]) {
+        expect(decodeChallenge(codeFor(JSON.stringify(tuple({ [index]: text })))), `${index}: ${text}`).toBeNull();
+      }
+    }
+  });
+
+  it('keeps song text with dots, abbreviations and words that only look like terms', () => {
+    for (const text of ["Sgt. Pepper's", 'Vol. 1', 'St. Anger', 'AC/DC', 'Mr. Big', 'Disputa', 'Spice Girls',
+      'Bostaph', 'The Com Truise', 'Brasil.Rock']) {
+      expect(decodeChallenge(codeFor(JSON.stringify(tuple({ 3: text }))))?.title, text).toBe(text);
+    }
+  });
+
+  it('drops a nickname that is a domain but keeps the challenge', () => {
+    for (const nickname of ['golpe.com', 'www.premio', 'pix.com.br']) {
+      const decoded = decodeChallenge(codeFor(JSON.stringify(tuple({ 8: nickname }))));
+      expect(decoded, nickname).not.toBeNull();
+      expect(decoded?.nickname, nickname).toBeNull();
+      expect(decodeChallenge(encodeChallenge(challenge({ nickname })))?.nickname, nickname).toBeNull();
+    }
+    expect(decodeChallenge(codeFor(JSON.stringify(tuple({ 8: 'joao.silva' }))))?.nickname).toBe('joao.silva');
   });
 
   it('drops an offensive or invalid nickname but keeps the challenge', () => {

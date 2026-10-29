@@ -30,6 +30,11 @@ interface RecordsData {
   bests: RunResult[]; // most recently played first, one per song, part and speed
 }
 
+interface StoredRecords extends RecordsData {
+  // Saved by a newer PRGB (e.g. another tab already updated): read as empty and never overwritten
+  fromNewerVersion: boolean;
+}
+
 const STORAGE_KEY = 'prgb:records:v1';
 const DATA_VERSION = 1;
 const HISTORY_LIMIT = 50;
@@ -100,12 +105,15 @@ const resolveStorage = (storage?: Storage): Storage | null => {
   }
 };
 
-const readData = (storage: Storage | null): RecordsData => {
-  const empty: RecordsData = { history: [], bests: [] };
+const readData = (storage: Storage | null): StoredRecords => {
+  const empty: StoredRecords = { history: [], bests: [], fromNewerVersion: false };
   if (!storage) return empty;
   try {
     const raw = storage.getItem(STORAGE_KEY);
     const value: unknown = raw ? JSON.parse(raw) : null;
+    if (isRecord(value) && typeof value.version === 'number' && value.version > DATA_VERSION) {
+      return { ...empty, fromNewerVersion: true };
+    }
     if (!isRecord(value) || value.version !== DATA_VERSION || !Array.isArray(value.history) || !Array.isArray(value.bests)) {
       return empty;
     }
@@ -117,7 +125,8 @@ const readData = (storage: Storage | null): RecordsData => {
     });
     return {
       history: value.history.map(parseRun).filter((run): run is RunResult => run !== null).slice(0, HISTORY_LIMIT),
-      bests: bests.slice(0, BESTS_LIMIT)
+      bests: bests.slice(0, BESTS_LIMIT),
+      fromNewerVersion: false
     };
   } catch {
     return empty;
@@ -138,10 +147,12 @@ const findBest = (bests: RunResult[], key: string): RunResult | null => bests.fi
  * Save a finished run to the history and update the personal best for its song, part and speed.
  * Only a strictly higher score is a new record: a tie is not, and 0 points never is. A run with
  * invalid numbers is not saved. The outcome is still returned if the browser refuses to save.
+ * Records saved by a newer PRGB are left untouched: nothing is saved and the run is no record.
  */
 export function recordRun(run: RunResult, storage?: Storage): RecordOutcome {
   const target = resolveStorage(storage);
   const data = readData(target);
+  if (data.fromNewerVersion) return { isPersonalBest: false, previousBest: null };
   const entry = prepareRun(run);
   if (!entry) return { isPersonalBest: false, previousBest: findBest(data.bests, bestKey(run)) };
 
@@ -166,9 +177,12 @@ export function getHistory(limit = HISTORY_LIMIT, storage?: Storage): RunResult[
   return readData(resolveStorage(storage)).history.slice(0, Math.max(0, limit));
 }
 
+// Leaves records saved by a newer PRGB untouched, like recordRun
 export function clearRecords(storage?: Storage): void {
+  const target = resolveStorage(storage);
+  if (readData(target).fromNewerVersion) return;
   try {
-    resolveStorage(storage)?.removeItem(STORAGE_KEY);
+    target?.removeItem(STORAGE_KEY);
   } catch {
     // Nothing to clear when storage is blocked.
   }

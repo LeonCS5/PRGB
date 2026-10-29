@@ -87,7 +87,7 @@ export const PRIVACY_POLICY: LegalDocument = {
       items: [
         'Áudio da guitarra ou do microfone: usado só dentro do seu navegador, para detectar as notas, mostrar o afinador e simular o amplificador. Nunca é gravado nem enviado a nenhum servidor.',
         'Dados guardados no seu navegador: preferências, recordes, histórico e apelido local. Ficam no seu aparelho e não são enviados ao PRGB (veja “O que fica só no seu navegador”).',
-        'Registros técnicos de acesso: como qualquer site, a hospedagem (Vercel) registra dados técnicos de cada visita, como endereço IP, data e hora, endereço da página e informações do navegador (user agent). Quando você abre o ranking ou usa a sala online, o Supabase registra dados técnicos parecidos das conexões.',
+        'Registros técnicos de acesso: como qualquer site, a hospedagem (Vercel) registra dados técnicos de cada visita, como endereço IP, data e hora, endereço da página e informações do navegador (user agent). Quando você abre o ranking ou usa a sala online, o Supabase registra dados técnicos parecidos das conexões. Se você tiver conta no ranking, o sistema de login do Supabase também guarda, junto da conta, dados das sessões de acesso (como endereço IP e navegador); eles são apagados quando a conta é excluída.',
         'Busca de músicas: o termo pesquisado e a música que você abre são repassados ao Songsterr para trazer a tablatura.',
         'Ranking (opcional, para maiores de 18 anos): apelido, ID aleatório da conta, pontuações e datas, detalhados em “Ranking: o que guardamos”.',
         'Sala online em dupla (opcional, para maiores de 18 anos): apelido e placar ao vivo, repassados ao seu parceiro sem serem gravados.',

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AudioEngine, STANDARD_TUNING, estimateStringAndFret, type InputChannelMode } from './audioEngine';
+import { AudioEngine, STANDARD_TUNING, computeNsdf, estimateStringAndFret, type InputChannelMode } from './audioEngine';
 
 vi.mock('./tone3000Amp', () => ({
   Tone3000AmpEngine: class {
@@ -25,6 +25,54 @@ describe('estimateStringAndFret', () => {
   it('returns null outside the neck range', () => {
     expect(estimateStringAndFret(39)).toBeNull();
     expect(estimateStringAndFret(64 + 25)).toBeNull();
+  });
+});
+
+describe('computeNsdf', () => {
+  // Textbook NSDF, every sum computed from scratch for each lag
+  const naiveNsdf = (buffer: Float32Array, maxLag: number): number[] =>
+    Array.from({ length: maxLag + 1 }, (_, tau) => {
+      let acf = 0;
+      let divisor = 0;
+      for (let i = 0; i < buffer.length - tau; i++) {
+        acf += buffer[i] * buffer[i + tau];
+        divisor += buffer[i] * buffer[i] + buffer[i + tau] * buffer[i + tau];
+      }
+      return divisor > 0 ? (2 * acf) / divisor : 0;
+    });
+
+  it('matches the textbook formula within 1e-9 relative, also on a fading note', () => {
+    let seed = 7;
+    const noise = () => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed / 2147483648 - 0.5;
+    };
+    const signals = [
+      // Low E with harmonics and some noise
+      Float32Array.from({ length: 2048 }, (_, i) =>
+        0.3 * Math.sin((2 * Math.PI * 82.41 * i) / 48000) + 0.2 * Math.sin((2 * Math.PI * 164.82 * i) / 48000) + 0.05 * noise()),
+      // A note fading fast: late lags divide by little energy, where a running sum loses precision first
+      Float32Array.from({ length: 2048 }, (_, i) => Math.exp(-i / 200) * Math.sin((2 * Math.PI * 440 * i) / 48000))
+    ];
+    const maxLag = 1200; // 48 kHz / 40 Hz
+    for (const signal of signals) {
+      const fast = new Float64Array(maxLag + 1);
+      computeNsdf(signal, maxLag, fast);
+      const naive = naiveNsdf(signal, maxLag);
+      let worst = 0;
+      for (let tau = 0; tau <= maxLag; tau++) {
+        // Relative to the NSDF scale (|nsdf| ≤ 1), so values crossing zero are not divided by ~0
+        worst = Math.max(worst, Math.abs(fast[tau] - naive[tau]) / Math.max(Math.abs(naive[tau]), 1e-3));
+      }
+      expect(worst).toBeLessThan(1e-9);
+      expect(fast[0]).toBeCloseTo(1, 12);
+    }
+  });
+
+  it('writes zeros for silence', () => {
+    const out = new Float64Array(11).fill(5);
+    computeNsdf(new Float32Array(64), 10, out);
+    expect(Array.from(out)).toEqual(Array(11).fill(0));
   });
 });
 
@@ -68,7 +116,7 @@ class FakeAudioContext {
     return node;
   }
   createGain() { return this.keep(this.gains, gainNode()); }
-  // Web Audio's default channelCount, which getInputChannelCount() falls back to
+  // Web Audio's default channelCount, whatever the input delivers
   createMediaStreamSource() { return { ...audioNode(), channelCount: 2 }; }
   createChannelSplitter() { return this.keep(this.splitters, audioNode()); }
   createChannelMerger() { return this.keep(this.mergers, audioNode()); }
@@ -253,6 +301,8 @@ describe('AudioEngine lifecycle', () => {
       ['E4 (1ª corda solta)', 329.63, 64],
       ['E5 (1ª corda, casa 12)', 659.26, 76],
       ['B5 (1ª corda, casa 19)', 987.77, 83],
+      ['D6 (1ª corda, casa 22)', 1174.66, 86],
+      ['E6 (1ª corda, casa 24)', 1318.51, 88],
       ['A1 (baixo, 4ª corda)', 55, 33],
       ['E1 (baixo, 4ª corda solta)', 41.2, 28]
     ])('detects a pure %s', async (_name, hz, midi) => {
@@ -272,6 +322,12 @@ describe('AudioEngine lifecycle', () => {
       expect(await detect(tone(82.41, [0.3, 1, 0.8, 0.5, 0.4, 0.3]))).toMatchObject({ midiNote: 40 });
     });
 
+    it('removes a DC offset before measuring the level and the pitch', async () => {
+      const withOffset = sine(82.41).map((sample) => sample + 0.3);
+      // The level is the sine's alone: amplitude / √2
+      expect(await detect(withOffset)).toMatchObject({ midiNote: 40, volume: 0.35 });
+    });
+
     it('reports no pitch for noise', async () => {
       let seed = 12345;
       const noise = Float32Array.from({ length: 2048 }, () => {
@@ -279,6 +335,101 @@ describe('AudioEngine lifecycle', () => {
         return (seed / 2147483648 - 0.5) * 0.6;
       });
       expect(await detect(noise)).toBeNull();
+    });
+  });
+
+  describe('attack tracking', () => {
+    interface Heard { midiNote: number; attackId: number }
+
+    // Plays one signal per frame on channel 1 and returns what was heard in each frame
+    const playFrames = async (signals: (Float32Array | null)[]) => {
+      const heard: (Heard | null)[] = [];
+      const engine = new AudioEngine();
+      await engine.start('a', 'ch1', (pitch) => heard.push(pitch));
+      heard.length = 0;
+      for (const signal of signals) {
+        contexts[0].analysers[0].signal = signal;
+        runFrame();
+      }
+      return heard;
+    };
+
+    const E2 = 82.41;
+    const A2 = 110;
+
+    it('keeps the attack of a note that rings while it fades', async () => {
+      const heard = await playFrames(Array.from({ length: 20 }, (_, frame) => sine(E2, 0.5 * 0.9 ** frame)));
+      expect(heard.every((pitch) => pitch?.midiNote === 40)).toBe(true);
+      expect(new Set(heard.map((pitch) => pitch?.attackId)).size).toBe(1);
+    });
+
+    it('counts a new attack when the same note is picked again', async () => {
+      const heard = await playFrames([
+        ...Array.from({ length: 8 }, (_, frame) => sine(E2, 0.5 * 0.85 ** frame)), // fades to ~0.16
+        sine(E2, 0.5), // picked again: 3× louder in one frame
+        sine(E2, 0.45)
+      ]);
+      const ids = heard.map((pitch) => pitch?.attackId);
+      expect(new Set(ids.slice(0, 8)).size).toBe(1);
+      expect(ids[8]).toBeGreaterThan(ids[0] ?? Infinity);
+      expect(ids[9]).toBe(ids[8]);
+    });
+
+    it('counts a new attack after silence', async () => {
+      const heard = await playFrames([sine(E2, 0.3), sine(E2, 0.3), null, null, sine(E2, 0.3)]);
+      expect(heard[2]).toBeNull();
+      expect(heard[4]?.attackId).toBeGreaterThan(heard[0]?.attackId ?? Infinity);
+    });
+
+    it('counts a new attack when the note changes without a pick (hammer-on, slide)', async () => {
+      const heard = await playFrames([...Array(5).fill(sine(E2, 0.3)), sine(A2, 0.3), sine(A2, 0.3), sine(A2, 0.3)]);
+      expect(heard.map((pitch) => pitch?.midiNote)).toEqual([40, 40, 40, 40, 40, 45, 45, 45]);
+      const ids = heard.map((pitch) => pitch?.attackId);
+      // Two detections in a row make the new note stable, so one stray detection is not an attack
+      expect(ids[5]).toBe(ids[0]);
+      expect(ids[6]).toBeGreaterThan(ids[0] ?? Infinity);
+      expect(ids[7]).toBe(ids[6]);
+    });
+
+    it('ignores a single stray detection of another note', async () => {
+      const heard = await playFrames([sine(E2, 0.3), sine(E2, 0.3), sine(E2, 0.3), sine(A2, 0.3), sine(E2, 0.3),
+        sine(E2, 0.3)]);
+      expect(new Set(heard.map((pitch) => pitch?.attackId)).size).toBe(1);
+    });
+
+    it('merges attacks less than 3 frames apart', async () => {
+      const heard = await playFrames([
+        sine(E2, 0.05), sine(E2, 0.15), sine(E2, 0.45), // the window fills over a few frames: one pick
+        sine(E2, 0.45), sine(E2, 0.45),
+        sine(E2, 0.9) // a real new pick
+      ]);
+      const ids = heard.map((pitch) => pitch?.attackId);
+      expect(new Set(ids.slice(0, 5)).size).toBe(1);
+      expect(ids[5]).toBeGreaterThan(ids[0] ?? Infinity);
+    });
+
+    it('never hands out an attack id twice, across players and reconnections', async () => {
+      const seen: [number[], number[]] = [[], []];
+      const engine = new AudioEngine();
+      await engine.start('a', 'duo', (pitch, player) => {
+        if (pitch) seen[player].push(pitch.attackId);
+      });
+      const [first, second] = contexts[0].analysers;
+      for (const amplitude of [0.1, 0.1, 0.1, 0.1, 0.5, 0.5]) {
+        first.signal = sine(E2, amplitude);
+        second.signal = sine(A2, amplitude);
+        runFrame();
+      }
+      await engine.start('a', 'ch1');
+      contexts[0].analysers[2].signal = sine(E2, 0.3);
+      runFrame();
+      const [player1, player2] = seen;
+      // Each player's ids only grow
+      for (const ids of seen) expect(ids).toEqual([...ids].sort((a, b) => a - b));
+      expect(new Set(player1.slice(0, 6)).size).toBe(2); // first sound, then the jump to 0.5
+      expect(new Set([...player1.slice(0, 6), ...player2]).size).toBe(4);
+      // After reconnecting, the first attack is newer than every id before it
+      expect(player1[6]).toBeGreaterThan(Math.max(...player1.slice(0, 6), ...player2));
     });
   });
 
@@ -386,6 +537,83 @@ describe('AudioEngine lifecycle', () => {
       ]);
     });
 
+    describe('areDuoChannelsMirrored', () => {
+      // Runs one frame per pair of signals on the two duo channels
+      const startDuo = async () => {
+        const engine = new AudioEngine();
+        await engine.start('a', 'duo');
+        const [first, second] = contexts[0].analysers;
+        const play = (frames: number, signal1: Float32Array | null, signal2: Float32Array | null) => {
+          for (let i = 0; i < frames; i++) {
+            first.signal = signal1;
+            second.signal = signal2;
+            runFrame();
+          }
+        };
+        return { engine, play };
+      };
+
+      it('detects an interface that copies one input to both channels, after 60 frames of playing', async () => {
+        const { engine, play } = await startDuo();
+        expect(engine.areDuoChannelsMirrored()).toBe(false);
+        play(59, A3, A3);
+        expect(engine.areDuoChannelsMirrored()).toBe(false);
+        play(1, A3, A3);
+        expect(engine.areDuoChannelsMirrored()).toBe(true);
+      });
+
+      it('allows a gain difference under 2% but not a real second guitar', async () => {
+        const { engine, play } = await startDuo();
+        play(60, sine(220, 0.5), sine(220, 0.495)); // 1% quieter: still the same signal
+        expect(engine.areDuoChannelsMirrored()).toBe(true);
+        play(60, sine(220, 0.5), sine(220, 0.45)); // 10% quieter
+        expect(engine.areDuoChannelsMirrored()).toBe(false);
+        play(60, A3, E4); // two guitars
+        expect(engine.areDuoChannelsMirrored()).toBe(false);
+      });
+
+      it('needs at least 90% of the last 60 frames to match', async () => {
+        const { engine, play } = await startDuo();
+        play(54, A3, A3);
+        play(6, A3, E4);
+        expect(engine.areDuoChannelsMirrored()).toBe(true);
+        play(1, A3, E4); // 53 of the last 60
+        expect(engine.areDuoChannelsMirrored()).toBe(false);
+      });
+
+      it('only counts frames in which both channels play', async () => {
+        const { engine, play } = await startDuo();
+        play(100, A3, null); // player 2 silent: says nothing about the interface
+        play(100, null, null);
+        expect(engine.areDuoChannelsMirrored()).toBe(false);
+        play(60, A3, A3);
+        expect(engine.areDuoChannelsMirrored()).toBe(true);
+        play(100, A3, null); // still the last 60 frames with both playing
+        expect(engine.areDuoChannelsMirrored()).toBe(true);
+      });
+
+      it('is false outside duo mode, when stopped, and starts over on each start()', async () => {
+        const { engine, play } = await startDuo();
+        play(60, A3, A3);
+        expect(engine.areDuoChannelsMirrored()).toBe(true);
+        await engine.start('a', 'duo');
+        expect(engine.areDuoChannelsMirrored()).toBe(false);
+        const [, , first, second] = contexts[0].analysers;
+        for (let i = 0; i < 60; i++) {
+          first.signal = A3;
+          second.signal = A3;
+          runFrame();
+        }
+        expect(engine.areDuoChannelsMirrored()).toBe(true);
+        await engine.stop();
+        expect(engine.areDuoChannelsMirrored()).toBe(false);
+        await engine.start('a', 'both');
+        contexts[0].analysers[4].signal = A3;
+        for (let i = 0; i < 60; i++) runFrame();
+        expect(engine.areDuoChannelsMirrored()).toBe(false);
+      });
+    });
+
     it('reports how many channels the input delivers', async () => {
       const engine = new AudioEngine();
       expect(engine.getInputChannelCount()).toBe(0);
@@ -394,9 +622,10 @@ describe('AudioEngine lifecycle', () => {
       trackChannels = 1; // e.g. a USB microphone
       await engine.start('mic');
       expect(engine.getInputChannelCount()).toBe(1);
-      trackChannels = undefined; // not reported by the browser: falls back to the source node
+      // Not reported by the browser: 1, not the source node's channelCount (always 2)
+      trackChannels = undefined;
       await engine.start('a');
-      expect(engine.getInputChannelCount()).toBe(2);
+      expect(engine.getInputChannelCount()).toBe(1);
       await engine.stop();
       expect(engine.getInputChannelCount()).toBe(0);
     });
