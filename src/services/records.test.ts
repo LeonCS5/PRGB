@@ -180,6 +180,22 @@ describe('reading stored data', () => {
     }
   });
 
+  it('never overwrites or clears data saved by a newer version', () => {
+    const newer = JSON.stringify({
+      version: 2,
+      history: [run({ score: 7000 })],
+      bests: [run({ score: 7000 })],
+      somethingNew: { kept: true }
+    });
+    const storage = memoryStorage({ [STORAGE_KEY]: newer });
+    expect(getHistory(undefined, storage)).toEqual([]);
+    expect(getPersonalBest(123, 0, 1, storage)).toBeNull();
+    expect(recordRun(run({ score: 9000 }), storage)).toEqual({ isPersonalBest: false, previousBest: null });
+    clearRecords(storage);
+    expect(storage.getItem(STORAGE_KEY)).toBe(newer);
+    expect(JSON.parse(exportLocalData(storage))).toMatchObject({ personalBests: [], history: [] });
+  });
+
   it('drops invalid, duplicated and unknown data but keeps the valid entries', () => {
     const storage = memoryStorage({
       [STORAGE_KEY]: JSON.stringify({

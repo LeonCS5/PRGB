@@ -1,18 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CHORD_WINDOW_MS,
   GOOD_POINTS,
   MAX_MULTIPLIER,
   PERFECT_POINTS,
   accuracyPercent,
   applyJudgement,
   bendTargetMidi,
+  canUseAttack,
   comboMultiplier,
+  consumeAttack,
   countScorableNotes,
+  createAttackLedger,
   createScoreState,
   isScorable,
   judgeNote,
   maxPossibleScore,
+  type AttackLedger,
   type Judgement,
+  type NoteOutcome,
   type ScoreState
 } from './scoring';
 import type { NoteEvent } from './songsterrApi';
@@ -30,7 +36,7 @@ const note = (extra: Partial<NoteEvent> = {}): NoteEvent => ({
   ...extra
 });
 
-const heard = (midiNote: number, volume = 0.5) => ({ midiNote, volume });
+const heard = (midiNote: number, volume = 0.5, attackId = 0) => ({ midiNote, volume, attackId });
 
 const play = (judgements: readonly Judgement[], from: ScoreState = createScoreState()) =>
   judgements.reduce(applyJudgement, from);
@@ -145,13 +151,20 @@ describe('judgeNote', () => {
     expect(judgeNote(a3, 0, null)).toBeNull();
     expect(judgeNote(a3, 0, heard(57, 0.02))).toBeNull(); // must be louder than MIN_PITCH_VOLUME
     expect(judgeNote(a3, 0, heard(57, 0.021))).toBe('perfect');
-    expect([56, 58].map((midi) => judgeNote(a3, 0, heard(midi)))).toEqual(['perfect', 'perfect']);
+    expect([56, 58].map((midi) => judgeNote(a3, 0, heard(midi)))).toEqual(['good', 'good']);
     expect([55, 59].map((midi) => judgeNote(a3, 0, heard(midi)))).toEqual([null, null]);
   });
 
-  it('accepts the written pitch or the bend target on bends', () => {
+  it('gives perfect only for the exact note: a semitone off is at most good', () => {
+    expect([0, 30, -55].map((diff) => judgeNote(a3, diff, heard(57)))).toEqual(['perfect', 'perfect', 'perfect']);
+    expect([0, 30, -55, 100].map((diff) => judgeNote(a3, diff, heard(58)))).toEqual(['good', 'good', 'good', 'good']);
+    expect([0, 100].map((diff) => judgeNote(a3, diff, heard(56)))).toEqual(['good', 'good']);
+  });
+
+  it('accepts the written pitch or the bend target on bends, perfect only when exact', () => {
     const bend = note({ bendSemitones: 2 }); // A3 bent up to B3
-    expect([56, 57, 58, 59, 60].map((midi) => judgeNote(bend, 0, heard(midi)))).toEqual(Array(5).fill('perfect'));
+    expect([56, 57, 58, 59, 60].map((midi) => judgeNote(bend, 0, heard(midi))))
+      .toEqual(['good', 'perfect', 'good', 'perfect', 'good']);
     expect([55, 61].map((midi) => judgeNote(bend, 0, heard(midi)))).toEqual([null, null]);
   });
 
@@ -173,6 +186,101 @@ describe('judgeNote', () => {
   });
 });
 
+describe('attack ledger', () => {
+  it('starts with no attack spent', () => {
+    expect(createAttackLedger()).toEqual({ attackId: -1, noteTimeMs: -Infinity });
+    expect(canUseAttack(createAttackLedger(), 0, 0)).toBe(true);
+  });
+
+  it('lets a spent attack hit only the notes of the same chord', () => {
+    const ledger: AttackLedger = { attackId: 7, noteTimeMs: 1000 };
+    expect(CHORD_WINDOW_MS).toBe(30);
+    expect(canUseAttack(ledger, 8, 1150)).toBe(true); // new attack
+    expect([1000, 1030, 970].map((time) => canUseAttack(ledger, 7, time))).toEqual([true, true, true]);
+    expect([1031, 969, 1150].map((time) => canUseAttack(ledger, 7, time))).toEqual([false, false, false]);
+  });
+
+  it('records a hit in a new ledger and keeps the chord anchored at its first note', () => {
+    const start = Object.freeze(createAttackLedger());
+    const first = consumeAttack(start, 3, 1000);
+    expect(first).toEqual({ attackId: 3, noteTimeMs: 1000 });
+    expect(start).toEqual(createAttackLedger());
+    const sameChord = consumeAttack(Object.freeze(first), 3, 1020);
+    expect(sameChord).toEqual({ attackId: 3, noteTimeMs: 1000 });
+    // Notes 20 ms apart can't chain one attack through a run of notes
+    expect(canUseAttack(sameChord, 3, 1040)).toBe(false);
+    expect(consumeAttack(sameChord, 4, 1040)).toEqual({ attackId: 4, noteTimeMs: 1040 });
+  });
+});
+
+describe('judgeNote with an attack ledger', () => {
+  const E2 = 40;
+
+  /**
+   * Plays notes the way the game loop does: every 16 ms frame, each pending note is judged against the
+   * pitch heard, and each hit spends its attack. Returns the outcome of every note.
+   */
+  const play = (
+    notes: NoteEvent[],
+    pitchAt: (timeMs: number) => ReturnType<typeof heard> | null,
+    withLedger = true
+  ): (NoteOutcome | undefined)[] => {
+    const outcomes = new Map<string, NoteOutcome>();
+    let ledger = createAttackLedger();
+    const end = Math.max(...notes.map((current) => current.timeMs)) + 300;
+    for (let time = 0; time <= end; time += 16) {
+      const pitch = pitchAt(time);
+      for (const current of notes) {
+        if (outcomes.has(current.id)) continue;
+        const outcome = judgeNote(current, current.timeMs - time, pitch, withLedger ? ledger : undefined);
+        if (!outcome) continue;
+        outcomes.set(current.id, outcome);
+        if (pitch && (outcome === 'perfect' || outcome === 'good')) {
+          ledger = consumeAttack(ledger, pitch.attackId, current.timeMs);
+        }
+      }
+    }
+    return notes.map((current) => outcomes.get(current.id));
+  };
+
+  // The E2 riff of Creeping Death: the same note picked over and over, 150 ms apart
+  const riff = Array.from({ length: 8 }, (_, i) =>
+    note({ id: `note-${i}`, timeMs: 1000 + i * 150, string: 6, fret: 0, midiNote: E2, noteName: 'E2' }));
+
+  it('does not let one held note hit the repeated notes after it', () => {
+    const held = (time: number) => (time >= 950 ? heard(E2, 0.5, 1) : null);
+    expect(play(riff, held)).toEqual(['perfect', ...Array(7).fill('miss')]);
+    // Without a ledger the old behavior stays: holding the note hits them all
+    expect(play(riff, held, false).every((outcome) => outcome === 'perfect' || outcome === 'good')).toBe(true);
+  });
+
+  it('hits every repeated note that is picked again', () => {
+    // A new attack 50 ms before each note
+    const picked = (time: number) => (time >= 950 ? heard(E2, 0.5, Math.floor((time - 950) / 150) + 1) : null);
+    expect(play(riff, picked)).toEqual(Array(8).fill('perfect'));
+  });
+
+  it('hits the notes of a chord (same time) with one attack', () => {
+    const chord = [
+      note({ id: 'note-1', timeMs: 1000, string: 6, fret: 0, midiNote: E2 }),
+      note({ id: 'note-2', timeMs: 1000, string: 5, fret: 0, midiNote: E2 + 1 }), // a semitone off: good
+      note({ id: 'note-3', timeMs: 1000 + CHORD_WINDOW_MS, string: 4, fret: 0, midiNote: E2 }), // strummed
+      note({ id: 'note-4', timeMs: 1300, string: 6, fret: 0, midiNote: E2 }) // the next beat, not picked again
+    ];
+    const once = (time: number) => (time >= 990 ? heard(E2, 0.5, 5) : null);
+    expect(play(chord, once)).toEqual(['perfect', 'good', 'perfect', 'miss']);
+  });
+
+  it('still never judges dead or grace notes, and lets ghost notes pass unplayed', () => {
+    const spent: AttackLedger = { attackId: 2, noteTimeMs: 500 };
+    expect(judgeNote(note({ dead: true }), 0, heard(57, 0.5, 2), spent)).toBeNull();
+    expect(judgeNote(note({ ghost: true }), 0, heard(57, 0.5, 2), spent)).toBeNull();
+    expect(judgeNote(note({ ghost: true }), -131, heard(57, 0.5, 2), spent)).toBe('skip');
+    expect(judgeNote(note(), -131, heard(57, 0.5, 2), spent)).toBe('miss');
+    expect(judgeNote(note(), 0, heard(57, 0.5, 3), spent)).toBe('perfect');
+  });
+});
+
 describe('maxPossibleScore', () => {
   it('matches the naive sum of perfect hits for 0 to 200 notes', () => {
     let naive = 0;
@@ -187,9 +295,13 @@ describe('maxPossibleScore', () => {
     expect(play(Array<Judgement>(37).fill('perfect')).score).toBe(maxPossibleScore(37));
   });
 
-  it('treats the count as a whole, non-negative number', () => {
-    expect(maxPossibleScore(-3)).toBe(0);
-    expect(maxPossibleScore(6.9)).toBe(maxPossibleScore(6));
+  it('throws RangeError for a count that is not a whole, non-negative, safe number', () => {
+    for (const count of [-1, -3, 6.9, 0.5, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY,
+      Number.MAX_SAFE_INTEGER + 1]) {
+      expect(() => maxPossibleScore(count), String(count)).toThrow(RangeError);
+    }
+    expect(maxPossibleScore(-0)).toBe(0);
+    expect(Number.isFinite(maxPossibleScore(Number.MAX_SAFE_INTEGER))).toBe(true);
   });
 
   it('is never beaten by any sequence of judgements over n scorable notes', () => {
