@@ -38,6 +38,7 @@ async function player(fields: { lastSeen?: string; isAnonymous?: boolean } = {})
 }
 
 const exists = async (sql: string, params: unknown[]) => (await db.query(sql, params)).rows.length > 0;
+const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
 
 describe('retention', () => {
   it('schedules a daily purge', async () => {
@@ -58,8 +59,9 @@ describe('retention', () => {
     const idle = await player({ lastSeen: '13 months' });
     const active = await player({ lastSeen: '11 months' });
     const idlePermanent = await player({ lastSeen: '13 months', isAnonymous: false });
-    const orphanOld = await createUser(db, { createdAt: new Date(Date.now() - 400 * 86_400_000).toISOString() });
-    const orphanNew = await createUser(db);
+    // Anonymous accounts that never created a profile go after 2 days
+    const orphanOld = await createUser(db, { createdAt: daysAgo(3) });
+    const orphanNew = await createUser(db, { createdAt: daysAgo(1) });
 
     await db.query(
       `insert into public.song_parts (song_id, part_id, title, artist, track_name, scorable_notes, duration_ms, max_score,
@@ -97,5 +99,30 @@ describe('retention', () => {
     const { rows: parts } = await db.query<{ song_id: number; registered_by: string | null }>(
       'select song_id, registered_by from public.song_parts where song_id in (1, 2) order by song_id');
     expect(parts).toEqual([{ song_id: 1, registered_by: null }, { song_id: 2, registered_by: active }]);
+  });
+
+  it('runs every step even when one fails', async () => {
+    const orphan = await createUser(db, { createdAt: daysAgo(3) });
+    const owner = await player();
+    await db.query(
+      `insert into public.play_sessions (user_id, song_id, part_id, started_at)
+       values ($1, 1, 0, now() - interval '8 days')`, [owner]);
+
+    const after = await db.transaction(async (tx) => {
+      // Make the session cleanup fail
+      await tx.exec(`
+        create function public.refuse_delete() returns trigger language plpgsql as $$
+        begin raise exception 'refused'; end; $$;
+        create trigger refuse_delete before delete on public.play_sessions
+          for each row execute function public.refuse_delete();`);
+      await tx.query('select public.purge_expired_ranking_data()');
+      const { rows } = await tx.query<{ orphan: boolean; sessions: number }>(
+        `select exists (select 1 from auth.users where id = $1) as orphan,
+          (select count(*) from public.play_sessions where user_id = $2) as sessions`, [orphan, owner]);
+      await tx.rollback();
+      return rows[0];
+    });
+    // The account step still ran; the failing session step kept its rows
+    expect(after).toEqual({ orphan: false, sessions: 1 });
   });
 });
