@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   BLOCKED_TERMS,
   MODERATION_ALLOWLIST,
+  MODERATION_CONFUSABLES,
   NICKNAME_ERROR_MESSAGES,
   NICKNAME_MAX,
   NICKNAME_MIN,
   NICKNAME_PATTERN,
   containsBlockedTerm,
   foldForModeration,
+  nicknameKey,
   normalizeNickname,
   validateNickname,
   type NicknameError
@@ -21,10 +23,37 @@ describe('normalizeNickname', () => {
   });
 });
 
+describe('nicknameKey', () => {
+  it('gives the same key to nicknames that differ only in case, accents, look-alikes or spaces', () => {
+    expect(nicknameKey('João')).toBe('joao');
+    expect(nicknameKey('João')).toBe(nicknameKey('Joao'));
+    expect(nicknameKey('JOÃO')).toBe(nicknameKey('joao'));
+    expect(nicknameKey('  João   Silva ')).toBe('joao silva');
+    expect(nicknameKey('Ølsen')).toBe('olsen');
+    expect(nicknameKey('Łukasz')).toBe('lukasz');
+    expect(nicknameKey('Straße')).toBe('strasse');
+    expect(nicknameKey('Admın')).toBe(nicknameKey('Admin'));
+  });
+
+  it('keeps nicknames apart when letters, digits or symbols differ', () => {
+    expect(nicknameKey('Leo')).not.toBe(nicknameKey('Leo1'));
+    expect(nicknameKey('Ana_B')).not.toBe(nicknameKey('Ana B'));
+    expect(nicknameKey('Leo')).not.toBe(nicknameKey('Lea'));
+  });
+});
+
 describe('NICKNAME_PATTERN', () => {
-  it('accepts Latin letters with accents, digits, "_", "-", "." and single spaces', () => {
-    for (const nickname of ['Leo', 'João Silva', 'ana_b.r-1', 'Zoë', 'Søren', 'Łukasz', 'Straße', 'Ｌｅｏ']) {
+  it('accepts A-Z, Latin-1 and Latin Extended-A letters, digits, "_", "-", "." and single spaces', () => {
+    for (const nickname of ['Leo', 'João Silva', 'ana_b.r-1', 'Zoë', 'Søren', 'Ølsen', 'Łukasz', 'Straße', 'Ğül',
+      'ÀÖØöøÿĀſ']) {
       expect(NICKNAME_PATTERN.test(nickname), nickname).toBe(true);
+    }
+  });
+
+  it('rejects Latin letters beyond Extended-A, full-width letters and the × and ÷ signs', () => {
+    const clicks = String.fromCodePoint(0x1c0, 0x1c1, 0x1c2, 0x1c3); // look like "|", "‖", "ǂ" and "!"
+    for (const nickname of ['ƒuck', 'Ǆemal', clicks, 'Ｌｅｏ', 'a×b', 'a÷b', 'ẞig']) {
+      expect(NICKNAME_PATTERN.test(nickname), nickname).toBe(false);
     }
   });
 
@@ -64,9 +93,10 @@ describe('validateNickname', () => {
     expect(validateNickname('abc').ok).toBe(true);
     expect(validateNickname('a'.repeat(20)).ok).toBe(true);
     expect(validateNickname('a'.repeat(21))).toEqual({ ok: false, error: 'long' });
-    // "𝼀" (U+1DF00) is one Latin letter stored as two UTF-16 units: the limit counts letters, like char_length() in SQL
-    expect(validateNickname('\u{1DF00}'.repeat(20)).ok).toBe(true);
-    expect(validateNickname('\u{1DF00}'.repeat(21))).toEqual({ ok: false, error: 'long' });
+    // "𝐀" is one character stored as two UTF-16 units: 20 of them are within the limit (and fail on the
+    // characters instead), because the limit counts characters, like char_length() in SQL
+    expect(validateNickname('𝐀'.repeat(20))).toEqual({ ok: false, error: 'chars' });
+    expect(validateNickname('𝐀'.repeat(21))).toEqual({ ok: false, error: 'long' });
   });
 
   it('rejects characters outside the pattern', () => {
@@ -85,6 +115,16 @@ describe('validateNickname', () => {
     for (const nickname of ['Puta', 'Admin1', 'PRGB Oficial', 'Moderador', 'Suporte']) {
       expect(validateNickname(nickname)).toEqual({ ok: false, error: 'offensive' });
     }
+  });
+
+  it('rejects look-alike letters that normalization leaves alone', () => {
+    for (const nickname of ['Admın', 'Hıtler', 'Nazı', 'Pørno', 'Merđa', 'Bıtch', 'Đickhead', 'Caralħo', 'ßhit']) {
+      expect(validateNickname(nickname), nickname).toEqual({ ok: false, error: 'offensive' });
+    }
+    for (const nickname of ['ƒuck', String.fromCodePoint(0x1c3, 0x1c3, 0x1c3)]) {
+      expect(validateNickname(nickname), nickname).toEqual({ ok: false, error: 'chars' });
+    }
+    expect(validateNickname('Ølsen')).toEqual({ ok: true, value: 'Ølsen' });
   });
 
   it('rejects the nicknames found in review', () => {
@@ -132,6 +172,19 @@ describe('foldForModeration', () => {
     expect(foldForModeration('Cássio')).toBe('casio');
     expect(foldForModeration('kkkkk')).toBe('k');
     expect(foldForModeration('')).toBe('');
+  });
+
+  it('maps look-alike letters that NFKD leaves alone', () => {
+    expect(MODERATION_CONFUSABLES).toEqual({
+      'ı': 'i', 'ĸ': 'k', 'ł': 'l', 'ħ': 'h', 'ŧ': 't', 'đ': 'd', 'ð': 'd', 'ŋ': 'n',
+      'œ': 'oe', 'æ': 'ae', 'ø': 'o', 'þ': 'th', 'ß': 'ss'
+    });
+    expect(Object.isFrozen(MODERATION_CONFUSABLES)).toBe(true);
+    expect(foldForModeration('ıĸłħŧđŋ')).toBe('iklhtdn');
+    expect(foldForModeration('ð')).toBe('d');
+    expect(foldForModeration('ŒUVRE Æther Ølsen Þor')).toBe('oeuvre aether olsen thor');
+    expect(foldForModeration('Straße')).toBe('strase'); // ß → ss, then repeated letters collapse
+    expect(foldForModeration('ŁĐØ')).toBe('ldo'); // capitals are lowercased first
   });
 
   it('splits camelCase into words first, but keeps digits glued to letters', () => {

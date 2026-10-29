@@ -4,11 +4,23 @@
 export const NICKNAME_MIN = 3;
 export const NICKNAME_MAX = 20;
 
-// Latin letters (accents included), ASCII digits, "_", "-", "." and single spaces between words.
-// Other scripts are left out on purpose: Cyrillic and Greek letters pass for Latin ones ("РRGВ"), and
-// Hangul fillers (U+3164, U+FFA0, U+115F, U+1160) are letters that print as blanks.
-// Leading, trailing and double spaces fail, so only normalized nicknames match.
-export const NICKNAME_PATTERN = /^[\p{Script=Latin}0-9_.-]+(?: [\p{Script=Latin}0-9_.-]+)*$/u;
+// A–Z, a–z, Latin-1 and Latin Extended-A letters (U+00C0–U+017F except × and ÷), ASCII digits, "_", "-",
+// "." and single spaces between words. Everything else is left out on purpose: Cyrillic and Greek letters
+// pass for Latin ones ("РRGВ"), Hangul fillers print as blanks, and Latin Extended-B and beyond hold
+// look-alikes that no normalization undoes ("ƒuck", clicks "ǃ"). The few look-alikes left in range are
+// mapped by MODERATION_CONFUSABLES. Leading, trailing and double spaces fail, so only normalized
+// nicknames match.
+export const NICKNAME_PATTERN =
+  /^[A-Za-z0-9_.\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u017F-]+(?: [A-Za-z0-9_.\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u017F-]+)*$/u;
+
+// Letters in the allowed range that NFKD leaves alone but read as other letters ("Admın", "Pørno").
+// Applied to lowercase text with the accents already removed.
+export const MODERATION_CONFUSABLES: Readonly<Record<string, string>> = Object.freeze({
+  'ı': 'i', 'ĸ': 'k', 'ł': 'l', 'ħ': 'h', 'ŧ': 't', 'đ': 'd', 'ð': 'd', 'ŋ': 'n',
+  'œ': 'oe', 'æ': 'ae', 'ø': 'o', 'þ': 'th', 'ß': 'ss'
+});
+
+const CONFUSABLE = new RegExp(`[${Object.keys(MODERATION_CONFUSABLES).join('')}]`, 'g');
 
 export interface BlockedTerm {
   readonly term: string;
@@ -75,22 +87,31 @@ export function normalizeNickname(raw: string): string {
   return raw.normalize('NFC').trim().replace(/\s+/g, ' ');
 }
 
+// NFKD, lowercase, combining marks removed and confusables mapped: "Ølsen" → "olsen"
+const baseLetters = (text: string): string =>
+  text.normalize('NFKD').toLowerCase().replace(/\p{M}/gu, '').replace(CONFUSABLE, (char) => MODERATION_CONFUSABLES[char]);
+
+/**
+ * Form used to tell nicknames apart: two nicknames with the same key are the same nickname ("João" and
+ * "Joao", "LEO" and "leo"). Normalized, lowercase, without accents, confusables mapped, single spaces.
+ */
+export function nicknameKey(raw: string): string {
+  return baseLetters(normalizeNickname(raw)).trim().replace(/\s+/g, ' ');
+}
+
 /**
  * Fold text for moderation. The database replicates these steps:
  * 1. camelCase splits into words: a lowercase letter followed by an uppercase one gets a space
  *    between them ("FilhoDaPuta" → "Filho Da Puta"). Digits stay glued to letters: they may be leetspeak.
  * 2. NFKD, lowercase and remove combining marks (drops accents; styled letters such as "𝐚" or "ａ" become "a")
- * 3. leetspeak: 0→o 1→i 3→e 4→a 5→s 7→t @→a $→s
- * 4. every run of non-letters becomes one space, the word separator
- * 5. consecutive one-letter words are joined ("p.u.t.a" → "puta")
- * 6. repeated letters collapse ("fuuuck" → "fuck")
+ * 3. MODERATION_CONFUSABLES: ı→i ĸ→k ł→l ħ→h ŧ→t đ→d ð→d ŋ→n œ→oe æ→ae ø→o þ→th ß→ss
+ * 4. leetspeak: 0→o 1→i 3→e 4→a 5→s 7→t @→a $→s
+ * 5. every run of non-letters becomes one space, the word separator
+ * 6. consecutive one-letter words are joined ("p.u.t.a" → "puta")
+ * 7. repeated letters collapse ("fuuuck" → "fuck")
  */
 export function foldForModeration(text: string): string {
-  const pieces = text
-    .replace(/(\p{Ll})(\p{Lu})/gu, '$1 $2')
-    .normalize('NFKD')
-    .toLowerCase()
-    .replace(/\p{M}/gu, '')
+  const pieces = baseLetters(text.replace(/(\p{Ll})(\p{Lu})/gu, '$1 $2'))
     .replace(/[013457@$]/g, (char) => LEETSPEAK[char])
     .split(/\P{L}+/u)
     .filter(Boolean);
@@ -130,7 +151,7 @@ export function containsBlockedTerm(text: string): boolean {
 
 export function validateNickname(raw: string): { ok: true; value: string } | { ok: false; error: NicknameError } {
   const value = normalizeNickname(raw);
-  // Code points, like char_length() in the database ("𝼀" is one letter but two UTF-16 units)
+  // Code points, like char_length() in the database ("𝐀" is one character but two UTF-16 units)
   const length = Array.from(value).length;
   if (length < NICKNAME_MIN) return { ok: false, error: 'short' };
   if (length > NICKNAME_MAX) return { ok: false, error: 'long' };
