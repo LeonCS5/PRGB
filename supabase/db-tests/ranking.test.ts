@@ -1,4 +1,4 @@
-import type { PGlite } from '@electric-sql/pglite';
+import type { PGlite, Transaction } from '@electric-sql/pglite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { getDemoSong } from '../../src/services/demoSong';
 import { countScorableNotes, maxPossibleScore } from '../functions/_shared/scoreLimits.ts';
@@ -79,7 +79,7 @@ describe('access control', () => {
       from pg_class c join pg_namespace n on n.oid = c.relnamespace
       where n.nspname = 'public' and c.relkind = 'r'`);
     expect(rows.map((r) => r.table).sort()).toEqual(
-      ['blocked_terms', 'play_sessions', 'profiles', 'scores_best', 'scores_weekly', 'song_parts']);
+      ['blocked_terms', 'moderation_allowlist', 'play_sessions', 'profiles', 'scores_best', 'scores_weekly', 'song_parts']);
     for (const row of rows) expect(row, row.table).toMatchObject({ rls: true, anon: false, authenticated: false });
   });
 
@@ -154,20 +154,24 @@ describe('create_profile', () => {
   });
 
   it('normalizes a decomposed accent (NFC)', async () => {
-    const profile = await createProfile(await createUser(db), 'José Lima');
+    const profile = await createProfile(await createUser(db), 'Jose\u0301 Lima');
     expect(profile.nickname).toBe('José Lima');
   });
 
-  it.each(['ab', 'a'.repeat(21), 'Dj <b>', 'x×y', 'emoji 🎸'])('rejects the invalid nickname %j', async (nickname) => {
+  it.each([
+    'ab', 'a'.repeat(21), 'Dj <b>', 'x×y', 'emoji 🎸', 'Łukasz 日本語',
+    '\u0410dmin', // Cyrillic "\u0410"
+    '\u3164\u3164\u3164' // Hangul filler, renders as blank
+  ])('rejects the invalid nickname %j', async (nickname) => {
     await expectError(createProfile(await createUser(db), nickname), 'nickname_invalid');
   });
 
-  it('accepts letters of other scripts and accents', async () => {
+  it('accepts accented Latin letters', async () => {
     await expect(createProfile(await createUser(db), 'ÀÉÎÕÜçñøÿ ß.æ_-1')).resolves.toBeDefined();
-    await expect(createProfile(await createUser(db), 'Łukasz 日本語')).resolves.toBeDefined();
+    await expect(createProfile(await createUser(db), 'Łukasz Đorđević')).resolves.toBeDefined();
   });
 
-  it.each(['Admin1', 'Merdaaaa', 'Fuuuck you', 'C.a.r.a.l.h.o', 'Pútá', 'xX_ADMIN_Xx', 'PRGB oficial'])(
+  it.each(['Admin1', 'Merdaaaa', 'Fuuuck you', 'C.a.r.a.l.h.o', 'Pútá', 'xX_ADMIN_Xx', 'PRGB oficial', 'FilhoDaPuta', 'AdminPRGB'])(
     'blocks %j', async (nickname) => {
       await expectError(createProfile(await createUser(db), nickname), 'nickname_blocked');
     });
@@ -182,7 +186,8 @@ describe('create_profile', () => {
   });
 });
 
-// The same cases as src/services/nickname.test.ts, so the database and the app agree on every nickname
+// Cases from src/services/nickname.test.ts plus the reviewed rules (Latin letters only, camelCase split,
+// allowlist, word/part modes), so the database and the app agree on every nickname
 describe('nickname rules mirror src/services/nickname.ts', () => {
   const apply = async <T>(expression: string, inputs: string[]): Promise<[string, T][]> => {
     const { rows } = await db.query<{ input: string; output: T }>(
@@ -194,25 +199,29 @@ describe('nickname rules mirror src/services/nickname.ts', () => {
     expect(await apply<boolean>(expression, inputs)).toEqual(inputs.map((input) => [input, expected]));
 
   it('normalizes like normalizeNickname', async () => {
-    expect(await apply('public.clean_nickname(c)', ['  João \t  Silva\n', 'João'])).toEqual([
-      ['  João \t  Silva\n', 'João Silva'], ['João', 'João']
+    expect(await apply('public.clean_nickname(c)', ['  João \t  Silva\n', 'Joa\u0303o'])).toEqual([
+      ['  João \t  Silva\n', 'João Silva'], ['Joa\u0303o', 'João']
     ]);
   });
 
-  it('validates like NICKNAME_PATTERN with 3 to 20 code points', async () => {
+  it('accepts only Latin letters, ASCII digits, _ - . and single spaces, 3 to 20 code points', async () => {
     await expectAll('public.is_valid_nickname(c)',
-      ['Leo', 'João Silva', 'ana_b.r-1', 'Zoë', 'Søren', 'Łukasz', '日本語', 'abc', 'a'.repeat(20), '𝐀'.repeat(20)], true);
+      ['Leo', 'João Silva', 'ana_b.r-1', 'Zoë', 'Søren', 'Łukasz', 'Đorđe', 'abc', 'a'.repeat(20), 'ɏ'.repeat(20)], true);
     await expectAll('public.is_valid_nickname(c)', [
-      'Leo!', 'a@b', 'Leo🎸', 'Le​o', 'a  b', ' ab', 'ab ', 'a\tb', '', 'ab', 'a'.repeat(21), '𝐀'.repeat(21),
-      'a<b>c', 'José' // not NFC
+      'Leo!', 'a@b', 'Leo🎸', 'Le\u200bo', 'a  b', ' ab', 'ab ', 'a\tb', '', 'ab', 'a'.repeat(21), 'a<b>c',
+      'Jose\u0301', // not NFC
+      '日本語', '𝐀𝐀𝐀', '\u0412\u0430\u0441\u044f', // other scripts, styled letters, Cyrillic
+      '\u0410dmin', // Cyrillic "\u0410" posing as Latin
+      '\u3164\u3164\u3164', 'Leo\u3164' // Hangul filler
     ], false);
   });
 
-  it('folds like foldForModeration', async () => {
+  it('folds like foldForModeration, splitting camelCase first', async () => {
     const cases: [string, string][] = [
       ['ÁÉÍÓÚ Çãõ', 'aeiou cao'], ['İstanbul', 'istanbul'], ['@dm1n$', 'admins'], ['P0RR4 M3RD4', 'pora merda'],
       ['5h17', 'shit'], ['𝐟𝐮𝐜𝐤', 'fuck'], ['ｆｕｃｋ', 'fuck'], ['Joao_da-Silva.2', 'joao da silva'], ['Ana L', 'ana l'],
-      ['f.u.c.k', 'fuck'], ['A B C Banda', 'abc banda'], ['FUUUUCK', 'fuck'], ['Cássio', 'casio'], ['kkkkk', 'k'], ['', '']
+      ['f.u.c.k', 'fuck'], ['A B C Banda', 'abc banda'], ['FUUUUCK', 'fuck'], ['Cássio', 'casio'], ['kkkkk', 'k'], ['', ''],
+      ['FilhoDaPuta', 'filho da puta'], ['AdminPRGB', 'admin prgb'], ['ÉdipoRei', 'edipo rei']
     ];
     expect(await apply('public.fold_for_moderation(c)', cases.map(([input]) => input))).toEqual(cases);
   });
@@ -225,7 +234,10 @@ describe('nickname rules mirror src/services/nickname.ts', () => {
       'Admin', 'Administrador', 'Moderadora', 'PRGB Oficial', 'PRGBOficial', 'Equipe PRGB', '𝐏𝐑𝐆𝐁', 'Suporte Técnico',
       'Staff',
       'Faggot', 'N1gg3r', 'Nigga', 'Viado', 'v14d0', 'Boiola', 'Traveco', 'Retardada', 'Mongoloide',
-      'Fuck You'
+      'Fuck You',
+      // Glued words are split by case, and alternating case can't cut a term apart
+      'CaRaLhO', 'pUtA', 'mErDa',
+      'FilhoDaPuta', 'AdminPRGB', 'FuckYou', 'MerdaTotal'
     ], true);
   });
 
@@ -236,17 +248,44 @@ describe('nickname rules mirror src/services/nickname.ts', () => {
       'Fagote', 'Bichano', 'Desviado', 'Badminton', 'Nigéria', 'Bostaph',
       'Cássio', 'Assis', 'Ponta Porã', 'Pica-Pau', 'Pinto', 'Macaco', 'Capricorno', 'Dick Dale', 'Pussy Riot',
       'Hancock', 'Cocktail', 'Therapist', 'Moderado', 'Kkkkkk',
-      'Cássio 10', 'Joao 1990', 'Guitar 5150',
-      'FuckYou' // the accepted cost of whole-word matching
+      'Cássio 10', 'Joao 1990', 'Guitar 5150'
     ], false);
   });
 
-  it('stores every term folded and blocks each one on its own', async () => {
-    const { rows } = await db.query<{ term: string; folded: string; blocked: boolean }>(
-      'select term, public.fold_for_moderation(term) as folded, public.is_blocked_nickname(term) as blocked from public.blocked_terms');
+  it('is driven by the word lists: modes and allowlist are rows', async () => {
+    const blocked = async (tx: Transaction, inputs: string[]) => {
+      const { rows } = await tx.query<{ c: string; blocked: boolean }>(
+        'select c, public.is_blocked_nickname(c) as blocked from unnest($1::text[]) with ordinality as t(c, n) order by n',
+        [inputs]);
+      return rows.map((row) => [row.c, row.blocked]);
+    };
+    await db.transaction(async (tx) => {
+      await tx.query("update public.blocked_terms set mode = 'part' where term in ('puta', 'admin')");
+      // 'part' catches diminutives and glued words...
+      expect(await blocked(tx, ['Putaço', 'xxputaxx', 'Superadmin'])).toEqual(
+        [['Putaço', true], ['xxputaxx', true], ['Superadmin', true]]);
+      // ...while allowlisted fragments are erased before matching
+      const innocent = ['Computador', 'Deputado', 'Disputa', 'Reputação', 'Imputado', 'Badminton'];
+      expect(await blocked(tx, innocent)).toEqual(innocent.map((c) => [c, false]));
+      expect(await blocked(tx, ['Deputado Puta'])).toEqual([['Deputado Puta', true]]);
+      await tx.query("delete from public.moderation_allowlist where fragment = 'computa'");
+      expect(await blocked(tx, ['Computador'])).toEqual([['Computador', true]]);
+      await tx.rollback();
+    });
+  });
+
+  it('stores the current BLOCKED_TERMS folded, with mode by length, and each blocks itself', async () => {
+    const { rows } = await db.query<{ term: string; mode: string; folded: string; blocked: boolean }>(
+      `select term, mode, public.fold_for_moderation(term) as folded, public.is_blocked_nickname(term) as blocked
+       from public.blocked_terms`);
     expect(rows).toHaveLength(69);
-    for (const row of rows) expect(row, row.term).toEqual({ term: row.term, folded: row.term, blocked: true });
-    await expect(db.query("insert into public.blocked_terms values ('Staff')")).rejects.toMatchObject({ code: '23514' });
+    for (const row of rows) {
+      expect(row, row.term).toEqual(
+        { term: row.term, mode: row.term.length <= 5 ? 'word' : 'part', folded: row.term, blocked: true });
+    }
+    await expect(db.query("insert into public.blocked_terms values ('Staff', 'word')")).rejects.toMatchObject({ code: '23514' });
+    await expect(db.query("insert into public.blocked_terms values ('xyz', 'both')")).rejects.toMatchObject({ code: '23514' });
+    await expect(db.query("insert into public.moderation_allowlist values ('Computa')")).rejects.toMatchObject({ code: '23514' });
   });
 });
 

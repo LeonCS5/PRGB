@@ -17,8 +17,9 @@
 -- Errors are raised as stable snake_case codes in the message (raise exception 'nickname_taken'), which the
 -- app maps in src/services/backend/rankingApi.ts.
 
--- Nickname rules: a copy of src/services/nickname.ts (validateNickname, foldForModeration,
--- containsBlockedTerm, BLOCKED_TERMS). Change both together; db-tests/ranking.test.ts runs its cases here.
+-- Nickname rules: the same as src/services/nickname.ts (validateNickname, foldForModeration,
+-- containsBlockedTerm). The rules are code in both places, change them together; the word lists are the
+-- tables blocked_terms and moderation_allowlist. db-tests/ranking.test.ts runs the app's cases here.
 
 -- normalizeNickname: NFC, whitespace runs collapsed to one space, trimmed
 create function public.clean_nickname(p_nickname text)
@@ -30,9 +31,10 @@ as $$
   select btrim(regexp_replace(normalize(coalesce(p_nickname, ''), nfc), '[[:space:]]+', ' ', 'g'))
 $$;
 
--- NICKNAME_PATTERN and 3-20 code points: letters of any script, digits, _ - . and single spaces between
--- words. Only the normalized form passes. [[:alpha:]] follows the database locale (Unicode letters on a
--- UTF-8 locale; check it after deploying, see the deploy checklist).
+-- 3 to 20 code points of Latin letters (ASCII and accented, up to Latin Extended-B), ASCII digits, _ - .
+-- and single spaces between words; only the normalized form passes. Other scripts are refused, which keeps
+-- out look-alike letters (Cyrillic "\u0430") and invisible fillers (Hangul). The letter class is explicit so it
+-- does not depend on the database locale.
 create function public.is_valid_nickname(p_nickname text)
 returns boolean
 language sql
@@ -42,13 +44,13 @@ as $$
   select p_nickname is not null
     and p_nickname is nfc normalized
     and char_length(p_nickname) between 3 and 20
-    and p_nickname ~ '^[[:alpha:]0-9_.-]+( [[:alpha:]0-9_.-]+)*$'
+    and p_nickname ~ '^[A-Za-zÀ-ÖØ-öø-ɏ0-9_.-]+( [A-Za-zÀ-ÖØ-öø-ɏ0-9_.-]+)*$'
 $$;
 
--- foldForModeration: NFKD, lowercase, combining marks removed (accents; styled letters such as "𝐚" or
--- "ａ" become "a"), leetspeak, every run of non-letters becomes one space, consecutive one-letter words
--- joined ("p.u.t.a" -> "puta"), repeated letters collapsed ("fuuuck" -> "fuck"). Postgres has no \p{M}, so
--- the combining mark blocks are listed; they cover the marks NFKD produces for Latin, Greek and Cyrillic.
+-- foldForModeration: camelCase split first ("FilhoDaPuta" -> "Filho Da Puta"), then NFKD, lowercase,
+-- combining marks removed (accents; styled letters such as "𝐚" or "ａ" become "a"), leetspeak, every run
+-- of non-letters becomes one space, consecutive one-letter words joined ("p.u.t.a" -> "puta"), repeated
+-- letters collapsed ("fuuuck" -> "fuck"). Postgres has no \p{M}, so the combining mark blocks are listed.
 create function public.fold_for_moderation(p_text text)
 returns text
 language plpgsql
@@ -62,10 +64,11 @@ declare
 begin
   foreach v_piece in array regexp_split_to_array(
     translate(
-      regexp_replace(lower(normalize(coalesce(p_text, ''), nfkd)),
-        '[̀-ͯ᪰-᫿᷀-᷿⃐-⃿︠-︯]', '', 'g'),
+      regexp_replace(
+        lower(normalize(regexp_replace(coalesce(p_text, ''), '([a-zà-ÿ])([A-ZÀ-Þ])', '\1 \2', 'g'), nfkd)),
+        '[\u0300-\u036f\u1ab0-\u1aff\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f]', '', 'g'),
       '013457@$', 'oieastas'),
-    '[^[:alpha:]]+')
+    '[^A-Za-zÀ-ÖØ-öø-ɏ]+')
   loop
     continue when v_piece = '';
     if char_length(v_piece) = 1 then
@@ -81,7 +84,7 @@ begin
   if v_spelled <> '' then
     v_words := v_words || v_spelled;
   end if;
-  return regexp_replace(array_to_string(v_words, ' '), '([[:alpha:]])\1+', '\1', 'g');
+  return regexp_replace(array_to_string(v_words, ' '), '([A-Za-zÀ-ÖØ-öø-ɏ])\1+', '\1', 'g');
 end;
 $$;
 
@@ -100,32 +103,48 @@ create table public.profiles (
 
 create unique index profiles_nickname_key on public.profiles (lower(nickname));
 
--- BLOCKED_TERMS, stored already folded (lowercase ASCII, no repeated letters; some are stems)
+-- Moderation word lists are data, so syncing them with the app only changes rows. Both are stored folded
+-- (lowercase ASCII, no repeated letters; some terms are stems).
+-- mode 'word': whole word only ("cunt" must not block "Scunthorpe"); 'part': also inside a word ("caralh"
+-- blocks "caralhada").
 create table public.blocked_terms (
   term text primary key constraint blocked_terms_folded
-    check (term ~ '^[a-z]+$' and public.fold_for_moderation(term) = term)
+    check (term ~ '^[a-z]+$' and public.fold_for_moderation(term) = term),
+  mode text not null constraint blocked_terms_mode check (mode in ('word', 'part'))
 );
 
--- Exactly the app's list, in its order. Left out on purpose there: everyday words, names and band names.
-insert into public.blocked_terms (term) values
+-- Fragments erased from the folded text before matching, so innocent words that hold a 'part' term pass
+-- ("computador" stops holding "puta")
+create table public.moderation_allowlist (
+  fragment text primary key constraint moderation_allowlist_folded
+    check (fragment ~ '^[a-z]+$' and public.fold_for_moderation(fragment) = fragment)
+);
+
+-- The app's current BLOCKED_TERMS in its order: up to 5 letters 'word', longer 'part'
+insert into public.blocked_terms (term, mode)
+select t.term, case when char_length(t.term) <= 5 then 'word' else 'part' end
+from unnest(array[
   -- Pretending to be the PRGB team
-  ('admin'), ('administrador'), ('administrator'), ('moderador'), ('moderator'), ('moderacao'), ('suporte'),
-  ('staf'), ('prgb'), ('prgboficial'),
+  'admin', 'administrador', 'administrator', 'moderador', 'moderator', 'moderacao', 'suporte', 'staf', 'prgb',
+  'prgboficial',
   -- Profanity and sexual terms (pt-BR)
-  ('cu'), ('cuzao'), ('puta'), ('putaria'), ('foda'), ('fodase'), ('merda'), ('bosta'), ('caralh'), ('buceta'),
-  ('boceta'), ('xoxota'), ('xereca'), ('piroca'), ('punhet'), ('boquete'), ('vadia'), ('vagabunda'),
-  ('prostitut'), ('arombad'), ('fdp'), ('pqp'), ('vsf'), ('vtnc'),
+  'cu', 'cuzao', 'puta', 'putaria', 'foda', 'fodase', 'merda', 'bosta', 'caralh', 'buceta', 'boceta', 'xoxota',
+  'xereca', 'piroca', 'punhet', 'boquete', 'vadia', 'vagabunda', 'prostitut', 'arombad', 'fdp', 'pqp', 'vsf', 'vtnc',
   -- Profanity and sexual terms (English)
-  ('fuck'), ('fucker'), ('fucking'), ('shit'), ('bulshit'), ('cunt'), ('slut'), ('twat'), ('whore'), ('bitch'),
-  ('ashole'), ('dickhead'), ('anal'), ('porn'), ('porno'), ('dildo'),
+  'fuck', 'fucker', 'fucking', 'shit', 'bulshit', 'cunt', 'slut', 'twat', 'whore', 'bitch', 'ashole', 'dickhead',
+  'anal', 'porn', 'porno', 'dildo',
   -- Homophobic and transphobic slurs
-  ('viado'), ('bicha'), ('boiola'), ('baitola'), ('traveco'), ('fag'), ('fagot'),
+  'viado', 'bicha', 'boiola', 'baitola', 'traveco', 'fag', 'fagot',
   -- Racist slurs and hate
-  ('niger'), ('niga'), ('chink'), ('spic'), ('nazi'), ('nazista'), ('hitler'),
+  'niger', 'niga', 'chink', 'spic', 'nazi', 'nazista', 'hitler',
   -- Ableist slurs
-  ('retardad'), ('retarded'), ('mongoloide'),
+  'retardad', 'retarded', 'mongoloide',
   -- Sexual violence
-  ('estupr'), ('pedofil');
+  'estupr', 'pedofil'
+]) as t(term);
+
+insert into public.moderation_allowlist (fragment) values
+  ('computa'), ('deputa'), ('disputa'), ('imputa'), ('reputa'), ('badminton');
 
 -- One row per Songsterr track that can be ranked, counted on the server by the register-part Edge Function
 create table public.song_parts (
@@ -203,6 +222,7 @@ create index scores_weekly_board_idx on public.scores_weekly (song_id, part_id, 
 
 alter table public.profiles enable row level security;
 alter table public.blocked_terms enable row level security;
+alter table public.moderation_allowlist enable row level security;
 alter table public.song_parts enable row level security;
 alter table public.play_sessions enable row level security;
 alter table public.scores_best enable row level security;
@@ -210,7 +230,7 @@ alter table public.scores_weekly enable row level security;
 
 -- Supabase grants new tables to the API roles by default; the app only reaches them through the functions
 revoke all on table
-  public.profiles, public.blocked_terms, public.song_parts, public.play_sessions,
+  public.profiles, public.blocked_terms, public.moderation_allowlist, public.song_parts, public.play_sessions,
   public.scores_best, public.scores_weekly
 from public, anon, authenticated;
 
@@ -264,8 +284,27 @@ as $$
   where p.id = p_user_id
 $$;
 
--- hasBlockedTerm on folded text: terms up to BLOCKED_TERM_WHOLE_WORD_MAX (5) letters only as whole words
--- ("cunt" must not block "Scunthorpe"), longer ones also inside a word ("caralh" blocks "caralhada").
+-- Folded text with the allowlisted fragments erased, longest first
+create function public.strip_allowed_fragments(p_folded text)
+returns text
+language plpgsql
+stable
+set search_path = ''
+as $$
+declare
+  v_text text := coalesce(p_folded, '');
+  v_fragment text;
+begin
+  for v_fragment in
+    select a.fragment from public.moderation_allowlist a order by char_length(a.fragment) desc, a.fragment
+  loop
+    v_text := replace(v_text, v_fragment, '');
+  end loop;
+  return v_text;
+end;
+$$;
+
+-- hasBlockedTerm on folded text, after the allowlist
 create function public.has_blocked_term(p_folded text)
 returns boolean
 language sql
@@ -275,15 +314,18 @@ as $$
   select exists (
     select 1
     from public.blocked_terms b
-    where case
-      when char_length(b.term) <= 5 then position(' ' || b.term || ' ' in ' ' || p_folded || ' ') > 0
-      else position(b.term in p_folded) > 0
+    cross join (select public.strip_allowed_fragments(p_folded) as folded) t
+    where case b.mode
+      when 'word' then position(' ' || b.term || ' ' in ' ' || t.folded || ' ') > 0
+      else position(b.term in t.folded) > 0
     end
   )
 $$;
 
 -- containsBlockedTerm: checked with digits read as leetspeak ("4dm1n") and with digits removed, because a
--- trailing number would otherwise glue a letter to a short term ("Admin1" folds to "admini").
+-- trailing number would otherwise glue a letter to a short term ("Admin1" folds to "admini"). Each is
+-- folded as written (camelCase split: "FilhoDaPuta") and lowercased first (no split), since alternating
+-- case would otherwise cut a term apart ("PuTa" splits into "pu ta").
 -- Security invoker: only the RPCs below call it, already running as the table owner.
 create function public.is_blocked_nickname(p_nickname text)
 returns boolean
@@ -291,8 +333,12 @@ language sql
 stable
 set search_path = ''
 as $$
-  select public.has_blocked_term(public.fold_for_moderation(p_nickname))
-    or public.has_blocked_term(public.fold_for_moderation(regexp_replace(coalesce(p_nickname, ''), '[0-9]', '', 'g')))
+  select exists (
+    select 1
+    from unnest(array[coalesce(p_nickname, ''), regexp_replace(coalesce(p_nickname, ''), '[0-9]', '', 'g')]) v(text)
+    where public.has_blocked_term(public.fold_for_moderation(v.text))
+      or public.has_blocked_term(public.fold_for_moderation(lower(v.text)))
+  )
 $$;
 
 create function public.assert_nickname_allowed(p_nickname text, p_user_id uuid)
@@ -780,6 +826,7 @@ revoke all on function
   public.clean_nickname(text),
   public.is_valid_nickname(text),
   public.fold_for_moderation(text),
+  public.strip_allowed_fragments(text),
   public.has_blocked_term(text),
   public.current_week_start(),
   public.require_user(),
