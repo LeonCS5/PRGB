@@ -72,13 +72,15 @@ describe('encodeChallenge and decodeChallenge', () => {
 
   it('keeps worst-case multi-byte challenges under the link limit', () => {
     const emoji = '🎸'.repeat(120);
+    // U+1DF00 is a Latin letter taking 4 bytes in UTF-8, the longest a valid nickname can get
+    const longestNickname = '\u{1DF00}'.repeat(20);
     const huge = challenge({
-      songId: Number.MAX_SAFE_INTEGER, title: emoji, artist: emoji, trackName: emoji, nickname: '𝐀'.repeat(20)
+      songId: Number.MAX_SAFE_INTEGER, title: emoji, artist: emoji, trackName: emoji, nickname: longestNickname
     });
     const code = encodeChallenge(huge);
     expect(code.length).toBeLessThanOrEqual(2000);
     const decoded = decodeChallenge(code);
-    expect(decoded).toMatchObject({ songId: Number.MAX_SAFE_INTEGER, score: 123456, nickname: '𝐀'.repeat(20) });
+    expect(decoded).toMatchObject({ songId: Number.MAX_SAFE_INTEGER, score: 123456, nickname: longestNickname });
     // Shortened to fit, never emptied
     const titleLength = Array.from(decoded?.title ?? '').length;
     expect(titleLength).toBeGreaterThan(0);
@@ -111,7 +113,7 @@ describe('decodeChallenge strictness', () => {
     }
     // Valid content, but a code longer than 2000 characters is refused before decoding
     const giant = codeFor(JSON.stringify(tuple({
-      1: Number.MAX_SAFE_INTEGER, 3: '🎸'.repeat(120), 4: '🎸'.repeat(120), 5: '🎸'.repeat(120), 8: '𝐀'.repeat(20)
+      1: Number.MAX_SAFE_INTEGER, 3: '🎸'.repeat(120), 4: '🎸'.repeat(120), 5: '🎸'.repeat(120), 8: '\u{1DF00}'.repeat(20)
     })));
     expect(giant.length).toBeGreaterThan(2000);
     expect(decodeChallenge(giant)).toBeNull();
