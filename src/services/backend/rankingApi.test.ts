@@ -44,6 +44,7 @@ describe('toRankingError', () => {
     [{ message: 'nickname_taken', code: 'P0001' }, 'nickname_taken'],
     [{ message: 'score_implausible', code: 'P0001' }, 'score_implausible'],
     [{ message: 'revision_mismatch', code: 'P0001' }, 'revision_mismatch'],
+    [{ message: 'empty_run', code: 'P0001' }, 'empty_run'],
     [{ message: 'permission denied for function create_profile', code: '42501' }, 'not_authenticated'],
     [{ message: 'JWT expired', code: 'PGRST301' }, 'not_authenticated'],
     [{ name: 'AuthRetryableFetchError', status: 0, message: 'Failed to fetch' }, 'network'],

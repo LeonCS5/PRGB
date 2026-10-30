@@ -421,6 +421,19 @@ describe('submit_score', () => {
     await expect(submit(userId, sessionId, { accuracy: 91 })).resolves.toMatchObject({ accepted: true });
   });
 
+  it.each<[string, Partial<Result>]>([
+    ['nothing judged', { score: 0, perfect: 0, good: 0, miss: 0, maxCombo: 0, accuracy: 100 }],
+    ['only misses', { score: 0, perfect: 0, good: 0, miss: 20, maxCombo: 0, accuracy: 0 }]
+  ])('keeps an empty run off the leaderboard: %s', async (_label, result) => {
+    const userId = await newPlayer();
+    const part = await registerPart();
+    const sessionId = await startSession(userId, part.songId);
+    await backdate(sessionId, '61 seconds');
+    await expectError(submit(userId, sessionId, result), 'empty_run');
+    const { rows } = await db.query('select 1 from public.scores_best where user_id = $1', [userId]);
+    expect(rows).toEqual([]);
+  });
+
   it('keeps only the best score', async () => {
     const userId = await newPlayer();
     const part = await registerPart();

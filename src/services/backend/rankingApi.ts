@@ -30,6 +30,7 @@ export type RankingErrorCode =
   | 'session_expired'
   | 'already_submitted'
   | 'score_implausible'
+  | 'empty_run' // nothing judged or nothing scored: the run does not enter the leaderboard
   // registerPart
   | 'song_not_found'
   | 'part_not_found'
@@ -42,7 +43,7 @@ const SERVER_CODES: ReadonlySet<string> = new Set<RankingErrorCode>([
   'not_authenticated', 'invalid_input', 'rate_limited', 'consent_required', 'nickname_invalid', 'nickname_blocked',
   'nickname_taken', 'profile_exists', 'profile_required', 'part_unregistered', 'revision_mismatch', 'session_invalid',
   'session_too_short',
-  'session_expired', 'already_submitted', 'score_implausible', 'song_not_found', 'part_not_found',
+  'session_expired', 'already_submitted', 'score_implausible', 'empty_run', 'song_not_found', 'part_not_found',
   'songsterr_unavailable', 'tab_invalid', 'tab_empty'
 ]);
 

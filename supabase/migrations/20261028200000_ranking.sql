@@ -706,7 +706,8 @@ begin
   end if;
 
   -- The numbers are those of the revision the session started with (copied by start_session).
-  -- Ranking only counts 1x speed: the session must have lasted at least 90% of the song
+  -- The server can only enforce a minimum time (90% of the song); the app locks ranked runs to 1x speed and
+  -- disables seeking.
   if extract(epoch from now() - v_session.started_at) * 1000 < v_session.duration_ms * 0.9 then
     raise exception 'session_too_short';
   end if;
@@ -719,6 +720,10 @@ begin
     raise exception 'score_implausible';
   end if;
   v_judged := p_perfect::bigint + p_good + p_miss;
+  -- A run where nothing was judged or nothing scored stays off the leaderboard
+  if v_judged < 1 or p_score < 1 then
+    raise exception 'empty_run';
+  end if;
   -- Same formula as the game; with nothing judged it shows 100%
   v_expected_accuracy := case
     when v_judged > 0 then round((p_perfect::numeric + p_good) * 100 / v_judged)
