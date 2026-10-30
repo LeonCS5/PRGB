@@ -84,8 +84,8 @@ const freshPlayers = (): PlayerRun[] => [
 
 const synthKey = (laneIndex: number, noteId: string) => `${laneIndex}:${noteId}`;
 
-// A longer gap between frames (tab in the background, a stall) counts as a pause, so the song never
-// jumps ahead past notes nobody could play
+// A longer gap between frames (a stall, a slow device) only moves the song this far, so it never jumps
+// past notes nobody could play; a hidden tab pauses instead (visibilitychange)
 const MAX_FRAME_GAP_MS = 100;
 
 const isSamePart = (a: GamePart, b: GamePart) => a.tab.songId === b.tab.songId && a.partId === b.partId;
@@ -264,6 +264,20 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     playHitFeedback(outcome, note, y, palette, effectsRef.current);
     return outcome;
   };
+
+  const forEachNote = (visit: (note: NoteEvent, noteStates: Map<string, NoteState>, laneIndex: number) => void) => {
+    lanes.forEach((lane, laneIndex) => {
+      const noteStates = noteStatesRef.current[laneIndex];
+      for (const note of lane.part.tab.notes) visit(note, noteStates, laneIndex);
+    });
+  };
+
+  // Notes jumped over are skipped rather than missed
+  const skipNotesBefore = (position: number) => forEachNote((note, noteStates) => {
+    if (note.timeMs - position < -HIT_WINDOW_MS && (noteStates.get(note.id) ?? 'pending') === 'pending') {
+      noteStates.set(note.id, 'skipped');
+    }
+  });
 
   // At the end every note still pending is past its window for good: the same rule as a note that
   // scrolled by unplayed (miss, or skip for dead/grace/ghost), so the HUD and the result agree
@@ -500,13 +514,17 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   const renderFrame = useEffectEvent((now: number) => {
     const elapsed = now - lastFrameTimeRef.current;
     lastFrameTimeRef.current = now;
-    const delta = elapsed > MAX_FRAME_GAP_MS ? 0 : elapsed * speed;
+    const delta = Math.min(elapsed, MAX_FRAME_GAP_MS) * speed;
     // The guard covers frames that run before the pause at the end is committed
     if (isPlaying && !runFinishedRef.current) {
       if (!runStartedRef.current) {
         runStartedRef.current = true;
-        // Starting after a seek forward skips the beginning: not a full run
-        if (positionRef.current > 0) integrityRef.current.jumped = true;
+        // Starting after a seek forward skips the beginning: not a full run, and the notes left behind
+        // are skipped (not missed)
+        if (positionRef.current > 0) {
+          integrityRef.current.jumped = true;
+          skipNotesBefore(positionRef.current);
+        }
       }
       const next = Math.min(positionRef.current + delta, durationMs);
       positionRef.current = next;
@@ -569,25 +587,28 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   };
 
   const seekTo = (target: number) => {
-    // Before the run starts, seeking only moves the start point (checked when playback begins)
-    if (runStartedRef.current) integrityRef.current.jumped = true;
+    const previous = positionRef.current;
     positionRef.current = target;
     setCurrentTimeMs(target);
-    lanes.forEach((lane, laneIndex) => {
-      const noteStates = noteStatesRef.current[laneIndex];
-      for (const note of lane.part.tab.notes) {
-        if (note.timeMs > target) {
-          // Notes ahead sound again in the synth, but a note already judged stays judged (once per run)
-          synthPlayedNotesRef.current.delete(synthKey(laneIndex, note.id));
-        } else if ((noteStates.get(note.id) ?? 'pending') === 'pending' && note.timeMs - target < -HIT_WINDOW_MS) {
-          // Jumped over: skipped rather than missed, and the run no longer covers the whole song
-          noteStates.set(note.id, 'skipped');
-          integrityRef.current.jumped = true;
-        }
-      }
+    // Notes ahead sound again in the synth
+    forEachNote((note, _noteStates, laneIndex) => {
+      if (note.timeMs > target) synthPlayedNotesRef.current.delete(synthKey(laneIndex, note.id));
     });
+    // Before the run starts, seeking only moves the start point (renderFrame checks it when playback begins)
+    if (!runStartedRef.current) return;
+
+    // From here on the run is practice: a jumped run is never saved (no record, challenge or ranking, and
+    // the ranked mode of phase 2 locks the seek bar), so judging notes again can't inflate anything kept
+    integrityRef.current.jumped = true;
+    if (target < previous) {
+      // Going back reopens the notes ahead, to play that passage again with hits and misses shown
+      forEachNote((note, noteStates) => {
+        if (note.timeMs > target) noteStates.delete(note.id);
+      });
+    } else {
+      skipNotesBefore(target);
+    }
     if (target >= durationMs) {
-      integrityRef.current.jumped = true;
       setIsPlaying(false);
       finishRun();
     }
