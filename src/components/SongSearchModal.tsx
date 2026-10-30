@@ -1,12 +1,13 @@
 import { ModalFrame } from './ModalFrame';
 import React, { useMemo, useRef, useState } from 'react';
-import { Search, Music, Disc, Loader2, Sparkles, X, ChevronRight, Trophy, User, Users } from 'lucide-react';
+import { Search, Music, Disc, ListOrdered, Loader2, Sparkles, X, ChevronRight, Trophy, User, Users } from 'lucide-react';
 import { SongsterrApi, type SongsterrSearchResult, type SongsterrMeta, type NormalizedSongTab } from '../services/songsterrApi';
 import type { SavedSong } from '../context/preferences';
 import { ErrorNotice } from './ErrorNotice';
 import { getSongMetadata, loadSongTrack } from '../context/uiErrors';
 import { getPersonalBest } from '../services/records';
 import type { GamePart } from '../context/gameSession';
+import { useRanking } from '../context/ranking';
 
 interface SongSearchModalProps {
   isOpen: boolean;
@@ -38,6 +39,7 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
   onChooseMode,
   onSelectDuo
 }) => {
+  const { isConfigured: isRankingOn, openLeaderboard } = useRanking();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SongsterrSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -279,11 +281,11 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
 
               <div className="space-y-2">
                 {selectedSongMeta.tracks.map((track, idx) => (
+                  <div key={idx} className="flex items-stretch gap-2">
                   <button
-                    key={idx}
                     onClick={() => handleSelectTrack(idx)}
                     disabled={isLoadingTab}
-                    className="w-full flex items-center justify-between p-3 rounded-xl border border-ink-800 bg-ink-900/80 hover:border-amp-500/60 hover:bg-ink-800 transition text-left group cursor-pointer"
+                    className="min-w-0 flex-1 flex items-center justify-between p-3 rounded-xl border border-ink-800 bg-ink-900/80 hover:border-amp-500/60 hover:bg-ink-800 transition text-left group cursor-pointer"
                   >
                     <div>
                       <div className="text-sm font-semibold text-ink-100 group-hover:text-amp-300 transition">
@@ -309,6 +311,17 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
                       )}
                     </div>
                   </button>
+                  {isRankingOn && (
+                    <button
+                      type="button"
+                      onClick={() => openLeaderboard({ songId: selectedSongMeta.songId, partId: track.partId, title: selectedSongMeta.title, trackName: track.name || track.instrument })}
+                      aria-label={`Ver ranking de ${track.name || track.instrument}`}
+                      className="flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-ink-800 bg-ink-900/80 px-3 text-xs font-semibold text-ink-200 transition hover:border-ink-500"
+                    >
+                      <ListOrdered size={16} aria-hidden="true" /><span className="hidden sm:inline">Ver ranking</span>
+                    </button>
+                  )}
+                  </div>
                 ))}
               </div>
               </>

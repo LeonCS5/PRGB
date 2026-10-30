@@ -12,6 +12,7 @@ import {
   Headphones,
   PlugZap,
   Target,
+  Trophy,
   Volume2,
   Zap,
   Loader2,
@@ -27,6 +28,7 @@ import { LegalPage } from './components/LegalPage';
 import { readHash, resolveLegalRoute, subscribeToHash } from './context/legalRoute';
 import { consumeLocalDataCleared } from './context/localData';
 import { gameDevPreset, readDevScene } from './components/devScenes';
+import { RankingModals } from './components/RankingModals';
 import { CHALLENGE_PARAM, readChallengeFromSearch, type Challenge } from './services/challenge';
 import { BrandMark } from './components/BrandMark';
 import { getSongMetadata, loadSongTrack } from './context/uiErrors';
@@ -38,6 +40,8 @@ import { AudioSessionProvider, useAudioSession, useLatestPitch } from './context
 import { ModalsProvider, useModals } from './context/ModalsContext';
 import { readPreferences, savePreferences } from './context/preferences';
 import { DEFAULT_PLAYER_NAMES, nextSessionKey, type GamePart, type GameSession, type RankedStart } from './context/gameSession';
+import { RankingProvider } from './context/RankingProvider';
+import { useRanking } from './context/ranking';
 
 const supportUrl = import.meta.env.VITE_SUPPORT_URL?.trim();
 const supportHref = supportUrl || 'https://github.com/LeonCS5/PRGB';
@@ -154,6 +158,7 @@ const AppContent: React.FC = () => {
     setSettingsOpen: setIsSettingsOpen,
     setTone3000RackOpen: setIsTone3000RackOpen
   } = useModals();
+  const { isConfigured: isRankingOn, hasAccount, openAccount } = useRanking();
 
   const [devScene] = useState(readDevScene);
   const [session, setSession] = useState<GameSession | null>(() => initialSession(devScene));
@@ -379,6 +384,12 @@ const AppContent: React.FC = () => {
                   <span className="hidden sm:inline">Áudio {isAudioRunning ? 'conectado' : 'desconectado'}</span>
                   <span className="sr-only sm:hidden">Áudio {isAudioRunning ? 'conectado' : 'desconectado'}</span>
                 </span>
+                {isRankingOn && (
+                  <button type="button" onClick={openAccount} aria-label={hasAccount ? 'Minha conta do ranking' : 'Entrar no ranking'}
+                    className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-lg px-2 py-2 text-xs font-semibold text-ink-200 transition hover:bg-ink-800 hover:text-amp-300 sm:text-sm">
+                    <Trophy size={16} className="shrink-0 text-amp-400" aria-hidden="true" /><span className="hidden lg:inline">{hasAccount ? 'Minha conta do ranking' : 'Entrar no ranking'}</span>
+                  </button>
+                )}
                 <a href={supportHref} target="_blank" rel="noopener noreferrer" aria-label={supportLabel} className="flex min-h-11 max-w-48 items-center gap-2 rounded-lg px-2 py-2 text-xs font-semibold text-ink-200 transition hover:bg-ink-800 hover:text-amp-300 sm:max-w-none sm:text-sm">
                   <Heart size={16} className="shrink-0 text-amp-400" aria-hidden="true" /><span className="sm:hidden">Apoiar</span><span className="hidden sm:inline">{supportLabel}</span>
                 </a>
@@ -584,6 +595,8 @@ const AppContent: React.FC = () => {
         onClose={() => setIsTone3000RackOpen(false)}
         tone3000={tone3000}
       />
+
+      <RankingModals />
     </div>
   );
 };
@@ -591,7 +604,9 @@ const AppContent: React.FC = () => {
 export const App: React.FC = () => (
   <AudioSessionProvider>
     <ModalsProvider>
-      <AppContent />
+      <RankingProvider>
+        <AppContent />
+      </RankingProvider>
     </ModalsProvider>
   </AudioSessionProvider>
 );
