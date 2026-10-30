@@ -181,6 +181,7 @@ export const RankingAccountModal: React.FC = () => {
                 <DeleteAccountConfirm description={CONSENT_COPY.deleteDescription} onCancel={() => setIsDeleting(false)}
                   onConfirm={async () => {
                     await deleteAccount();
+                    setError(null);
                     setWasDeleted(true);
                   }} />
               </div>

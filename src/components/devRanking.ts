@@ -60,7 +60,7 @@ const createDevApi = (initial: { profile: RankingProfile | null; rows: Leaderboa
     },
     exportMyData: async () => ({
       exported_at: NOW, account: null, profile: null, scores_best: [], scores_weekly: [], play_sessions: [],
-      registered_parts: [], register_part_quota: []
+      registered_parts: [], register_part_quota: [], room_seats: [], room_create_quota: []
     }),
     registerPart: async (songId, partId, revisionId = 0) => {
       requireProfile();

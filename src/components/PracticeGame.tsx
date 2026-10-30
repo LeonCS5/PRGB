@@ -363,7 +363,8 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
       }
     }
     setRunSummary({ scores: finalScores, speed, jumped, speedChanged, personalBest });
-    ranked.controller.submitRun(finalScores[0], { jumped, speedChanged });
+    // The server can only see a run that was too fast, so a slower one must never be sent
+    if (!isDuo) ranked.controller.submitRun(finalScores[0], { jumped, speedChanged: speedChanged || speed !== 1 });
   };
 
   // Metronome: clicks are scheduled on the audio clock; the render loop only reports the song position
@@ -615,6 +616,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
 
   // A ranked run only plays once the server has opened its session
   const startRankedRun = async () => {
+    setSpeed(1);
     if (await ranked.controller.beginRun()) setIsPlaying(true);
   };
 
@@ -682,6 +684,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   };
 
   const changeSpeed = (value: number) => {
+    if (ranked.isOn) return;
     if (runStartedRef.current) integrityRef.current.speedChanged = true;
     setSpeed(value);
   };
