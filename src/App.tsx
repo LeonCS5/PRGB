@@ -15,7 +15,8 @@ import {
   Volume2,
   Zap,
   Loader2,
-  Users
+  Users,
+  X
 } from 'lucide-react';
 import { getDemoSong, DEMO_SONG_ID } from './services/demoSong';
 import { ErrorNotice } from './components/ErrorNotice';
@@ -24,6 +25,7 @@ import { LocalRecords } from './components/LocalRecords';
 import { DuoSetupModal } from './components/DuoSetupModal';
 import { LegalPage } from './components/LegalPage';
 import { readHash, resolveLegalRoute, subscribeToHash } from './context/legalRoute';
+import { consumeLocalDataCleared } from './context/localData';
 import { gameDevPreset, readDevScene } from './components/devScenes';
 import { CHALLENGE_PARAM, readChallengeFromSearch, type Challenge } from './services/challenge';
 import { BrandMark } from './components/BrandMark';
@@ -41,6 +43,8 @@ const supportUrl = import.meta.env.VITE_SUPPORT_URL?.trim();
 const supportHref = supportUrl || 'https://github.com/LeonCS5/PRGB';
 const supportLabel = supportUrl ? 'Apoie o projeto' : 'Apoie com uma estrela no GitHub';
 const currentYear = new Date().getFullYear();
+// Read once per page load (erasing local data reloads the page to confirm it here)
+const localDataWasCleared = consumeLocalDataCleared();
 
 const PracticePreview: React.FC = () => (
   <figure className="relative min-w-0 lg:-mr-8" aria-label="Ilustração do modo de prática: seis cordas, notas e pontuação em tempo real">
@@ -165,6 +169,7 @@ const AppContent: React.FC = () => {
   const [pendingChallenge, setPendingChallenge] = useState<Challenge | null>(readValidChallenge);
   const [openedWithChallenge] = useState(() => pendingChallenge !== null);
   const [isLoadingChallenge, setIsLoadingChallenge] = useState(false);
+  const [showClearedNotice, setShowClearedNotice] = useState(localDataWasCleared);
   const [challengeError, setChallengeError] = useState<string | null>(null);
   const songSelectionVersion = useRef(0);
   const hash = useSyncExternalStore(subscribeToHash, readHash);
@@ -321,6 +326,16 @@ const AppContent: React.FC = () => {
         {defaultError && (
           <ErrorNotice message={defaultError} onDismiss={() => setDefaultError(null)}
             actionLabel="Tentar novamente" onAction={() => void handleLoadDefaultSong()} actionDisabled={isLoadingDefault} />
+        )}
+        {showClearedNotice && (
+          <div role="status" className="flex items-center gap-3 rounded-2xl border border-hit/40 bg-ink-900 p-4 text-sm text-ink-100 shadow-panel">
+            <Check size={20} className="shrink-0 text-hit" aria-hidden="true" />
+            <p className="flex-1">Seus dados locais foram apagados.</p>
+            <button type="button" onClick={() => setShowClearedNotice(false)} aria-label="Dispensar aviso"
+              className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-xl hover:bg-ink-800">
+              <X size={18} aria-hidden="true" />
+            </button>
+          </div>
         )}
         {challengeError && pendingChallenge && (
           <ErrorNotice message={challengeError} onDismiss={() => setChallengeError(null)}
@@ -504,8 +519,8 @@ const AppContent: React.FC = () => {
         isOpen={isSearchOpen}
         onClose={() => {
           setIsSearchOpen(false);
-          // Gave up picking a duo song from the landing: back to the solo input
-          if (duoSearchNames && session?.mode !== 'duo') exitDuoAudio();
+          // Left the search without a duo playing (gave up, or switched to Solo): back to the solo input
+          if (channelMode === 'duo' && session?.mode !== 'duo') exitDuoAudio();
           setDuoSearchNames(null);
         }}
         duoNames={duoSearchNames}

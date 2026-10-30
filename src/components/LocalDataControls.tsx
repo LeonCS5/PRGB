@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Download, Trash2 } from 'lucide-react';
 import { CONSENT_COPY } from '../content/legal';
-import { buildLocalDataExport, clearLocalData, LOCAL_DATA_FILE_NAME } from '../context/localData';
+import { buildLocalDataExport, clearLocalData, LOCAL_DATA_FILE_NAME, markLocalDataCleared } from '../context/localData';
 
 const buttonClass = 'flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border px-4 text-sm font-semibold transition';
 
@@ -27,6 +27,7 @@ export const LocalDataControls: React.FC = () => {
 
   const handleClear = () => {
     clearLocalData();
+    markLocalDataCleared();
     // The open page still holds the old preferences in memory and would save them again: start fresh
     window.location.reload();
   };
