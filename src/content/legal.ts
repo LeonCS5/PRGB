@@ -142,7 +142,7 @@ export const PRIVACY_POLICY: LegalDocument = {
       paragraphs: [
         'A sala online é opcional e só para maiores de 18 anos. Durante a partida, seu parceiro vê seu apelido e, ao vivo, seus pontos, seu combo e sua precisão, e você vê os dele.',
         'Essas informações e os comandos da partida passam pelo serviço de tempo real do Supabase só para chegar ao outro jogador e não são gravados. O som da sua guitarra nunca é transmitido.',
-        'Para que só você e seu parceiro consigam entrar na sala, guardamos a sua vaga: o código da sala, o ID pseudônimo da conta e o horário de entrada. Esse registro é apagado quando a sala acaba ou, no máximo, em 6 horas.'
+        'Para que só você e seu parceiro consigam entrar na sala, guardamos a sua vaga: o código da sala, o ID pseudônimo da conta e o horário de entrada. Esse registro é apagado quando a sala acaba ou, no máximo, em 6 horas. Para limitar abusos, guardamos também, por cerca de 1 hora, os horários em que você criou salas, sem os códigos.'
       ]
     },
     {
@@ -204,7 +204,7 @@ export const PRIVACY_POLICY: LegalDocument = {
         `conta do ranking e pontuações do ranking geral: enquanto a conta existir, até você usar “${DELETE_LABEL}” ou até ela ser apagada automaticamente depois de 12 meses sem acesso;`,
         'ranking semanal: 8 semanas;',
         'registros técnicos das partidas ranqueadas: 7 dias;',
-        'sala online: mensagens e placar ao vivo não são gravados; o registro da vaga na sala é apagado em até 6 horas;',
+        'sala online: mensagens e placar ao vivo não são gravados; o registro da vaga na sala é apagado em até 6 horas, e os horários de criação de salas, em cerca de 1 hora;',
         'registros técnicos de acesso da Vercel e do Supabase: pelos prazos definidos por esses fornecedores;',
         'cópias de segurança automáticas do banco, quando o Supabase as mantém: descartadas no ciclo do fornecedor, em poucos dias; nunca as usamos para recuperar dados que você excluiu;',
         'e-mails de contato: pelo tempo necessário para atender ao seu pedido;',
