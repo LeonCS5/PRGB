@@ -179,6 +179,7 @@ const AppContent: React.FC = () => {
   const songSelectionVersion = useRef(0);
   const hash = useSyncExternalStore(subscribeToHash, readHash);
   const legalRoute = useMemo(() => resolveLegalRoute(hash), [hash]);
+  const [openedOnLegalPage] = useState(() => legalRoute !== null);
 
   const sessionParts = useMemo<GamePart[]>(
     () => !session ? [] : session.mode === 'solo' ? [session.part] : session.parts,
@@ -190,8 +191,9 @@ const AppContent: React.FC = () => {
   }, [sessionParts, audioEngine]);
 
   useEffect(() => {
-    // A challenge link opens on the landing card instead of jumping into the last song
-    if (!savedSong || savedSong.songId === DEMO_SONG_ID || openedWithChallenge || devScene || new URLSearchParams(window.location.search).has('demo')) return;
+    // A challenge link opens on the landing card instead of jumping into the last song, and a legal page
+    // (the consent form opens them in a new tab) stays on screen while it is being read
+    if (!savedSong || savedSong.songId === DEMO_SONG_ID || openedWithChallenge || openedOnLegalPage || devScene || new URLSearchParams(window.location.search).has('demo')) return;
     let cancelled = false;
     const version = songSelectionVersion.current;
     const restoreSong = async () => {
@@ -209,7 +211,7 @@ const AppContent: React.FC = () => {
     };
     void restoreSong();
     return () => { cancelled = true; };
-  }, [savedSong, restoreAttempt, openedWithChallenge, devScene]);
+  }, [savedSong, restoreAttempt, openedWithChallenge, openedOnLegalPage, devScene]);
 
   // Duo is a session mode: leaving it restores the input channel saved in the preferences
   const soloChannelMode = () => channelMode === 'duo' ? readPreferences().channelMode : channelMode;
