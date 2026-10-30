@@ -40,10 +40,10 @@ export interface SongsterrSearchResult {
 }
 
 export class SongsterrApi {
+  // Same-origin proxies only (Vite dev server, Vercel rewrites): calling Songsterr from the browser
+  // would hand visitors' IPs straight to third parties, which the privacy policy says doesn't happen
   private static readonly API_BASE = '/api/songsterr';
-  private static readonly CDN_BASE = '/cdn/songsterr';
-  private static readonly DIRECT_CDN_1 = 'https://dqsljvtekg760.cloudfront.net';
-  private static readonly DIRECT_CDN_2 = 'https://d3d3l6a6rcgkaf.cloudfront.net';
+  private static readonly CDN_BASES = ['/cdn/songsterr', '/cdn2/songsterr'];
 
   /**
    * Search Songsterr's vast catalog of songs
@@ -51,13 +51,7 @@ export class SongsterrApi {
   static async searchSongs(query: string): Promise<SongsterrSearchResult[]> {
     const url = `${this.API_BASE}/songs?pattern=${encodeURIComponent(query)}`;
     const response = await fetch(url);
-    if (!response.ok) {
-      // Direct fallback
-      const directUrl = `https://www.songsterr.com/api/songs?pattern=${encodeURIComponent(query)}`;
-      const directRes = await fetch(directUrl);
-      if (!directRes.ok) throw new Error(`Search failed: ${directRes.status}`);
-      return directRes.json();
-    }
+    if (!response.ok) throw new Error(`Search failed: ${response.status}`);
     return response.json();
   }
 
@@ -66,12 +60,8 @@ export class SongsterrApi {
    */
   static async getSongMeta(songId: number): Promise<SongsterrMeta> {
     const url = `${this.API_BASE}/meta/${songId}`;
-    let response = await fetch(url);
-    if (!response.ok) {
-      const directUrl = `https://www.songsterr.com/api/meta/${songId}`;
-      response = await fetch(directUrl);
-      if (!response.ok) throw new Error(`Meta fetch failed: ${response.status}`);
-    }
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Meta fetch failed: ${response.status}`);
     return normalizeSongMeta(await response.json());
   }
 
@@ -85,16 +75,10 @@ export class SongsterrApi {
     partId: number
   ): Promise<any> {
     const cdnPath = `/${songId}/${revisionId}/${image}/${partId}.json`;
-    const urls = [
-      `${this.CDN_BASE}${cdnPath}`,
-      `${this.DIRECT_CDN_1}${cdnPath}`,
-      `${this.DIRECT_CDN_2}${cdnPath}`
-    ];
-
     let lastError = null;
-    for (const url of urls) {
+    for (const base of this.CDN_BASES) {
       try {
-        const res = await fetch(url);
+        const res = await fetch(`${base}${cdnPath}`);
         if (res.ok) {
           return await res.json();
         }

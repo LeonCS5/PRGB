@@ -185,4 +185,25 @@ describe('shared tab normalizer (also used by the register-part Edge Function)',
       [1, [43, 38, 33, 28]]
     ]);
   });
+
+  it('only ever calls same-origin proxies, even when they fail', async () => {
+    const fetchMock = vi.fn(async (_url: string) => new Response('nope', { status: 502 }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(SongsterrApi.searchSongs('metallica')).rejects.toThrow('Search failed: 502');
+    await expect(SongsterrApi.getSongMeta(7)).rejects.toThrow('Meta fetch failed: 502');
+    await expect(SongsterrApi.getTrackTabJson(7, 99, 'img', 0)).rejects.toThrow('Failed to load track tab');
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      '/api/songsterr/songs?pattern=metallica',
+      '/api/songsterr/meta/7',
+      '/cdn/songsterr/7/99/img/0.json',
+      '/cdn2/songsterr/7/99/img/0.json'
+    ]);
+  });
+
+  it('falls back to the second CDN proxy', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) =>
+      url.startsWith('/cdn2/') ? new Response('{"measures":[]}') : new Response('nope', { status: 404 })
+    ));
+    await expect(SongsterrApi.getTrackTabJson(7, 99, 'img', 0)).resolves.toEqual({ measures: [] });
+  });
 });

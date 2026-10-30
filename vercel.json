@@ -6,6 +6,7 @@
   "rewrites": [
     { "source": "/api/songsterr/:path*", "destination": "https://www.songsterr.com/api/:path*" },
     { "source": "/cdn/songsterr/:path*", "destination": "https://dqsljvtekg760.cloudfront.net/:path*" },
+    { "source": "/cdn2/songsterr/:path*", "destination": "https://d3d3l6a6rcgkaf.cloudfront.net/:path*" },
     { "source": "/((?!api/|cdn/|assets/|icons/|fonts/).*)", "destination": "/index.html" }
   ],
   "headers": [
