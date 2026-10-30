@@ -20,6 +20,8 @@ function fakeClient(options: { session?: boolean; rpc?: RpcResult } = {}) {
     rpc: vi.fn(async (): Promise<RpcResult> => options.rpc ?? { data: null, error: null, status: 200 }),
     auth: {
       getSession: vi.fn(async () => ({ data: { session: options.session === false ? null : { user: USER } }, error: null })),
+      getUser: vi.fn(async (): Promise<{ data: { user: typeof USER | null }; error: unknown }> =>
+        ({ data: { user: USER }, error: null })),
       signInAnonymously: vi.fn(async () => ({ data: { user: USER, session: {} }, error: null })),
       signOut: vi.fn(async () => ({ error: null }))
     },
@@ -50,6 +52,9 @@ describe('toRankingError', () => {
     [{ name: 'AuthRetryableFetchError', status: 0, message: 'Failed to fetch' }, 'network'],
     [{ name: 'AuthApiError', status: 429, message: 'Request rate limit reached' }, 'rate_limited'],
     [{ name: 'FunctionsFetchError', message: 'Failed to send a request to the Edge Function' }, 'network'],
+    [{ __isAuthError: true, name: 'AuthApiError', status: 403, code: 'user_not_found' }, 'not_authenticated'],
+    [{ __isAuthError: true, name: 'AuthApiError', status: 400, code: 'refresh_token_not_found' }, 'not_authenticated'],
+    [{ __isAuthError: true, name: 'AuthSessionMissingError', status: 400 }, 'not_authenticated'],
     [{ message: 'something else', code: 'XX000' }, 'unknown'],
     [null, 'unknown'],
     ['boom', 'unknown']
@@ -110,6 +115,22 @@ describe('session and profile', () => {
     expect(client.auth.signInAnonymously).toHaveBeenCalledTimes(1);
   });
 
+  it('replaces a stored session whose account no longer exists', async () => {
+    client.auth.getUser.mockResolvedValue(
+      { data: { user: null }, error: { __isAuthError: true, name: 'AuthApiError', status: 403, code: 'user_not_found' } });
+    expect(await api.ensureAnonymousSession()).toEqual({ userId: 'user-1', isAnonymous: true });
+    expect(client.auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
+    expect(client.auth.signInAnonymously).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the session and creates no account when Auth is unreachable', async () => {
+    client.auth.getUser.mockResolvedValue(
+      { data: { user: null }, error: { __isAuthError: true, name: 'AuthRetryableFetchError', status: 0 } });
+    await rejectsWith(api.ensureAnonymousSession(), 'network');
+    expect(client.auth.signOut).not.toHaveBeenCalled();
+    expect(client.auth.signInAnonymously).not.toHaveBeenCalled();
+  });
+
   it('maps a failed anonymous sign-in', async () => {
     useClient(fakeClient({ session: false }));
     client.auth.signInAnonymously.mockResolvedValue({ data: { user: null, session: null }, error: { name: 'AuthApiError', status: 429 } } as never);
@@ -131,6 +152,20 @@ describe('session and profile', () => {
     });
   });
 
+  it('creates the profile again once on a fresh account when the stored one is gone', async () => {
+    const gone: RpcResult = { data: null, error: { message: 'not_authenticated', code: 'P0001' }, status: 400 };
+    client.rpc.mockResolvedValueOnce(gone).mockResolvedValueOnce({ data: PROFILE, error: null, status: 200 });
+    expect(await api.createProfile({ nickname: 'Ana', ageConfirmed: true, consent: true, consentVersion: 'v1' }))
+      .toEqual(PROFILE);
+    expect(client.auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
+    expect(client.auth.signInAnonymously).toHaveBeenCalledTimes(1);
+
+    useClient(fakeClient({ rpc: gone }));
+    await rejectsWith(api.createProfile({ nickname: 'Ana', ageConfirmed: true, consent: true, consentVersion: 'v1' }),
+      'not_authenticated');
+    expect(client.rpc).toHaveBeenCalledTimes(2);
+  });
+
   it('surfaces the server codes', async () => {
     useClient(fakeClient({ rpc: { data: null, error: { message: 'nickname_blocked', code: 'P0001' }, status: 400 } }));
     await rejectsWith(api.updateNickname('Admin'), 'nickname_blocked');
@@ -149,6 +184,11 @@ describe('session and profile', () => {
     useClient(fakeClient({ rpc: { data: null, error: { message: 'not_authenticated' }, status: 400 } }));
     await rejectsWith(api.deleteMyAccount(), 'not_authenticated');
     expect(client.auth.signOut).not.toHaveBeenCalled();
+  });
+
+  it('reports the deletion as done even if clearing the local session fails', async () => {
+    client.auth.signOut.mockRejectedValue(new Error('storage unavailable'));
+    await expect(api.deleteMyAccount()).resolves.toBeUndefined();
   });
 
   it('returns the data export as stored', async () => {

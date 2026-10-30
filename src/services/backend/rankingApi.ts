@@ -57,6 +57,12 @@ export class RankingError extends Error {
   }
 }
 
+// Supabase Auth error codes meaning the stored session can't be used any more
+const AUTH_SESSION_GONE: ReadonlySet<string> = new Set([
+  'user_not_found', 'session_not_found', 'refresh_token_not_found', 'refresh_token_already_used', 'bad_jwt',
+  'no_authorization'
+]);
+
 const isServerCode = (value: unknown): value is RankingErrorCode =>
   typeof value === 'string' && SERVER_CODES.has(value);
 
@@ -68,6 +74,11 @@ export function toRankingError(error: unknown): RankingError {
     if (isServerCode(message)) return new RankingError(message, { cause: error });
     // Permission denied (anon calling a player RPC) or a JWT PostgREST refused
     if (code === '42501' || (typeof code === 'string' && /^PGRST30[123]$/.test(code)) || status === 401) {
+      return new RankingError('not_authenticated', { cause: error });
+    }
+    // Auth refusing the stored session, e.g. its account was deleted by the player or by the retention purge
+    if (name === 'AuthSessionMissingError' || (typeof code === 'string' && AUTH_SESSION_GONE.has(code))
+      || ('__isAuthError' in error && status === 403)) {
       return new RankingError('not_authenticated', { cause: error });
     }
     if (name === 'AuthRetryableFetchError' || name === 'FunctionsFetchError' || name === 'FunctionsRelayError') {
@@ -339,11 +350,34 @@ export async function getSession(): Promise<RankingSession | null> {
  */
 export async function ensureAnonymousSession(): Promise<RankingSession> {
   const client = await requireClient();
-  const existing = await readSession(client);
-  if (existing) return existing;
+  try {
+    const existing = await readSession(client);
+    if (existing) {
+      // The stored session may belong to an account deleted meanwhile (by the player or the purge)
+      const { error } = await client.auth.getUser();
+      if (!error) return existing;
+      throw toRankingError(error);
+    }
+  } catch (error) {
+    // Only a refused session is replaced; a network failure must not create another account
+    if (toRankingError(error).code !== 'not_authenticated') throw toRankingError(error);
+    await signOutLocally(client);
+  }
+  return signInAnonymously(client);
+}
+
+async function signInAnonymously(client: SupabaseClient): Promise<RankingSession> {
   const { data, error } = await client.auth.signInAnonymously();
   if (error || !data.user) throw toRankingError(error);
   return toSession(data.user);
+}
+
+async function signOutLocally(client: SupabaseClient): Promise<void> {
+  try {
+    await client.auth.signOut({ scope: 'local' });
+  } catch {
+    // The local copy is all there is to clear; a failure here changes nothing for the player
+  }
 }
 
 /** null without a session or before createProfile. */
@@ -354,14 +388,27 @@ export async function getMyProfile(): Promise<RankingProfile | null> {
   return data === null ? null : parseProfile(data);
 }
 
+/**
+ * Creates the profile with the consent given right now. If the stored session belongs to an account that no
+ * longer exists, it signs in anonymously again and retries once (the player is consenting, so the new
+ * account is covered).
+ */
 export async function createProfile(input: CreateProfileInput): Promise<RankingProfile> {
   const client = await requireClient();
-  return parseProfile(await callRpc(client, 'create_profile', {
+  const create = async () => parseProfile(await callRpc(client, 'create_profile', {
     p_nickname: input.nickname,
     p_age_confirmed: input.ageConfirmed,
     p_consent: input.consent,
     p_consent_version: input.consentVersion
   }));
+  try {
+    return await create();
+  } catch (error) {
+    if (!(error instanceof RankingError) || error.code !== 'not_authenticated') throw error;
+    await signOutLocally(client);
+    await signInAnonymously(client);
+    return create();
+  }
 }
 
 export async function updateNickname(nickname: string): Promise<RankingProfile> {
@@ -386,8 +433,9 @@ export async function exportMyData(): Promise<RankingDataExport> {
 export async function deleteMyAccount(): Promise<void> {
   const client = await requireClient();
   await callRpc(client, 'delete_my_account');
-  // The account no longer exists, so only the local copy of the session is left to clear
-  await client.auth.signOut({ scope: 'local' });
+  // The account no longer exists, so only the local copy of the session is left to clear; the deletion
+  // succeeded even if that fails
+  await signOutLocally(client);
 }
 
 /**
