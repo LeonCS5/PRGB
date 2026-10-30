@@ -17,7 +17,7 @@
 2. **Ouvir o som processado** em tempo real pelo motor DSP **TONE3000** (emulação de amplificador valvulado, gabinete, noise gate, reverb)
 3. **Tocar junto com tablaturas** baixadas da API do Songsterr (1M+ músicas), com detecção de pitch e gamificação (score, combo, acertos Perfect/Good/Miss)
 
-**Sem servidor próprio.** O jogo roda 100% no navegador (todo o áudio via Web Audio API, nunca enviado); ranking e salas online, opcionais e só com consentimento 18+, usam Supabase gerenciado (região São Paulo). Regras em AGENTS.md › Regras INVIOLÁVEIS 1 e 11.
+**Sem servidor próprio.** O jogo roda 100% no navegador (todo o áudio via Web Audio API, nunca enviado); ranking e salas online, opcionais e só com consentimento 18+, usam Supabase gerenciado (Auth anônimo, RPC security definer, Edge Function, Realtime — região São Paulo). Regras em AGENTS.md › Regras INVIOLÁVEIS 1 e 11.
 
 ---
 
@@ -53,32 +53,74 @@ src/
 ├── main.tsx                         # Entry point React (StrictMode)
 ├── App.tsx                          # Componente raiz: landing de produto + troca para o jogo
 ├── index.css                        # Tailwind + tokens de design PRGB (@theme) + reset global
-├── vite-env.d.ts                    # Tipos de import.meta.env (VITE_SUPPORT_URL)
+├── vite-env.d.ts                    # Tipos de import.meta.env (VITE_SUPPORT_URL, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY)
+│
+├── content/
+│   └── legal.ts                     # Cópia legal (LGPD): Política de Privacidade, Termos, LEGAL_VERSION
 │
 ├── context/
 │   ├── AudioSessionContext.tsx      # AudioEngine, TONE3000, device/canal, erros; pitch via useLatestPitch
+│   ├── gameSession.ts               # Tipos de sessão de jogo (GamePart, SoloSession, DuoSession, RunSummary)
+│   ├── legalRoute.ts                # Roteamento por hash (#privacidade / #termos) sem router library
+│   ├── localData.ts                 # Exportar/apagar dados locais; flag de sessão de ranking
 │   ├── ModalsContext.tsx            # Estado aberto/fechado dos modais
 │   ├── preferences.ts               # Persistência em localStorage (prgb:prefs:v1)
-│   └── uiErrors.ts                  # Mensagens de erro pt-BR + carga/validação de tabs
+│   ├── rankedRun.ts                 # RankedRunController: máquina de estados de um run ranqueado
+│   ├── ranking.ts                   # RankingContext, RankingApi type, RankingValue
+│   ├── RankingProvider.tsx          # Provider do contexto de ranking
+│   ├── room.ts                      # Estado puro da sala online e RoomController (sem React)
+│   ├── RoomProvider.tsx             # Provider da sala online
+│   ├── uiErrors.ts                  # Mensagens de erro pt-BR + carga/validação de tabs
+│   ├── useRankedRun.ts              # Hook React para RankedRunController
+│   └── useRoom.ts                   # Contexto e hook da sala online
 │
 ├── components/
-│   ├── PracticeGame.tsx             # ⭐ Canvas game principal (rails de notas, scoring, particles, metrônomo)
-│   ├── BrandMark.tsx                # Logo PRGB
-│   ├── SongSearchModal.tsx          # Modal de busca de músicas no Songsterr
+│   ├── PracticeGame.tsx             # ⭐ Canvas game principal (rails de notas, scoring, metrônomo)
 │   ├── AudioSettingsModal.tsx       # Modal de configuração de interface de áudio + afinador
-│   ├── Tone3000AmpRack.tsx          # Modal do rack completo do amp modeler TONE3000
-│   └── ErrorNotice.tsx              # Aviso de erro dispensável com ação
+│   ├── BrandMark.tsx                # Logo PRGB
+│   ├── ChallengeCard.tsx / ChallengeSharePanel.tsx  # Desafios entre jogadores
+│   ├── DeleteAccountConfirm.tsx     # Confirmação de exclusão de conta
+│   ├── DuoSetupModal.tsx            # Configuração de sessão duo (duas guitarras)
+│   ├── ErrorNotice.tsx              # Aviso de erro dispensável com ação
+│   ├── GameHud.tsx                  # HUD do jogo: score, combo, accuracy, run ranqueado
+│   ├── LeaderboardModal.tsx         # Placar online (semanal + all-time)
+│   ├── LegalPage.tsx                # Páginas legais (Privacidade / Termos)
+│   ├── LocalDataControls.tsx / LocalRecords.tsx  # Dados locais e histórico de recordes
+│   ├── ModalFrame.tsx               # Wrapper genérico de modal
+│   ├── OnlineHud.tsx                # Faixa do parceiro e da equipe durante a dupla online
+│   ├── OnlinePracticeGame.tsx       # PracticeGame da dupla online
+│   ├── OnlineResultPanel.tsx        # Resultado da dupla
+│   ├── RoomModal.tsx                # Modal da dupla online: criar/entrar, lobby e início
+│   ├── RankingAccountModal.tsx / RankingEntryModal.tsx / RankingModals.tsx  # Modais de ranking
+│   ├── ResultPanel.tsx              # Painel de resultado após a música
+│   ├── SongSearchModal.tsx          # Modal de busca de músicas no Songsterr
+│   └── Tone3000AmpRack.tsx          # Modal do rack completo do amp modeler TONE3000
 │
 ├── services/
 │   ├── audioEngine.ts               # ⭐ Engine de captura de áudio + detecção de pitch (NSDF/MPM)
-│   ├── tone3000Amp.ts               # ⭐ DSP engine: preamp, waveshaper, tone stack, cab sim, reverb
+│   ├── challenge.ts                 # Links de desafio (score pessoal codificado em URL)
+│   ├── demoSong.ts                  # Exercício original offline (sem rede, sem direitos de terceiros)
+│   ├── nickname.ts                  # Validação, normalização e filtro de apelidos
+│   ├── records.ts                   # Recordes pessoais locais (localStorage)
+│   ├── scoring.ts                   # Motor de scoring: judgeNote, multiplier, accuracy
 │   ├── songsterrApi.ts              # Client da API Songsterr: busca, meta, download de tabs, normalização
 │   ├── synthAudio.ts                # Sintetizador de notas, MetronomeScheduler e efeitos sonoros do jogo
-│   ├── demoSong.ts                  # Exercício original offline (sem rede, sem direitos de terceiros)
-│   └── *.test.ts                    # Testes Vitest de cada service
+│   ├── tone3000Amp.ts               # ⭐ DSP engine: preamp, waveshaper, tone stack, cab sim, reverb
+│   ├── *.test.ts                    # Testes Vitest de cada service
+│   └── backend/
+│       ├── rankingApi.ts            # RPCs do ranking (createProfile, submitScore, getLeaderboard, etc.)
+│       ├── roomChannel.ts           # Salas online via Supabase Realtime
+│       └── supabaseClient.ts        # Cliente Supabase lazy; lê VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY
 │
+supabase/
+├── migrations/                      # Migrations SQL (ranking, retention, reaccept_terms, room_realtime, room_data_export)
+├── functions/register-part/         # Edge Function: conta notas do lado do servidor
+├── functions/_shared/               # scoreLimits.ts, tabNormalizer.ts (shared com o app)
+└── db-tests/                        # Testes de integração das migrations (Vitest)
+
 public/
 ├── favicon.svg                      # Logo PRGB
+├── fonts/                           # Fontes locais (Inter, Space Grotesk, JetBrains Mono — woff2)
 ├── icons/, og-image.png             # Ícones do app e imagem de compartilhamento
 ├── manifest.webmanifest, sw.js      # PWA
 vercel.json                          # Deploy com rewrites do Songsterr (ver AGENTS.md › Deploy)
@@ -90,6 +132,9 @@ O Vite faz proxy reverso para acessar a API do Songsterr sem CORS:
 
 - `/api/songsterr/*` → `https://www.songsterr.com/api/*`
 - `/cdn/songsterr/*` → `https://dqsljvtekg760.cloudfront.net/*` (CDN de tablaturas JSON)
+- `/cdn2/songsterr/*` → `https://d3d3l6a6rcgkaf.cloudfront.net/*` (CDN alternativo)
+
+Em produção esses mesmos caminhos são reescritos pelo `vercel.json`.
 
 ---
 
@@ -170,7 +215,7 @@ O backlog fica **só** no `AGENTS.md` (seção "Problemas Conhecidos"), com dono
 - **Nunca migrar de Tailwind CSS** para outra solução de styling
 - **Nunca adicionar servidor próprio** — só Supabase gerenciado, para ranking/salas, e o jogo funciona sem ele
 - **Manter toda a UI em Português Brasileiro**
-- **Preservar a API de proxy do Vite** (`/api/songsterr`, `/cdn/songsterr`)
+- **Preservar a API de proxy do Vite** (`/api/songsterr`, `/cdn/songsterr`, `/cdn2/songsterr`)
 
 ### RECOMENDADO
 - Ao criar novos componentes, seguir o padrão `React.FC<Props>` existente

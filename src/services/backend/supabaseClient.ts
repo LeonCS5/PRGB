@@ -11,7 +11,7 @@ export interface BackendConfig {
 // Session storage key, created only once the player signs in to the ranking (after consenting)
 export const AUTH_STORAGE_KEY = 'prgb:auth';
 
-// ImportMetaEnv (src/vite-env.d.ts) does not declare these keys, so read them as unknown and check
+// Read by name, so the keys declared in ImportMetaEnv (src/vite-env.d.ts) don't apply: check the value here
 const readEnv = (name: string): string | undefined => {
   const value: unknown = (import.meta.env as Record<string, unknown>)[name];
   return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
