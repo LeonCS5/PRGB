@@ -250,6 +250,8 @@ create table public.play_sessions (
 );
 
 create index play_sessions_user_started_idx on public.play_sessions (user_id, started_at);
+create index play_sessions_started_idx on public.play_sessions (started_at); -- retention purge
+create index play_sessions_part_idx on public.play_sessions (song_id, part_id); -- foreign key
 
 create table public.scores_best (
   user_id uuid not null references public.profiles (id) on delete cascade,
@@ -286,6 +288,7 @@ create table public.scores_weekly (
 );
 
 create index scores_weekly_board_idx on public.scores_weekly (song_id, part_id, week_start, score desc, achieved_at);
+create index scores_weekly_week_idx on public.scores_weekly (week_start); -- retention purge
 
 -- Table access -----------------------------------------------------------------------------------------
 
@@ -637,8 +640,9 @@ declare
   v_part public.song_parts%rowtype;
   v_session_id uuid;
 begin
-  -- Locking the profile row serializes concurrent starts of the same player, so the hourly limit holds
-  perform 1 from public.profiles p where p.id = v_uid for update;
+  -- Locking the profile row serializes concurrent starts of the same player, so the hourly limit holds.
+  -- NO KEY UPDATE does not block the foreign key checks of other inserts referencing the profile.
+  perform 1 from public.profiles p where p.id = v_uid for no key update;
   if not found then
     raise exception 'profile_required';
   end if;
@@ -887,12 +891,11 @@ begin
 end;
 $$;
 
--- Clock reference for online rooms
+-- Clock reference for online rooms. Reads no table, so it runs with the caller's rights (security invoker).
 create function public.server_time()
 returns timestamptz
 language plpgsql
 volatile
-security definer
 set search_path = ''
 as $$
 begin

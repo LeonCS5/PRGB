@@ -562,9 +562,21 @@ describe('delete_my_account', () => {
 });
 
 describe('server_time and seed data', () => {
-  it('returns the database clock to anyone', async () => {
+  it('returns the database clock to anyone, without elevated rights', async () => {
     const time = await rpc<Date>(db, null, 'public.server_time()');
     expect(Math.abs(time.getTime() - Date.now())).toBeLessThan(5_000);
+    const { rows } = await db.query<{ definer: boolean }>(
+      "select prosecdef as definer from pg_proc where oid = 'public.server_time()'::regprocedure");
+    expect(rows).toEqual([{ definer: false }]);
+  });
+
+  it('indexes the columns the purge and foreign keys scan', async () => {
+    const { rows } = await db.query<{ indexname: string }>(
+      `select indexname from pg_indexes
+       where indexname in ('play_sessions_started_idx', 'play_sessions_part_idx', 'scores_weekly_week_idx')
+       order by indexname`);
+    expect(rows.map((row) => row.indexname)).toEqual(
+      ['play_sessions_part_idx', 'play_sessions_started_idx', 'scores_weekly_week_idx']);
   });
 
   it('seeds the offline demo with the numbers the app computes', async () => {
