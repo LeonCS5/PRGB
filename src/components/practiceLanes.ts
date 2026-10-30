@@ -66,14 +66,15 @@ export const stringY = (lane: LaneLayout, string: number): number =>
 
 /**
  * Static part of a lane (rails, string labels, hit line), drawn once into the cached background.
- * `label` names the player in duo mode.
+ * `label` names the player in duo mode. Play Free moves the line to where the notes are born.
  */
 export const drawLaneBackground = (
   ctx: OffscreenCanvasRenderingContext2D,
   lane: LaneLayout,
   width: number,
   palette: GamePalette,
-  label: { text: string; color: string } | null
+  label: { text: string; color: string } | null,
+  hitLineX: number = HIT_LINE_X
 ): void => {
   const availableHeight = lane.height - lane.topMargin * 2;
 
@@ -111,20 +112,20 @@ export const drawLaneBackground = (
 
   // 2. Draw Practice Playhead / Target Hit Zone Bar
   const top = lane.top + lane.topMargin;
-  const grad = ctx.createLinearGradient(HIT_LINE_X - 4, 0, HIT_LINE_X + 4, 0);
+  const grad = ctx.createLinearGradient(hitLineX - 4, 0, hitLineX + 4, 0);
   grad.addColorStop(0, palette.signal + '1a');
   grad.addColorStop(0.5, palette.signal);
   grad.addColorStop(1, palette.signal + '1a');
   ctx.fillStyle = grad;
-  ctx.fillRect(HIT_LINE_X - 8, top - 20, 16, availableHeight + 40);
+  ctx.fillRect(hitLineX - 8, top - 20, 16, availableHeight + 40);
 
   ctx.beginPath();
   ctx.strokeStyle = palette.signal;
   ctx.lineWidth = 3;
   ctx.shadowColor = palette.signal;
   ctx.shadowBlur = 16;
-  ctx.moveTo(HIT_LINE_X, top - 20);
-  ctx.lineTo(HIT_LINE_X, top + availableHeight + 20);
+  ctx.moveTo(hitLineX, top - 20);
+  ctx.lineTo(hitLineX, top + availableHeight + 20);
   ctx.stroke();
   ctx.shadowBlur = 0;
 

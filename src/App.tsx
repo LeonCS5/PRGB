@@ -35,6 +35,7 @@ import { CHALLENGE_PARAM, readChallengeFromSearch, type Challenge } from './serv
 import { BrandMark } from './components/BrandMark';
 import { getSongMetadata, loadSongTrack } from './context/uiErrors';
 import { PracticeGame } from './components/PracticeGame';
+import { FreePlay } from './components/FreePlay';
 import { OnlinePracticeGame } from './components/OnlinePracticeGame';
 import { RoomModal } from './components/RoomModal';
 import { SongSearchModal } from './components/SongSearchModal';
@@ -166,6 +167,7 @@ const AppContent: React.FC = () => {
   } = useModals();
   const { isConfigured: isRankingOn, hasAccount, openAccount } = useRanking();
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
+  const [isFreePlayOpen, setIsFreePlayOpen] = useState(false);
   const [onlineSession, setOnlineSession] = useState<{ part: GamePart; partnerName: string; startAtMs: number; sessionKey: number } | null>(null);
 
   const [devScene] = useState(readDevScene);
@@ -239,6 +241,14 @@ const AppContent: React.FC = () => {
     setDefaultError(null);
     setDuoSearchNames(null);
     setSession(duoSession(parts, names));
+  };
+
+  const handleOpenFreePlay = () => {
+    songSelectionVersion.current += 1;
+    setRestoreError(null);
+    setDefaultError(null);
+    ensureSoloAudio();
+    setIsFreePlayOpen(true);
   };
 
   const handleLoadDemo = () => {
@@ -391,6 +401,9 @@ const AppContent: React.FC = () => {
           tone3000={tone3000}
           onOpenTone3000Rack={() => setIsTone3000RackOpen(true)}
         />
+      ) : isFreePlayOpen ? (
+        <FreePlay onExit={() => setIsFreePlayOpen(false)} onOpenAudioSettings={() => setIsSettingsOpen(true)}
+          onOpenTone3000Rack={() => setIsTone3000RackOpen(true)} />
       ) : session ? (
         /* Practice mode */
         <>
@@ -484,6 +497,9 @@ const AppContent: React.FC = () => {
                         <Wifi size={18} aria-hidden="true" /><span className="text-left"><span className="block text-sm font-bold">Dupla online</span><span className="mt-1 block text-xs text-ink-300">Toque junto a distância</span></span>
                       </button>
                     )}
+                    <button onClick={handleOpenFreePlay} className="flex min-h-16 cursor-pointer items-center justify-center gap-3 rounded-xl border border-ink-600 bg-ink-900 px-5 py-3 text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
+                      <Guitar size={18} className="text-amp-300" aria-hidden="true" /><span className="text-left"><span className="block text-sm font-bold">Play Free</span><span className="mt-1 block text-xs text-ink-300">Só ouvir a guitarra e ver as notas</span></span>
+                    </button>
                   </div>
                   <p className="mt-5 flex items-center gap-2 text-xs text-ink-300"><Check size={14} className="text-hit" aria-hidden="true" /> Sem cadastro. O palco é seu.</p>
                 </div>

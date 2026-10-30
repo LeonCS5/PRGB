@@ -82,6 +82,7 @@ src/
 │   ├── DeleteAccountConfirm.tsx     # Confirmação de exclusão de conta
 │   ├── DuoSetupModal.tsx            # Configuração de sessão duo (duas guitarras)
 │   ├── ErrorNotice.tsx              # Aviso de erro dispensável com ação
+│   ├── FreePlay.tsx                 # Play Free: só escuta a guitarra e mostra as notas
 │   ├── GameHud.tsx                  # HUD do jogo: score, combo, accuracy, run ranqueado
 │   ├── LeaderboardModal.tsx         # Placar online (semanal + all-time)
 │   ├── LegalPage.tsx                # Páginas legais (Privacidade / Termos)
@@ -101,6 +102,7 @@ src/
 │   ├── challenge.ts                 # Links de desafio (score pessoal codificado em URL)
 │   ├── demoSong.ts                  # Exercício original offline (sem rede, sem direitos de terceiros)
 │   ├── nickname.ts                  # Validação, normalização e filtro de apelidos
+│   ├── noteTrail.ts                 # Histórico das notas tocadas no Play Free (lógica pura)
 │   ├── records.ts                   # Recordes pessoais locais (localStorage)
 │   ├── scoring.ts                   # Motor de scoring: judgeNote, multiplier, accuracy
 │   ├── songsterrApi.ts              # Client da API Songsterr: busca, meta, download de tabs, normalização

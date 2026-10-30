@@ -79,6 +79,7 @@ PRGB/
 │   │   ├── DeleteAccountConfirm.tsx # Confirmação de exclusão de conta de ranking
 │   │   ├── DuoSetupModal.tsx        # Modal de configuração da sessão duo (duas guitarras)
 │   │   ├── ErrorNotice.tsx          # Aviso de erro dispensável com ação (role="alert")
+│   │   ├── FreePlay.tsx             # Play Free: só escuta a guitarra e mostra as notas, sem música nem pontos
 │   │   ├── GameHud.tsx              # HUD do jogo: score, combo, accuracy, indicadores de run ranqueado
 │   │   ├── LeaderboardModal.tsx     # Modal do placar online (semanal + all-time)
 │   │   ├── LegalPage.tsx            # Renderizador das páginas legais (Privacidade / Termos)
@@ -102,6 +103,7 @@ PRGB/
 │   │   ├── challenge.ts             # Geração e validação de links de desafio (score pessoal codificado em URL)
 │   │   ├── demoSong.ts              # Exercício original offline (pentatônica de Lá menor), sem direitos de terceiros
 │   │   ├── nickname.ts              # Validação, normalização e filtro de apelidos (look-alikes, blocklist, NFKD)
+│   │   ├── noteTrail.ts             # Histórico das notas tocadas no Play Free (lógica pura)
 │   │   ├── records.ts               # Recordes pessoais locais: armazenamento, consulta e exportação (localStorage)
 │   │   ├── scoring.ts               # Motor de scoring: judgeNote, acumulação de estado, multiplier, accuracy
 │   │   ├── songsterrApi.ts          # API client + normalizer (cordas 0-indexed no JSON bruto, ties, grace, técnicas, beatGrid)
@@ -320,6 +322,9 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 - [x] **Serviço das salas** — `src/services/backend/roomChannel.ts`, migrations `room_realtime` e `room_data_export`; testado no Supabase real por script, com duas contas: vagas, canal privado, presença, mensagens e saída do anfitrião (@codex, @claude)
 - [x] **Interface da dupla online** — `RoomModal`, `RoomProvider`, `room.ts` (estado puro, com testes), `OnlinePracticeGame`, `OnlineHud`, `OnlineResultPanel`: lobby, escolha de faixa, início no mesmo relógio, placar da equipe e revanche. Partida online nunca vale para o ranking (@bob, revisada e corrigida por @claude; testada no Supabase real com dois navegadores e microfone sintético)
 - [ ] **Alinhar histórico de migrations** — a migration `room_realtime` foi aplicada manualmente pelo SQL Editor fora do histórico do CLI Supabase; precisa reconciliar antes do próximo `supabase db push` (@claude)
+
+### Rodada 6 — Play Free (concluída em `claude/fase2-base`, sem merge em `main`)
+- [x] **Play Free** — modo livre, sem música nem pontuação: mostra nota, frequência, afinação, corda, casa, nível e clareza, e o histórico nas seis cordas; serve também para testar a entrada de áudio (@bob, revisado e corrigido por @claude; testado no navegador com microfone sintético, não com guitarra)
 
 ### Pendências conhecidas (sem dono)
 - [ ] **Dupla online com guitarras de verdade** — testada de ponta a ponta no Supabase real com dois navegadores, contas temporárias e microfone sintético (partida, revanche com troca de música, queda e volta, saída do anfitrião, exportação e exclusão de conta) e o ranking com uma partida real aceita pelo servidor, mas nunca por duas pessoas com guitarra. Falta também o caso de sala cheia (`room_full`), que exige uma terceira conta.
