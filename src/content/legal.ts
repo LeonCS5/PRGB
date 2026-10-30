@@ -37,7 +37,7 @@ export interface ConsentCopy {
   clearLocalLabel: string;
 }
 
-export const LEGAL_VERSION: string = '2026-10-28';
+export const LEGAL_VERSION: string = '2026-10-30';
 
 export const LEGAL_CONTACT: LegalContact = {
   controller: 'Leonam Candido',
@@ -90,7 +90,7 @@ export const PRIVACY_POLICY: LegalDocument = {
         'Registros técnicos de acesso: como qualquer site, a hospedagem (Vercel) registra dados técnicos de cada visita, como endereço IP, data e hora, endereço da página e informações do navegador (user agent). Quando você abre o ranking ou usa a sala online, o Supabase registra dados técnicos parecidos das conexões. Se você tiver conta no ranking, o sistema de login do Supabase também guarda, junto da conta, dados das sessões de acesso (como endereço IP e navegador); eles são apagados quando a conta é excluída.',
         'Busca de músicas: o termo pesquisado e a música que você abre são repassados ao Songsterr para trazer a tablatura.',
         'Ranking (opcional, para maiores de 18 anos): apelido, ID aleatório da conta, pontuações e datas, detalhados em “Ranking: o que guardamos”.',
-        'Sala online em dupla (opcional, para maiores de 18 anos): apelido e placar ao vivo, repassados ao seu parceiro sem serem gravados.',
+        'Sala online em dupla (opcional, para maiores de 18 anos): apelido e placar ao vivo, repassados ao seu parceiro sem serem gravados, e o registro temporário da sua vaga na sala (código da sala, ID pseudônimo e horário de entrada).',
         'Contato por e-mail: se você escrever para nós, recebemos seu endereço de e-mail e o que você contar na mensagem.'
       ]
     },
@@ -141,7 +141,8 @@ export const PRIVACY_POLICY: LegalDocument = {
       title: 'Sala online em dupla',
       paragraphs: [
         'A sala online é opcional e só para maiores de 18 anos. Durante a partida, seu parceiro vê seu apelido e, ao vivo, seus pontos, seu combo e sua precisão, e você vê os dele.',
-        'Essas informações e os comandos da partida passam pelo serviço de tempo real do Supabase só para chegar ao outro jogador e não são gravados. O som da sua guitarra nunca é transmitido.'
+        'Essas informações e os comandos da partida passam pelo serviço de tempo real do Supabase só para chegar ao outro jogador e não são gravados. O som da sua guitarra nunca é transmitido.',
+        'Para que só você e seu parceiro consigam entrar na sala, guardamos a sua vaga: o código da sala, o ID pseudônimo da conta e o horário de entrada. Esse registro é apagado quando a sala acaba ou, no máximo, em 6 horas.'
       ]
     },
     {
@@ -203,7 +204,7 @@ export const PRIVACY_POLICY: LegalDocument = {
         `conta do ranking e pontuações do ranking geral: enquanto a conta existir, até você usar “${DELETE_LABEL}” ou até ela ser apagada automaticamente depois de 12 meses sem acesso;`,
         'ranking semanal: 8 semanas;',
         'registros técnicos das partidas ranqueadas: 7 dias;',
-        'sala online: nada fica gravado;',
+        'sala online: mensagens e placar ao vivo não são gravados; o registro da vaga na sala é apagado em até 6 horas;',
         'registros técnicos de acesso da Vercel e do Supabase: pelos prazos definidos por esses fornecedores;',
         'cópias de segurança automáticas do banco, quando o Supabase as mantém: descartadas no ciclo do fornecedor, em poucos dias; nunca as usamos para recuperar dados que você excluiu;',
         'e-mails de contato: pelo tempo necessário para atender ao seu pedido;',
@@ -434,7 +435,7 @@ export const CONSENT_COPY: ConsentCopy = {
   onlineSummary: [
     'Seu parceiro vê seu apelido e, ao vivo, seus pontos, seu combo e sua precisão.',
     'O som da sua guitarra nunca é transmitido.',
-    'Apelido, placar e comandos da partida passam pelo Supabase só para chegar ao outro jogador e não são gravados.',
+    'Apelido, placar e comandos da partida passam pelo Supabase só para chegar ao outro jogador e não são gravados. Só a sua vaga na sala fica registrada, por até 6 horas.',
     'A sala online é só para maiores de 18 anos.'
   ],
   nicknameHelp: 'De 3 a 20 caracteres: letras (com ou sem acento), números, espaço, _ (sublinhado), - (hífen) e . (ponto). Não são aceitos palavrões, ofensas nem nomes que imitem outras pessoas ou a equipe do PRGB. No ranking, cada apelido é único. Para proteger sua privacidade, não use seu nome completo.',
