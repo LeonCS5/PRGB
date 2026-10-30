@@ -85,9 +85,13 @@ as $$
   select btrim(regexp_replace(public.moderation_base(p_nickname), '[[:space:]]+', ' ', 'g'))
 $$;
 
--- foldForModeration: camelCase split first ("FilhoDaPuta" -> "Filho Da Puta"), then moderation_base,
+-- foldForModeration: camelCase split first (a lowercase letter followed by an uppercase one gets a space:
+-- "FilhoDaPuta" -> "Filho Da Puta"; digits stay glued, they may be leetspeak), then moderation_base,
 -- leetspeak, every run of non-letters becomes one space, consecutive one-letter words joined ("p.u.t.a" ->
--- "puta"), repeated letters collapsed ("fuuuck" -> "fuck").
+-- "puta"), repeated letters collapsed ("fuuuck" -> "fuck"). [[:lower:]], [[:upper:]] and [[:alpha:]] stand
+-- for \p{Ll}, \p{Lu} and \p{L} and follow the database locale, like lower() (UTF-8 on Supabase); kra and
+-- n-apostrophe (U+0138, U+0149) are lowercase letters without an uppercase form that the locale does not
+-- count as [[:lower:]].
 create function public.fold_for_moderation(p_text text)
 returns text
 language plpgsql
@@ -101,9 +105,10 @@ declare
 begin
   foreach v_piece in array regexp_split_to_array(
     translate(
-      public.moderation_base(regexp_replace(coalesce(p_text, ''), '([a-zà-ÿ])([A-ZÀ-Þ])', '\1 \2', 'g')),
+      public.moderation_base(
+        regexp_replace(coalesce(p_text, ''), '([[:lower:]\u0138\u0149])([[:upper:]])', '\1 \2', 'g')),
       '013457@$', 'oieastas'),
-    '[^A-Za-zÀ-ÖØ-öø-ſ]+')
+    '[^[:alpha:]]+')
   loop
     continue when v_piece = '';
     if char_length(v_piece) = 1 then
@@ -119,7 +124,7 @@ begin
   if v_spelled <> '' then
     v_words := v_words || v_spelled;
   end if;
-  return regexp_replace(array_to_string(v_words, ' '), '([A-Za-zÀ-ÖØ-öø-ſ])\1+', '\1', 'g');
+  return regexp_replace(array_to_string(v_words, ' '), '([[:alpha:]])\1+', '\1', 'g');
 end;
 $$;
 
@@ -161,38 +166,46 @@ create table public.blocked_terms (
   mode text not null constraint blocked_terms_mode check (mode in ('word', 'part'))
 );
 
--- Fragments erased from the folded text before matching, so innocent words that hold a 'part' term pass
--- ("computador" stops holding "puta")
+-- Fragments erased from the folded text before matching, one at a time in `position` order, so everyday
+-- words and names that hold a 'part' term pass ("computador" stops holding "puta")
 create table public.moderation_allowlist (
   fragment text primary key constraint moderation_allowlist_folded
-    check (fragment ~ '^[a-z]+$' and public.fold_for_moderation(fragment) = fragment)
+    check (fragment ~ '^[a-z]+$' and public.fold_for_moderation(fragment) = fragment),
+  position smallint not null unique
 );
 
--- The app's current BLOCKED_TERMS in its order: up to 5 letters 'word', longer 'part'
+-- The seeds are BLOCKED_TERMS, MODERATION_ALLOWLIST and MODERATION_CONFUSABLES of src/services/nickname.ts;
+-- db-tests/ranking.test.ts compares them.
 insert into public.blocked_terms (term, mode)
-select t.term, case when char_length(t.term) <= 5 then 'word' else 'part' end
-from unnest(array[
+select t.term, 'part' from unnest(array[
   -- Pretending to be the PRGB team
-  'admin', 'administrador', 'administrator', 'moderador', 'moderator', 'moderacao', 'suporte', 'staf', 'prgb',
-  'prgboficial',
+  'admin', 'moderador', 'moderator', 'moderacao', 'suporte', 'prgb',
   -- Profanity and sexual terms (pt-BR)
-  'cu', 'cuzao', 'puta', 'putaria', 'foda', 'fodase', 'merda', 'bosta', 'caralh', 'buceta', 'boceta', 'xoxota',
-  'xereca', 'piroca', 'punhet', 'boquete', 'vadia', 'vagabunda', 'prostitut', 'arombad', 'fdp', 'pqp', 'vsf', 'vtnc',
+  'puta', 'putinh', 'cuzao', 'cuzinh', 'foda', 'merd', 'bosta', 'caralh', 'bucet', 'bocet', 'xoxota', 'xereca',
+  'piroca', 'punhet', 'boquete', 'vagabunda', 'prostitut', 'arombad',
   -- Profanity and sexual terms (English)
-  'fuck', 'fucker', 'fucking', 'shit', 'bulshit', 'cunt', 'slut', 'twat', 'whore', 'bitch', 'ashole', 'dickhead',
-  'anal', 'porn', 'porno', 'dildo',
+  'fuck', 'shit', 'bitch', 'whore', 'ashole', 'dickhead', 'porn', 'dildo',
   -- Homophobic and transphobic slurs
-  'viado', 'bicha', 'boiola', 'baitola', 'traveco', 'fag', 'fagot',
+  'viadinh', 'viadao', 'boiola', 'baitola', 'traveco',
   -- Racist slurs and hate
-  'niger', 'niga', 'chink', 'spic', 'nazi', 'nazista', 'hitler',
+  'nazi', 'hitler',
   -- Ableist slurs
   'retardad', 'retarded', 'mongoloide',
   -- Sexual violence
   'estupr', 'pedofil'
+]) as t(term)
+union all
+select t.term, 'word' from unnest(array[
+  'staf', -- "Gustaf"
+  'cu', 'vadia', 'fdp', 'pqp', 'vsf', 'vtnc', -- "Curitiba", "vadiar"
+  'cunt', 'slut', 'twat', 'anal', -- "Scunthorpe", "Analice", "Canal"
+  'viado', 'bicha', 'fag', 'fagot', -- "Desviado", "Bichano", "Fagundes", "Fagote"
+  'niger', 'niga', 'chink', 'spic' -- "Nigéria", "Spice Girls"
 ]) as t(term);
 
-insert into public.moderation_allowlist (fragment) values
-  ('computa'), ('deputa'), ('disputa'), ('imputa'), ('reputa'), ('badminton');
+insert into public.moderation_allowlist (position, fragment) values
+  (1, 'computa'), (2, 'deputa'), (3, 'diputa'), (4, 'disputa'), (5, 'reputa'), (6, 'imputa'), (7, 'amputa'),
+  (8, 'badminton'), (9, 'bostaph'), (10, 'shitake'), (11, 'nazir'), (12, 'nazim');
 
 -- One row per Songsterr track that can be ranked, counted on the server by the register-part Edge Function
 -- for the tab revision in revision_id. When Songsterr publishes a new revision the function recounts and
@@ -342,7 +355,7 @@ as $$
   where p.id = p_user_id
 $$;
 
--- Folded text with the allowlisted fragments erased, longest first
+-- Folded text with the allowlisted fragments erased, one at a time in position order
 create function public.strip_allowed_fragments(p_folded text)
 returns text
 language plpgsql
@@ -354,7 +367,7 @@ declare
   v_fragment text;
 begin
   for v_fragment in
-    select a.fragment from public.moderation_allowlist a order by char_length(a.fragment) desc, a.fragment
+    select a.fragment from public.moderation_allowlist a order by a.position
   loop
     v_text := replace(v_text, v_fragment, '');
   end loop;

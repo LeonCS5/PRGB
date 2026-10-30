@@ -1,6 +1,18 @@
 import type { PGlite, Transaction } from '@electric-sql/pglite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { getDemoSong } from '../../src/services/demoSong';
+import {
+  BLOCKED_TERMS,
+  MODERATION_ALLOWLIST,
+  MODERATION_CONFUSABLES,
+  NICKNAME_MAX,
+  NICKNAME_MIN,
+  NICKNAME_PATTERN,
+  containsBlockedTerm,
+  foldForModeration,
+  nicknameKey,
+  normalizeNickname
+} from '../../src/services/nickname';
 import { countScorableNotes, maxPossibleScore } from '../functions/_shared/scoreLimits.ts';
 import { callAs, createDatabase, createUser, rpc } from './harness.ts';
 
@@ -184,7 +196,7 @@ describe('create_profile', () => {
     await expectError(createProfile(await createUser(db), nickname), 'nickname_blocked');
   });
 
-  it.each(['Computador', 'Scunthorpe', 'Cuca Fresca', 'Prgbzinho', 'Ponta Porã'])('allows %j', async (nickname) => {
+  it.each(['Computador', 'Scunthorpe', 'Cuca Fresca', 'Gustaf', 'Ponta Porã'])('allows %j', async (nickname) => {
     await expect(createProfile(await createUser(db), nickname)).resolves.toBeDefined();
   });
 
@@ -204,114 +216,97 @@ describe('create_profile', () => {
   });
 });
 
-// Cases from src/services/nickname.test.ts plus the reviewed rules (Latin letters only, camelCase split,
-// allowlist, word/part modes), so the database and the app agree on every nickname
-describe('nickname rules mirror src/services/nickname.ts', () => {
-  const apply = async <T>(expression: string, inputs: string[]): Promise<[string, T][]> => {
-    const { rows } = await db.query<{ input: string; output: T }>(
-      `select c as input, ${expression} as output from unnest($1::text[]) with ordinality as t(c, n) order by n`,
-      [inputs]);
-    return rows.map((row) => [row.input, row.output]);
-  };
-  const expectAll = async (expression: string, inputs: string[], expected: boolean) =>
-    expect(await apply<boolean>(expression, inputs)).toEqual(inputs.map((input) => [input, expected]));
+// The database must judge every nickname exactly like src/services/nickname.ts: same lists, and the same
+// fold, block, key and validation results on the app's own test inputs plus some extra ones.
+describe('nickname rules match src/services/nickname.ts', () => {
+  const CLICKS = String.fromCodePoint(0x1c0, 0x1c1, 0x1c2, 0x1c3);
+  const CORPUS = [
+    // nickname.test.ts
+    'João', '  João \t  Silva\n', 'Joao', 'JOÃO', 'joao', '  João   Silva ', 'Ølsen', 'Łukasz', 'Straße', 'Adm\u0131n', 'Admin',
+    'Leo', 'Leo1', 'Ana_B', 'Ana B', 'Lea', 'João Silva', 'ana_b.r-1', 'Zoë', 'Søren', 'Ğül', 'ÀÖØöøÿĀſ',
+    '\u0192uck', 'Ǆemal', CLICKS, 'Ｌｅｏ', 'a×b', 'a÷b', 'ẞig', 'Leo!', 'a@b', 'Leo🎸', 'Le\u200bo', 'a  b', ' ab',
+    'ab ', 'a\tb', '', '\u0420RG\u0412', '\u0430dmin', 'Adμin', '日本語', '𝐀𝐝𝐦𝐢𝐧', '\u3164\u3164\u3164',
+    '\uffa0\uffa0\uffa0', '\u115f\u115f\u115f', 'a\u1160b', '\u1160\u1160\u1160', 'ab', '   ', 'abc', 'a'.repeat(20),
+    'a'.repeat(21), '𝐀'.repeat(20), '𝐀'.repeat(21), 'a<b>c', 'a!', '!'.repeat(21),
+    'Puta', 'Admin1', 'PRGB Oficial', 'Moderador', 'Suporte', 'H\u0131tler', 'Naz\u0131', 'Pørno', 'Merđa', 'B\u0131tch',
+    'Đickhead', 'Caralħo', 'ßhit', 'FuckYou', 'FilhoDaPuta', 'VaiTomarNoCu', 'PutaMerda', 'ShitHead', 'Putinha',
+    'Bucetinha', 'Viadinho', 'Merdinha', 'Cuzinho', 'Nazismo', 'Pornstar', 'AdminPRGB', 'PRGBAdmin', 'OficialPRGB',
+    'PRGBteam', 'Cássio', 'Assis', 'Scunthorpe', 'Analice', 'Ana L', 'Computador', 'Deputado', 'Disputa', 'Reputação',
+    'Enviado', 'Analista', 'Fagundes', 'Fagote', 'Bichano', 'Desviado', 'Badminton', 'Nigéria', 'Bostaph', 'Shiitake',
+    'Nazareth', 'Spice Girls', 'Ponta Porã', 'Pica-Pau', 'Kkkkk', 'Joao 1990', 'Guitar 5150',
+    'ÁÉÍÓÚ Çãõ', 'İstanbul', '@dm1n$', 'P0RR4 M3RD4', '5h17', '𝐟𝐮𝐜𝐤', 'ｆｕｃｋ', 'Joao_da-Silva.2', 'f.u.c.k',
+    'A B C Banda', 'FUUUUCK', 'kkkkk', '\u0131ĸłħŧđŋ', 'ð', 'ŒUVRE Æther Ølsen Þor', 'ŁĐØ', 'ÉdsonÁvila', '4dm1n', 'PuTa',
+    'puta', 'Pút4', 'p.u.t.a', 'Filho da Puta', 'C4r4lh0', 'Caralhada', 'b.u.c.e.t.a', 'ｐｕｔａ', 'Foda-se', 'Fodase',
+    'Motherfucker', 'Pornô', 'Admin123', 'admin_01', 'Merda123', 'Nazi88', 'fu2ck', 'Administrador', 'Moderadora',
+    'PRGBOficial', 'Equipe PRGB', '𝐏𝐑𝐆𝐁', 'Suporte Técnico', 'Staff', 'Faggot', 'N1gg3r', 'Nigga', 'Viado', 'v14d0',
+    'Boiola', 'Traveco', 'Retardada', 'Mongoloide', 'fuckyou', 'filhodaputa', 'putamerda', 'CaRaLhO', 'mErDa', 'FuCk',
+    'aDmIn', 'Pu7A', 'cArAlH0', 'Curitiba', 'Escudo', 'Gustaf', 'Amputado', 'Imputável', 'Diputado', 'Nazir', 'Nazim',
+    'Disputa Puta', 'BadmintonAdmin', 'Nazareth Nazi', 'badmintonadmin', 'Pinto', 'Macaco', 'Capricorno', 'Dick Dale',
+    'Pussy Riot', 'Hancock', 'Cocktail', 'Therapist', 'Moderado', 'Kkkkkk', 'Cássio 10', 'vaitomarnocu', 'xcux',
+    'x cu x', 'xfuckx',
+    // Extra: Latin Extended-A camelCase and look-alikes, decompositions into non-letters
+    'ZłotyŁoś', 'ÆsirStraße', 'Fuck Łord', 'ĿeoŉPuta', 'Ĳsselmeer', 'ſhit', 'Ŧwat Ħitler',
+    ...BLOCKED_TERMS.map(({ term }) => term), ...MODERATION_ALLOWLIST
+  ];
 
-  it('normalizes like normalizeNickname', async () => {
-    expect(await apply('public.clean_nickname(c)', ['  João \t  Silva\n', 'Joa\u0303o'])).toEqual([
-      ['  João \t  Silva\n', 'João Silva'], ['Joa\u0303o', 'João']
-    ]);
+  it('seeds exactly the lists of nickname.ts', async () => {
+    const { rows: terms } = await db.query<{ term: string; mode: string }>('select term, mode from public.blocked_terms');
+    expect(Object.fromEntries(terms.map(({ term, mode }) => [term, mode])))
+      .toEqual(Object.fromEntries(BLOCKED_TERMS.map(({ term, mode }) => [term, mode])));
+    expect(terms).toHaveLength(BLOCKED_TERMS.length);
+    const { rows: allowlist } = await db.query<{ fragment: string }>(
+      'select fragment from public.moderation_allowlist order by position');
+    expect(allowlist.map(({ fragment }) => fragment)).toEqual([...MODERATION_ALLOWLIST]);
+    const { rows: confusables } = await db.query<{ src: string; dst: string }>(
+      'select src, dst from public.moderation_confusables');
+    expect(Object.fromEntries(confusables.map(({ src, dst }) => [src, dst]))).toEqual({ ...MODERATION_CONFUSABLES });
   });
 
-  it('accepts only Latin letters, ASCII digits, _ - . and single spaces, 3 to 20 code points', async () => {
-    await expectAll('public.is_valid_nickname(c)',
-      ['Leo', 'João Silva', 'ana_b.r-1', 'Zoë', 'Søren', 'Łukasz', 'Đorđe', 'Ølsen', 'abc', 'a'.repeat(20), 'ł'.repeat(20)], true);
-    await expectAll('public.is_valid_nickname(c)', [
-      'Leo!', 'a@b', 'Leo🎸', 'Le\u200bo', 'a  b', ' ab', 'ab ', 'a\tb', '', 'ab', 'a'.repeat(21), 'a<b>c',
-      'Jose\u0301', // not NFC
-      '日本語', '𝐀𝐀𝐀', '\u0412\u0430\u0441\u044f', // other scripts, styled letters, Cyrillic
-      '\u0410dmin', // Cyrillic "\u0410" posing as Latin
-      '\u3164\u3164\u3164', 'Leo\u3164' // Hangul filler
-    ], false);
-    // Latin Extended-B is out: "f" with hook, click letters that look like "!"
-    await expectAll('public.is_valid_nickname(c)', ['\u0192uck', '\u01c3\u01c3\u01c3', 'Leo\u01c0'], false);
+  it('folds, blocks, keys and validates every input like the app', async () => {
+    const { rows } = await db.query<{ input: string; fold: string; blocked: boolean; clean: string; key: string; valid: boolean }>(
+      `select c as input, public.fold_for_moderation(c) as fold, public.is_blocked_nickname(c) as blocked,
+         public.clean_nickname(c) as clean, public.nickname_key(public.clean_nickname(c)) as key,
+         public.is_valid_nickname(public.clean_nickname(c)) as valid
+       from unnest($1::text[]) with ordinality as t(c, n) order by n`, [CORPUS]);
+    const app = (input: string) => {
+      const clean = normalizeNickname(input);
+      const length = Array.from(clean).length;
+      return {
+        input,
+        fold: foldForModeration(input),
+        blocked: containsBlockedTerm(input),
+        clean,
+        key: nicknameKey(input),
+        valid: length >= NICKNAME_MIN && length <= NICKNAME_MAX && NICKNAME_PATTERN.test(clean)
+      };
+    };
+    const differences = rows.filter((row) => JSON.stringify(row) !== JSON.stringify(app(row.input)));
+    expect(differences.map((row) => ({ database: row, app: app(row.input) }))).toEqual([]);
+    expect(rows).toHaveLength(CORPUS.length);
   });
 
-  it('folds like foldForModeration, splitting camelCase first', async () => {
-    const cases: [string, string][] = [
-      ['ÁÉÍÓÚ Çãõ', 'aeiou cao'], ['İstanbul', 'istanbul'], ['@dm1n$', 'admins'], ['P0RR4 M3RD4', 'pora merda'],
-      ['5h17', 'shit'], ['𝐟𝐮𝐜𝐤', 'fuck'], ['ｆｕｃｋ', 'fuck'], ['Joao_da-Silva.2', 'joao da silva'], ['Ana L', 'ana l'],
-      ['f.u.c.k', 'fuck'], ['A B C Banda', 'abc banda'], ['FUUUUCK', 'fuck'], ['Cássio', 'casio'], ['kkkkk', 'k'], ['', ''],
-      ['FilhoDaPuta', 'filho da puta'], ['AdminPRGB', 'admin prgb'], ['ÉdipoRei', 'edipo rei'],
-      ['Pørno', 'porno'], ['Æsir', 'aesir'], ['Straße', 'strase'], ['Łódź', 'lodz']
-    ];
-    expect(await apply('public.fold_for_moderation(c)', cases.map(([input]) => input))).toEqual(cases);
-  });
-
-  it('blocks like containsBlockedTerm', async () => {
-    await expectAll('public.is_blocked_nickname(c)', [
-      'Puta', 'PuTa', 'Pút4', 'p.u.t.a', 'Filho da Puta', 'FUUUCK', 'C4r4lh0', 'Caralhada', 'b.u.c.e.t.a', 'ｐｕｔａ',
-      'Foda-se', 'Fodase', 'Motherfucker', 'Pornô',
-      'Admin1', 'Admin123', 'admin_01', 'Merda123', 'Nazi88', 'fu2ck',
-      'Admin', 'Administrador', 'Moderadora', 'PRGB Oficial', 'PRGBOficial', 'Equipe PRGB', '𝐏𝐑𝐆𝐁', 'Suporte Técnico',
-      'Staff',
-      'Faggot', 'N1gg3r', 'Nigga', 'Viado', 'v14d0', 'Boiola', 'Traveco', 'Retardada', 'Mongoloide',
-      'Fuck You',
-      // Glued words are split by case, and alternating case can't cut a term apart
-      'CaRaLhO', 'pUtA', 'mErDa',
-      'FilhoDaPuta', 'AdminPRGB', 'FuckYou', 'MerdaTotal',
-      // Look-alike letters (moderation_confusables)
-      'Adm\u0131n', 'H\u0131tler', 'Naz\u0131', 'Pørno', 'Merđa', 'Fuck Łord'
-    ], true);
-    await expectAll('public.is_blocked_nickname(c)', ['Ølsen', 'Æsir', 'Straße'], false);
-  });
-
-  it('avoids the same false positives', async () => {
-    await expectAll('public.is_blocked_nickname(c)', [
-      'Scunthorpe', 'Analice', 'Ana L', 'Canal', 'Analógico', 'Computador', 'Deputado', 'Disputa', 'Reputação',
-      'Curitiba', 'Escudo', 'Nazareth', 'Spice Girls', 'Shiitake',
-      'Fagote', 'Bichano', 'Desviado', 'Badminton', 'Nigéria', 'Bostaph',
-      'Cássio', 'Assis', 'Ponta Porã', 'Pica-Pau', 'Pinto', 'Macaco', 'Capricorno', 'Dick Dale', 'Pussy Riot',
-      'Hancock', 'Cocktail', 'Therapist', 'Moderado', 'Kkkkkk',
-      'Cássio 10', 'Joao 1990', 'Guitar 5150'
-    ], false);
-  });
-
-  it('is driven by the word lists: modes, allowlist and confusables are rows', async () => {
-    const blocked = async (tx: Transaction, inputs: string[]) => {
+  it('is driven by the lists: modes, allowlist and confusables are rows', async () => {
+    const check = async (tx: Transaction) => {
       const { rows } = await tx.query<{ c: string; blocked: boolean }>(
-        'select c, public.is_blocked_nickname(c) as blocked from unnest($1::text[]) with ordinality as t(c, n) order by n',
-        [inputs]);
-      return rows.map((row) => [row.c, row.blocked]);
+        `select c, public.is_blocked_nickname(c) as blocked
+         from unnest(array['Curitiba', 'Computador', 'Pørno']) with ordinality as t(c, n) order by n`);
+      return rows.map((row) => row.blocked);
     };
     await db.transaction(async (tx) => {
-      await tx.query("update public.blocked_terms set mode = 'part' where term in ('puta', 'admin')");
-      // 'part' catches diminutives and glued words...
-      expect(await blocked(tx, ['Putaço', 'xxputaxx', 'Superadmin'])).toEqual(
-        [['Putaço', true], ['xxputaxx', true], ['Superadmin', true]]);
-      // ...while allowlisted fragments are erased before matching
-      const innocent = ['Computador', 'Deputado', 'Disputa', 'Reputação', 'Imputado', 'Badminton'];
-      expect(await blocked(tx, innocent)).toEqual(innocent.map((c) => [c, false]));
-      expect(await blocked(tx, ['Deputado Puta'])).toEqual([['Deputado Puta', true]]);
+      expect(await check(tx)).toEqual([false, false, true]);
+      await tx.query("update public.blocked_terms set mode = 'part' where term = 'cu'");
       await tx.query("delete from public.moderation_allowlist where fragment = 'computa'");
-      expect(await blocked(tx, ['Computador'])).toEqual([['Computador', true]]);
-      await tx.query("delete from public.moderation_confusables where dst = 'o'");
-      expect(await blocked(tx, ['Pørno'])).toEqual([['Pørno', false]]);
+      await tx.query("delete from public.moderation_confusables where src = 'ø'");
+      expect(await check(tx)).toEqual([true, true, false]);
       await tx.rollback();
     });
   });
 
-  it('stores the current BLOCKED_TERMS folded, with mode by length, and each blocks itself', async () => {
-    const { rows } = await db.query<{ term: string; mode: string; folded: string; blocked: boolean }>(
-      `select term, mode, public.fold_for_moderation(term) as folded, public.is_blocked_nickname(term) as blocked
-       from public.blocked_terms`);
-    expect(rows).toHaveLength(69);
-    for (const row of rows) {
-      expect(row, row.term).toEqual(
-        { term: row.term, mode: row.term.length <= 5 ? 'word' : 'part', folded: row.term, blocked: true });
-    }
+  it('only accepts folded terms and fragments', async () => {
     await expect(db.query("insert into public.blocked_terms values ('Staff', 'word')")).rejects.toMatchObject({ code: '23514' });
     await expect(db.query("insert into public.blocked_terms values ('xyz', 'both')")).rejects.toMatchObject({ code: '23514' });
-    await expect(db.query("insert into public.moderation_allowlist values ('Computa')")).rejects.toMatchObject({ code: '23514' });
+    await expect(db.query("insert into public.moderation_allowlist values ('Computa', 99)"))
+      .rejects.toMatchObject({ code: '23514' });
   });
 });
 
