@@ -4,9 +4,11 @@ export interface ModalsValue {
   isSearchOpen: boolean;
   isSettingsOpen: boolean;
   isAmpRackOpen: boolean;
+  isFeedbackOpen: boolean;
   setSearchOpen: (open: boolean) => void;
   setSettingsOpen: (open: boolean) => void;
   setAmpRackOpen: (open: boolean) => void;
+  setFeedbackOpen: (open: boolean) => void;
 }
 
 const ModalsContext = createContext<ModalsValue | null>(null);
@@ -15,10 +17,11 @@ export const ModalsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [isSearchOpen, setSearchOpen] = useState(false);
   const [isSettingsOpen, setSettingsOpen] = useState(false);
   const [isAmpRackOpen, setAmpRackOpen] = useState(false);
+  const [isFeedbackOpen, setFeedbackOpen] = useState(false);
 
   const value = useMemo(
-    () => ({ isSearchOpen, isSettingsOpen, isAmpRackOpen, setSearchOpen, setSettingsOpen, setAmpRackOpen }),
-    [isSearchOpen, isSettingsOpen, isAmpRackOpen]
+    () => ({ isSearchOpen, isSettingsOpen, isAmpRackOpen, isFeedbackOpen, setSearchOpen, setSettingsOpen, setAmpRackOpen, setFeedbackOpen }),
+    [isSearchOpen, isSettingsOpen, isAmpRackOpen, isFeedbackOpen]
   );
 
   return <ModalsContext.Provider value={value}>{children}</ModalsContext.Provider>;

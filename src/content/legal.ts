@@ -66,6 +66,7 @@ export const PRIVACY_POLICY: LegalDocument = {
     'Ranking e sala online são opcionais, só para maiores de 18 anos, e dependem do seu consentimento.',
     'No ranking, a conta é anônima: guardamos o apelido que você escolher (público), um ID aleatório e suas pontuações, sem e-mail, senha, nome real ou telefone.',
     'Você pode baixar seus dados, trocar o apelido ou excluir a conta quando quiser, direto no app.',
+    'A caixa “Reportar problema” é anônima: guardamos só a categoria, a tela e o texto, por 180 dias.',
     'Como em todo site, a hospedagem registra dados técnicos de acesso, como o endereço IP.',
     'Não vendemos dados, não exibimos publicidade e não usamos cookies de rastreamento nem ferramentas de análise de audiência.'
   ],
@@ -91,6 +92,7 @@ export const PRIVACY_POLICY: LegalDocument = {
         'Busca de músicas: o termo pesquisado e a música que você abre são repassados ao provedor externo de tablaturas.',
         'Ranking (opcional, para maiores de 18 anos): apelido, ID aleatório da conta, pontuações e datas, detalhados em “Ranking: o que guardamos”.',
         'Sala online em dupla (opcional, para maiores de 18 anos): apelido e placar ao vivo, repassados ao seu parceiro sem serem gravados, e o registro temporário da sua vaga na sala (código da sala, ID pseudônimo e horário de entrada).',
+        'Relatos de problemas: se você usar a caixa “Reportar problema”, guardamos a categoria, a tela em que você estava e o texto que escreveu. Não pedimos nome nem e-mail, e o relato não fica ligado à sua conta nem ao seu endereço IP. Evite escrever dados pessoais no texto.',
         'Contato por e-mail: se você escrever para nós, recebemos seu endereço de e-mail e o que você contar na mensagem.'
       ]
     },
@@ -157,6 +159,7 @@ export const PRIVACY_POLICY: LegalDocument = {
         'mostrar o ranking, guardar suas pontuações e calcular sua posição;',
         'conferir automaticamente se as pontuações são possíveis e evitar trapaças e abusos;',
         'ligar você ao seu parceiro na sala online;',
+        'ler os relatos de problemas e corrigir o que não funciona;',
         'registrar seu consentimento e atender aos seus pedidos como titular dos dados;',
         'apagar contas inativas e dados antigos nos prazos desta política.'
       ]
@@ -169,7 +172,7 @@ export const PRIVACY_POLICY: LegalDocument = {
       ],
       items: [
         `Consentimento (art. 7º, I): para criar a conta do ranking, publicar seu apelido e suas pontuações e usar a sala online. Você pode revogá-lo quando quiser, sem custo, excluindo a conta com o botão “${DELETE_LABEL}” ou deixando de usar a sala. Sem consentimento, você continua usando o PRGB normalmente, só sem esses recursos.`,
-        'Legítimo interesse (art. 7º, IX): para os registros técnicos de acesso, a segurança do site e a prevenção de fraudes no ranking, sempre com o mínimo de dados necessário.',
+        'Legítimo interesse (art. 7º, IX): para os registros técnicos de acesso, a segurança do site, a prevenção de fraudes no ranking e a leitura dos relatos de problemas, sempre com o mínimo de dados necessário.',
         'Cumprimento de obrigação legal (art. 7º, II): quando a lei ou uma autoridade competente exigir que guardemos ou forneçamos dados.'
       ]
     },
@@ -182,7 +185,7 @@ export const PRIVACY_POLICY: LegalDocument = {
       ],
       items: [
         'Vercel (EUA): hospeda o site, entrega os arquivos por uma rede global de servidores e repassa ao provedor de tablaturas os pedidos de busca e de música. Trata os registros técnicos de acesso.',
-        'Supabase (EUA): guarda os dados do ranking em servidores na região de São Paulo e transmite as mensagens da sala online. Para conferir pontuações, consulta no provedor de tablaturas dados públicos das faixas, como o número de notas e a duração, sem enviar dados seus.',
+        'Supabase (EUA): guarda os dados do ranking e os relatos de problemas em servidores na região de São Paulo e transmite as mensagens da sala online. Para conferir pontuações, consulta no provedor de tablaturas dados públicos das faixas, como o número de notas e a duração, sem enviar dados seus.',
         'Provedor externo de tablaturas: serviço de terceiro que fornece o acervo de músicas. Recebe, repassados pela Vercel, o termo que você busca e os códigos da música e da faixa que você abre. Esses pedidos podem levar dados técnicos, como endereço IP e tipo de navegador, que ele trata conforme a política de privacidade dele. Ele nunca recebe dados da sua conta do ranking. Você pode pedir o nome desse provedor pelo e-mail desta Política.',
         'Outros jogadores: veem seu apelido e suas pontuações no ranking e, na sala online, seu placar ao vivo.',
         'Autoridades: só quando a lei ou uma ordem judicial exigir.'
@@ -207,6 +210,7 @@ export const PRIVACY_POLICY: LegalDocument = {
         'sala online: mensagens e placar ao vivo não são gravados; o registro da vaga na sala é apagado em até 6 horas, e os horários de criação de salas, em cerca de 1 hora;',
         'registros técnicos de acesso da Vercel e do Supabase: pelos prazos definidos por esses fornecedores;',
         'cópias de segurança automáticas do banco, quando o Supabase as mantém: descartadas no ciclo do fornecedor, em poucos dias; nunca as usamos para recuperar dados que você excluiu;',
+        'relatos de problemas: 180 dias;',
         'e-mails de contato: pelo tempo necessário para atender ao seu pedido;',
         'dados no seu navegador: até você apagá-los.'
       ]
@@ -225,7 +229,8 @@ export const PRIVACY_POLICY: LegalDocument = {
         'Informação: saber com quem compartilhamos dados (veja “Com quem compartilhamos”) e o que acontece se você não consentir: você continua usando o PRGB, só sem ranking e sala online.',
         'Revisão de decisões automatizadas: se uma pontuação ou um apelido seu for recusado automaticamente, você pode pedir que a decisão seja revista.',
         'Anonimização, bloqueio ou eliminação de dados desnecessários, excessivos ou tratados em desacordo com a LGPD.',
-        'Oposição a tratamentos feitos com base no legítimo interesse, se eles não cumprirem a LGPD.'
+        'Oposição a tratamentos feitos com base no legítimo interesse, se eles não cumprirem a LGPD.',
+        'Relatos de problemas: como não ficam ligados a você, só conseguimos achar um relato para apagá-lo se você nos contar o que escreveu.'
       ]
     },
     {

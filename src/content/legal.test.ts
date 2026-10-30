@@ -59,7 +59,7 @@ describe('legal documents', () => {
   // Facts shared with the backend (retention job, providers, legal bases): if one changes, review these texts.
   it('state the retention periods, providers and legal bases the app really uses', () => {
     const retention = sectionText(PRIVACY_POLICY, 'retencao');
-    for (const period of ['12 meses', '8 semanas', '7 dias']) expect(retention).toContain(period);
+    for (const period of ['12 meses', '8 semanas', '7 dias', '180 dias']) expect(retention).toContain(period);
     const sharing = sectionText(PRIVACY_POLICY, 'compartilhamento');
     for (const party of ['Vercel', 'Supabase', 'Provedor externo de tablaturas']) expect(sharing).toContain(party);
     expect(sectionText(PRIVACY_POLICY, 'transferencia-internacional')).toContain('Estados Unidos');
@@ -93,7 +93,7 @@ describe('legal documents', () => {
     const allowed = new Set([
       ...DOCUMENTS.flatMap((document) => document.sections.map((section) => section.title)),
       CONSENT_COPY.exportLabel, CONSENT_COPY.deleteTitle, CONSENT_COPY.clearLocalLabel,
-      'admin', 'moderador', 'suporte'
+      'Reportar problema', 'admin', 'moderador', 'suporte'
     ]);
     for (const text of ALL_TEXT) {
       expect(text.split('“').length, text).toBe(text.split('”').length);

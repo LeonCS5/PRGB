@@ -18,7 +18,8 @@ import {
   Loader2,
   Users,
   Wifi,
-  X
+  X,
+  MessageSquareWarning
 } from 'lucide-react';
 import { getDemoSong, DEMO_SONG_ID } from './services/demoSong';
 import { ErrorNotice } from './components/ErrorNotice';
@@ -43,6 +44,7 @@ import { AudioSettingsModal } from './components/AudioSettingsModal';
 import { AmpRack } from './components/AmpRack';
 import { AudioSessionProvider, useAudioSession, useLatestPitch } from './context/AudioSessionContext';
 import { ModalsProvider, useModals } from './context/ModalsContext';
+import { FeedbackModal } from './components/FeedbackModal';
 import { readPreferences, savePreferences } from './context/preferences';
 import { DEFAULT_PLAYER_NAMES, nextSessionKey, type GamePart, type GameSession, type RankedStart, type SoloSession } from './context/gameSession';
 import { RankingProvider } from './context/RankingProvider';
@@ -161,9 +163,11 @@ const AppContent: React.FC = () => {
     isSearchOpen,
     isSettingsOpen,
     isAmpRackOpen,
+    isFeedbackOpen,
     setSearchOpen: setIsSearchOpen,
     setSettingsOpen: setIsSettingsOpen,
-    setAmpRackOpen: setIsAmpRackOpen
+    setAmpRackOpen: setIsAmpRackOpen,
+    setFeedbackOpen: setIsFeedbackOpen
   } = useModals();
   const { isConfigured: isRankingOn, hasAccount, openAccount } = useRanking();
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
@@ -585,12 +589,16 @@ const AppContent: React.FC = () => {
                   <a href="#privacidade" className="rounded py-2 hover:text-amp-300">Privacidade</a>
                   <a href="#termos" className="rounded py-2 hover:text-amp-300">Termos</a>
                 </nav>
+                <button type="button" onClick={() => setIsFeedbackOpen(true)} className="flex cursor-pointer items-center gap-2 rounded py-2 hover:text-amp-300"><MessageSquareWarning size={15} /> Reportar problema</button>
                 <a href={supportHref} target="_blank" rel="noopener noreferrer" className="rounded py-2 hover:text-amp-300">{supportLabel} ↗</a>
               </div>
             </div>
           </footer>
         </div>
       )}
+
+      <FeedbackModal isOpen={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)}
+        screen={onlineSession ? 'sala' : isFreePlayOpen ? 'play_free' : session ? 'jogo' : 'inicio'} />
 
       {/* Song Search Modal */}
       <SongSearchModal

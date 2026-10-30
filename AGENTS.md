@@ -73,6 +73,7 @@ PRGB/
 │   │
 │   ├── components/
 │   │   ├── AudioSettingsModal.tsx   # Modal: device selector, afinador, VU meter
+│   │   ├── FeedbackModal.tsx        # Caixa "Reportar problema": relato anônimo, com o e-mail de contato se falhar
 │   │   ├── AudioRouting.tsx         # Medidor de entrada em dB e avisos de rota (microfone do PC, retorno da saída)
 │   │   ├── BrandMark.tsx            # Logo PRGB (palheta) + wordmark
 │   │   ├── ChallengeCard.tsx        # Card de desafio (melhor score pessoal de um amigo)
@@ -112,6 +113,7 @@ PRGB/
 │   │   ├── synthAudio.ts            # SFX + MetronomeScheduler (cliques agendados no relógio do AudioContext)
 │   │   ├── ampEngine.ts           # DSP chain: preamp→waveshaper→EQ→cab→reverb→output
 │   │   └── backend/
+│   │       ├── feedbackApi.ts       # Relatos da caixa "Reportar problema" (RPC anônima)
 │   │       ├── rankingApi.ts        # RPCs do ranking: createProfile, submitScore, getLeaderboard, registerPart, etc.
 │   │       ├── roomChannel.ts       # Salas online via Supabase Realtime (Broadcast + Presence, host/guest)
 │   │       └── supabaseClient.ts    # Cliente Supabase (lazy, on-demand); lê VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY
@@ -329,8 +331,9 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 ### Rodada 6 — Play Free (concluída em `claude/fase2-base`, sem merge em `main`)
 - [x] **Play Free** — modo livre, sem música nem pontuação: mostra nota, frequência, afinação, corda, casa, nível e clareza, e o histórico nas seis cordas; serve também para testar a entrada de áudio (@bob, revisado e corrigido por @claude; testado no navegador com microfone sintético, não com guitarra)
 
-### Rodada 7 — entrada e saída de áudio (em `claude/entrada-saida-audio`)
+### Rodada 7 — entrada e saída de áudio e relatos
 - [x] **Rota de áudio** — sai sozinho do microfone do PC, saída escolhida com `setSinkId`, medidor em dB. Interfaces USB podem devolver a saída para a própria entrada: antes de abrir o monitor no mesmo aparelho, um tom de -40 dBFS testa o retorno. **Não reproduza esse laço em teste**: ele satura a saída da interface (@claude; validado no hardware real, sem guitarra tocando)
+- [x] **Caixa de reportar problemas** — RPC `submit_feedback` com a chave pública, sem conta nem consentimento; guarda categoria, tela e texto, limite de 60 por hora para todos, apagados em 180 dias. Os relatos são lidos na tabela `feedback`, no painel do Supabase (@claude)
 
 ### Pendências conhecidas (sem dono)
 - [ ] **Dupla online com guitarras de verdade** — testada de ponta a ponta no Supabase real com dois navegadores, contas temporárias e microfone sintético (partida, revanche com troca de música, queda e volta, saída do anfitrião, exportação e exclusão de conta) e o ranking com uma partida real aceita pelo servidor, mas nunca por duas pessoas com guitarra. Falta também o caso de sala cheia (`room_full`), que exige uma terceira conta.

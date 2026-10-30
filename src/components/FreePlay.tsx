@@ -2,7 +2,7 @@
 // makes this the quickest way to check an audio setup.
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Mic, Sliders, Trash2, Zap } from 'lucide-react';
+import { MessageSquareWarning, Mic, Sliders, Trash2, Zap } from 'lucide-react';
 import { AudioRouteNotice, InputLevelMeter } from './AudioRouting';
 import { BrandMark } from './BrandMark';
 import { ErrorNotice } from './ErrorNotice';
@@ -16,6 +16,7 @@ import {
   type LaneLayout,
 } from './practiceLanes';
 import { useAudioSession, useLatestPitch } from '../context/AudioSessionContext';
+import { useModals } from '../context/ModalsContext';
 import { audioDeviceName } from '../services/audioDevices';
 import { STANDARD_TUNING } from '../services/audioEngine';
 import { updateTrail, type PlayedNote } from '../services/noteTrail';
@@ -48,6 +49,7 @@ const Reading: React.FC<{ label: string; children: React.ReactNode }> = ({ label
 );
 
 export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings, onOpenAmpRack }) => {
+  const { setFeedbackOpen } = useModals();
   const { audioEngine, isAudioRunning, startAudio, audioError, dismissAudioError, getLatestPitch, activeInput, outputName } = useAudioSession();
   const pitch = useLatestPitch();
   const [palette] = useState(readPalette);
@@ -185,6 +187,10 @@ export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings,
               <span className="block truncate">Saída: {outputName || 'padrão do sistema'}</span>
             </button>
           )}
+          <button type="button" onClick={() => setFeedbackOpen(true)} aria-label="Reportar problema" title="Reportar problema"
+            className={`${activeInput ? 'ml-auto sm:ml-0' : 'ml-auto'} flex min-h-10 min-w-10 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-ink-700 bg-ink-800 text-ink-200 transition hover:border-ink-500`}>
+            <MessageSquareWarning size={16} />
+          </button>
         </div>
         <div className="mt-2 empty:hidden"><AudioRouteNotice /></div>
 

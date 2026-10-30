@@ -11,7 +11,8 @@ import {
   Zap,
   Loader2,
   Trophy,
-  UserRound
+  UserRound,
+  MessageSquareWarning
 } from 'lucide-react';
 import { BrandMark } from './BrandMark';
 import { ModalFrame } from './ModalFrame';
@@ -31,6 +32,7 @@ import {
   type HitEffects,
   type LaneLayout
 } from './practiceLanes';
+import { useModals } from '../context/ModalsContext';
 import type { NoteEvent } from '../services/tabsApi';
 import type { DetectedPitch, PlayerSlot } from '../services/audioEngine';
 import type { Challenge } from '../services/challenge';
@@ -727,6 +729,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     setSpeed(value);
   };
 
+  const { setFeedbackOpen } = useModals();
   const toolClass = 'flex min-h-10 min-w-10 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-700 bg-ink-800 px-3 text-xs font-semibold text-ink-200 transition hover:border-ink-500 disabled:cursor-not-allowed disabled:opacity-50';
   const lockedHint = isOnline ? 'Na dupla online a música segue sem pausa, em 1×.' : ranked.isOn ? 'Partidas ranqueadas valem só em 1× e sem saltos.' : undefined;
   const lockedHelp = ranked.isOn ? rankedHelpId : undefined;
@@ -782,6 +785,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
           <button aria-label="Configurações de áudio" onClick={onOpenAudioSettings} className={toolClass}><Sliders size={16} /><span className="hidden sm:inline">Áudio</span></button>
           <button aria-label="Abrir PRGB Amp" onClick={onOpenAmpRack} className={toolClass + ' text-amp-300!'}><Zap size={16} /><span>{toneSettings ? AMP_PRESETS[toneSettings.preset]?.badge : 'Amp'}</span></button>
           <button aria-label={toneSettings?.isMonitoringEnabled ? 'Silenciar guitarra' : 'Ouvir guitarra'} aria-pressed={toneSettings?.isMonitoringEnabled ?? false} onClick={() => { if (ampEngine && toneSettings) ampEngine.setMonitoringEnabled(!toneSettings.isMonitoringEnabled); }} className={toolClass}>{toneSettings?.isMonitoringEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}</button>
+          <button aria-label="Reportar problema" title="Reportar problema" onClick={() => setFeedbackOpen(true)} className={toolClass}><MessageSquareWarning size={16} /></button>
           {!isOnline && isRankingOn && <button aria-label="Minha conta do ranking" onClick={openRankingAccount} className={toolClass}><UserRound size={16} /><span className="hidden lg:inline">Minha conta</span></button>}
         </div>
         {!isOnline && ranked.isAvailable && (

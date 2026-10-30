@@ -26,7 +26,7 @@ afterAll(async () => {
   await db?.close();
 });
 
-const PUBLIC_RPCS = ['get_leaderboard', 'server_time'];
+const PUBLIC_RPCS = ['get_leaderboard', 'server_time', 'submit_feedback'];
 const PLAYER_RPCS = [
   'create_profile', 'create_room', 'delete_my_account', 'export_my_data', 'get_my_position', 'get_my_profile',
   'is_room_member', 'join_room', 'leave_room',
@@ -92,7 +92,7 @@ describe('access control', () => {
       from pg_class c join pg_namespace n on n.oid = c.relnamespace
       where n.nspname = 'public' and c.relkind = 'r'`);
     expect(rows.map((r) => r.table).sort()).toEqual([
-      'blocked_terms', 'moderation_allowlist', 'moderation_confusables', 'play_sessions', 'profiles',
+      'blocked_terms', 'feedback', 'moderation_allowlist', 'moderation_confusables', 'play_sessions', 'profiles',
       'register_part_quota', 'room_create_quota', 'room_seats', 'scores_best', 'scores_weekly', 'song_parts'
     ]);
     for (const row of rows) expect(row, row.table).toMatchObject({ rls: true, anon: false, authenticated: false });
