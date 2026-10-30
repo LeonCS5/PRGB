@@ -1,8 +1,7 @@
 // Online duel rooms (host + guest) over Supabase Realtime: Broadcast carries the game messages and Presence
 // tells who is in the room, on the private channel room:<CODE> (policies in the _room_realtime migration).
-// Nothing is written to any table, and no user id is shared: each connection has a random id. Only players
-// with a session can join (the app asks for 18+ consent and room acceptance first); this service never
-// creates an account. The two-seat limit is enforced by the clients: Realtime can't count who is in a channel.
+// RPCs admit two server-owned seats; Presence only reports whether the other seat is online. No user id
+// is shared over Realtime. A session and profile must already exist; this service never creates an account.
 
 import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 import { validateNickname } from '../nickname';
@@ -13,15 +12,12 @@ export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O 
 export const ROOM_CODE_LENGTH = 6;
 export const ROOM_CAPACITY = 2;
 export const START_LEAD_MS = 4000;
-export const PROGRESS_INTERVAL_MS = 250; // at most 4 progress messages per second
+export const PROGRESS_INTERVAL_MS = 500; // at most 2 progress messages per second
 export const JOIN_TIMEOUT_MS = 5000;
 
 const BROADCAST_EVENT = 'room';
 const TEXT_MAX = 200;
-const EARLY_MAX = 20;
-const EARLY_TTL_MS = 5000;
 const BACKLOG_MAX = 50;
-const CREATE_ATTEMPTS = 3;
 const ROOM_CODE_PATTERN = new RegExp(`^[${ROOM_CODE_ALPHABET}]{${ROOM_CODE_LENGTH}}$`);
 
 export type RoomRole = 'host' | 'guest';
@@ -29,6 +25,8 @@ export type RoomRole = 'host' | 'guest';
 export type RoomErrorCode =
   | 'not_configured'
   | 'not_authenticated' // no session, or Realtime refused it
+  | 'profile_required'
+  | 'rate_limited'
   | 'network'
   | 'room_full' // already two players
   | 'room_not_found' // nobody hosting this code
@@ -105,7 +103,7 @@ export type RoomMessage =
   | ProgressMessage
   | LeaveMessage;
 
-/** The other player; `id` is random per connection. */
+/** The other player; `id` is the seat number, never an account id. */
 export interface RoomPeer {
   id: string;
   role: RoomRole;
@@ -115,19 +113,20 @@ export type RoomEvent =
   | { type: 'peer_joined'; peer: RoomPeer } // also when the peer comes back after a dropped connection
   | { type: 'peer_left'; peer: RoomPeer } // a dropped connection too; a `leave` message comes first when they quit
   | { type: 'message'; from: RoomPeer; message: RoomMessage }
-  // network: connection lost, Realtime keeps retrying (see reconnected); room_full: lost the seat, the room closes
+  // network: connection lost, Realtime keeps retrying (see reconnected)
   | { type: 'error'; code: RoomErrorCode }
   | { type: 'reconnected' }
   | { type: 'closed' };
 
 export interface RoomHandle {
   readonly code: string;
+  readonly seat: 1 | 2;
   readonly role: RoomRole;
   /** Returns a function that removes the listener. The first listener also gets what happened before it. */
   onEvent(listener: (event: RoomEvent) => void): () => void;
   /**
-   * Validates and broadcasts. Progress is throttled to 4 per second keeping the latest (finished: true goes at
-   * once) and waits for the reconnection when offline; other messages reject with `network` while offline.
+   * Validates and broadcasts. Progress is throttled to 2 per second (finished: true goes at once), retained
+   * until acknowledged and retried on reconnection. Other messages reject with `network` while offline.
    * `{ type: 'leave' }` is the same as leave().
    */
   send(message: RoomMessage): Promise<void>;
@@ -143,35 +142,25 @@ export interface RoomHandle {
 }
 
 export interface RoomService {
-  /** Opens a new room as host with a fresh code (a code someone already hosts is skipped). */
+  /** Opens a room with a code and host seat assigned by create_room. Requires an existing profile. */
   createRoom(): Promise<RoomHandle>;
-  /** Joins a hosted room as guest: room_not_found when nobody hosts it, room_full with two players. */
+  /** join_room assigns a seat, or returns the same seat on reentry (including the host's). */
   joinRoom(code: string): Promise<RoomHandle>;
 }
 
 export interface RoomDeps {
   getClient: () => Promise<SupabaseClient | null>;
   getServerTime: () => Promise<ServerTime>;
-  randomBytes: (length: number) => Uint8Array;
-  newId: () => string;
   joinTimeoutMs: number;
 }
 
 const DEFAULT_DEPS: RoomDeps = {
   getClient: getSupabaseClient,
   getServerTime: fetchServerTime,
-  randomBytes: (length) => crypto.getRandomValues(new Uint8Array(length)),
-  newId: () => crypto.randomUUID(),
   joinTimeoutMs: JOIN_TIMEOUT_MS
 };
 
 // Codes ---------------------------------------------------------------------------------------------------
-
-/** 32 symbols divide 256, so a random byte modulo 32 keeps every symbol equally likely. */
-export function generateRoomCode(randomBytes: RoomDeps['randomBytes'] = DEFAULT_DEPS.randomBytes): string {
-  return Array.from(randomBytes(ROOM_CODE_LENGTH), (byte) => ROOM_CODE_ALPHABET[byte % ROOM_CODE_ALPHABET.length])
-    .join('');
-}
 
 /** Trimmed and uppercased code, or null when it can't be a room code. */
 export function normalizeRoomCode(input: string): string | null {
@@ -239,258 +228,261 @@ export function parseRoomMessage(value: unknown): RoomMessage | null {
 
 const HOST_ONLY: ReadonlySet<RoomMessage['type']> = new Set(['select_song', 'start']);
 
-// Presence ------------------------------------------------------------------------------------------------
-
-interface Member extends RoomPeer {
-  joinedAt: number;
-}
-
-function readMembers(channel: RealtimeChannel): Member[] {
-  const members: Member[] = [];
-  for (const [id, metas] of Object.entries(channel.presenceState<{ role?: unknown; joinedAt?: unknown }>())) {
-    const meta = metas[0];
-    if ((meta?.role === 'host' || meta?.role === 'guest') && typeof meta.joinedAt === 'number') {
-      members.push({ id, role: meta.role, joinedAt: meta.joinedAt });
-    }
-  }
-  return members;
-}
-
-// The first host and the first guest (by join time, then id) hold the two seats; everyone computes the same
-// answer from the same presence state, so a third player knows it has to leave.
-function seated(members: Member[]): Member[] {
-  const byArrival = (a: Member, b: Member) => a.joinedAt - b.joinedAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
-  const first = (role: RoomRole) => members.filter((member) => member.role === role).sort(byArrival)[0];
-  return [first('host'), first('guest')].filter((member): member is Member => member !== undefined)
-    .slice(0, ROOM_CAPACITY);
-}
-
 // Room ----------------------------------------------------------------------------------------------------
 
 class Room {
   readonly code: string;
+  readonly seat: 1 | 2;
   readonly role: RoomRole;
+  readonly userId: string;
   readonly #client: SupabaseClient;
   readonly #channel: RealtimeChannel;
   readonly #deps: RoomDeps;
-  readonly #selfId: string;
-  readonly #joinedAt: number;
+  readonly #other: RoomPeer;
+  readonly #onClosed: () => void;
   readonly #listeners = new Set<(event: RoomEvent) => void>();
-  // Events from before the first listener: the host is usually in the room when joinRoom returns
   readonly #backlog: RoomEvent[] = [];
-  // Messages from a player not seen in presence yet (their join can arrive after their first message)
-  readonly #early: { from: string; at: number; message: RoomMessage }[] = [];
+  readonly #handle: RoomHandle;
   #offsetMs: number;
-  #peer: Member | null = null;
+  #peer: RoomPeer | null = null;
   #joined = false;
   #connected = false;
   #closed = false;
+  #connectionVersion = 0;
   #lastProgressAt = Number.NEGATIVE_INFINITY;
   #queuedProgress: ProgressMessage | null = null;
   #progressTimer: ReturnType<typeof setTimeout> | null = null;
+  #progressFlight: Promise<void> | null = null;
+  #closePromise: Promise<void> | null = null;
   #settleJoin: ((error?: RoomError) => void) | null = null;
 
-  constructor(client: SupabaseClient, deps: RoomDeps, code: string, role: RoomRole, offsetMs: number) {
+  constructor(client: SupabaseClient, deps: RoomDeps, admission: RoomAdmission, userId: string,
+    offsetMs: number, onClosed: () => void) {
     this.#client = client;
     this.#deps = deps;
-    this.code = code;
-    this.role = role;
+    this.code = admission.code;
+    this.seat = admission.seat;
+    this.role = admission.seat === 1 ? 'host' : 'guest';
+    this.userId = userId;
     this.#offsetMs = offsetMs;
-    this.#selfId = deps.newId();
-    this.#joinedAt = Math.round(Date.now() + offsetMs);
-    this.#channel = client.channel(`room:${code}`, {
-      config: { private: true, broadcast: { self: false }, presence: { key: this.#selfId } }
+    this.#onClosed = onClosed;
+    this.#other = { id: this.seat === 1 ? '2' : '1', role: this.role === 'host' ? 'guest' : 'host' };
+    this.#channel = client.channel(`room:${this.code}`, {
+      config: { private: true, broadcast: { self: false, ack: true }, presence: { key: String(this.seat) } }
     });
+    this.#handle = {
+      code: this.code,
+      seat: this.seat,
+      role: this.role,
+      onEvent: (listener) => {
+        if (this.#closed) return () => undefined;
+        this.#listeners.add(listener);
+        if (this.#backlog.length > 0) {
+          queueMicrotask(() => {
+            if (!this.#closed && this.#listeners.size > 0) {
+              for (const event of this.#backlog.splice(0)) this.#emit(event);
+            }
+          });
+        }
+        return () => this.#listeners.delete(listener);
+      },
+      send: (message) => this.send(message),
+      getPeers: () => (this.#peer ? [{ ...this.#peer }] : []),
+      scheduleStart: (leadMs = START_LEAD_MS) => this.scheduleStart(leadMs),
+      localStartTimeFor: (startAtServerMs) => this.localStartTimeFor(startAtServerMs),
+      leave: () => this.close(true, true)
+    };
   }
 
-  /** Subscribes, takes a seat and waits until the room is usable (guest: until the host is there). */
+  get closed(): boolean { return this.#closed; }
+
+  handle(): RoomHandle { return this.#handle; }
+
+  /** The RPC already assigned the seat; an offline peer does not prevent subscribing. */
   join(): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const giveUpAfter = (ms: number, code: RoomErrorCode) => {
-        clearTimeout(timer);
-        timer = setTimeout(() => this.#settleJoin?.(new RoomError(code)), ms);
-      };
+      const timer = setTimeout(() => this.#settleJoin?.(new RoomError('network')), this.#deps.joinTimeoutMs);
       this.#settleJoin = (error) => {
         clearTimeout(timer);
         this.#settleJoin = null;
-        if (error) {
-          // Closed before rejecting, so trying the same code again gets a new channel
-          void this.#close(false).finally(() => reject(error));
-        } else {
+        if (error) reject(error);
+        else {
           this.#joined = true;
           resolve();
         }
       };
-      // Reaching Realtime gets more time than waiting for the host once inside
-      giveUpAfter(this.#deps.joinTimeoutMs * 2, 'network');
-
-      this.#channel
-        .on('presence', { event: 'sync' }, () => this.#onPresence())
-        .on('broadcast', { event: BROADCAST_EVENT }, ({ payload }) => this.#onBroadcast(payload))
-        .subscribe((status, error) => {
-          const state = `${status}`;
-          if (state === 'SUBSCRIBED') {
-            if (this.#settleJoin) {
-              giveUpAfter(this.#deps.joinTimeoutMs, this.role === 'guest' ? 'room_not_found' : 'network');
+      try {
+        this.#channel
+          .on('presence', { event: 'sync' }, () => this.#onPresence())
+          .on('broadcast', { event: BROADCAST_EVENT }, ({ payload }) => this.#onBroadcast(payload))
+          .subscribe((status, error) => {
+            if (this.#closed) return;
+            if (status === 'SUBSCRIBED') {
+              void this.#onSubscribed();
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+              const refused = /unauthori[sz]ed|permission|forbidden|jwt|token.*expired/i.test(error?.message ?? '');
+              this.#onConnectionLost(new RoomError(refused ? 'not_authenticated' : 'network', { cause: error }));
+            } else if (status === 'CLOSED') {
+              this.#onConnectionLost(new RoomError('network'));
+              void this.close(false, true).catch(() => undefined);
             }
-            this.#onSubscribed();
-          } else if (state === 'CHANNEL_ERROR' || state === 'TIMED_OUT') {
-            const refused = /unauthori[sz]ed|permission/i.test(error?.message ?? '');
-            this.#onConnectionLost(new RoomError(refused ? 'not_authenticated' : 'network', { cause: error }));
-          } else if (state === 'CLOSED' && !this.#closed) {
-            // Realtime retries after errors, but a closed channel is gone for good
-            this.#onConnectionLost(new RoomError('network'));
-            void this.leave();
-          }
-        });
+          });
+      } catch (cause) {
+        this.#settleJoin?.(toRoomError(cause));
+      }
     });
   }
 
-  #onSubscribed(): void {
-    if (this.#closed) return;
-    const reconnected = this.#joined && !this.#connected;
+  async #onSubscribed(): Promise<void> {
+    if (this.#closed || this.#connected) return;
+    const reconnected = this.#joined;
+    const version = this.#connectionVersion;
     this.#connected = true;
-    // Also after reconnecting: presence does not survive a dropped socket. Same joinedAt, so the seat stays.
-    void this.#channel.track({ role: this.role, joinedAt: this.#joinedAt }).then(
-      (result) => {
-        if (result !== 'ok') this.#onConnectionLost(new RoomError('network'));
-      },
-      (cause: unknown) => this.#onConnectionLost(new RoomError('network', { cause }))
-    );
-    if (reconnected) {
-      this.#emit({ type: 'reconnected' });
-      this.#flushProgress();
+    try {
+      const result = await this.#channel.track({ seat: this.seat });
+      if (this.#closed || version !== this.#connectionVersion) return;
+      if (result !== 'ok') throw new RoomError('network');
+      this.#settleJoin?.();
+      if (reconnected) {
+        this.#emit({ type: 'reconnected' });
+        void this.#flushProgress(true).catch(() => undefined);
+      }
+    } catch (cause) {
+      if (version === this.#connectionVersion) this.#onConnectionLost(toRoomError(cause));
     }
   }
 
   #onConnectionLost(error: RoomError): void {
-    if (this.#settleJoin) {
-      this.#settleJoin(error);
-    } else if (this.#connected && !this.#closed) {
-      this.#connected = false;
-      this.#emit({ type: 'error', code: error.code });
-    }
+    if (this.#closed) return;
+    const wasConnected = this.#connected;
+    this.#connected = false;
+    this.#connectionVersion++;
+    this.#cancelProgressTimer();
+    if (this.#settleJoin) this.#settleJoin(error);
+    else if (wasConnected) this.#emit({ type: 'error', code: error.code });
   }
 
   #emit(event: RoomEvent): void {
     if (this.#listeners.size === 0) {
-      if (this.#backlog.length < BACKLOG_MAX) this.#backlog.push(event);
+      if (!this.#closed && this.#backlog.length < BACKLOG_MAX) this.#backlog.push(event);
       return;
     }
     for (const listener of [...this.#listeners]) listener(event);
   }
 
   #onPresence(): void {
-    if (this.#closed) return;
-    const members = readMembers(this.#channel);
-    if (!members.some((member) => member.id === this.#selfId)) return; // our own track() not seen yet
-    const seats = seated(members);
-    if (!seats.some((member) => member.id === this.#selfId)) {
-      if (!this.#settleJoin) {
-        this.#emit({ type: 'error', code: 'room_full' });
-        void this.leave();
-      } else if (seats.some((member) => member.role === 'host')) {
-        this.#settleJoin(new RoomError('room_full'));
-      }
-      return; // no host: a waiting guest ends in room_not_found
-    }
-
-    const peer = seats.find((member) => member.id !== this.#selfId) ?? null;
-    if (peer?.id !== this.#peer?.id) {
-      const previous = this.#peer;
-      this.#peer = peer;
-      if (previous) this.#emit({ type: 'peer_left', peer: { id: previous.id, role: previous.role } });
-      if (peer) {
-        this.#emit({ type: 'peer_joined', peer: { id: peer.id, role: peer.role } });
-        this.#flushEarly(peer);
-      }
-    }
-    if (this.#settleJoin && (this.role === 'host' || this.#peer?.role === 'host')) this.#settleJoin();
+    if (this.#closed || !this.#connected) return;
+    const state = this.#channel.presenceState<{ seat?: unknown }>();
+    const online = state[this.#other.id]?.some((meta) => meta.seat === Number(this.#other.id)) ?? false;
+    if (online === (this.#peer !== null)) return;
+    this.#peer = online ? this.#other : null;
+    this.#emit({ type: online ? 'peer_joined' : 'peer_left', peer: { ...this.#other } });
   }
 
   #onBroadcast(payload: unknown): void {
-    if (this.#closed || !isRecord(payload) || typeof payload.from !== 'string' || payload.from === this.#selfId) return;
+    if (this.#closed || !this.#connected || !isRecord(payload)) return;
+    // self:false suppresses our broadcasts. Admission restricts the other sender to the opposite seat;
+    // neither a claimed sender id nor Presence metadata can grant host privileges.
+    if (payload.role !== undefined && payload.role !== this.#other.role) return;
     const message = parseRoomMessage(payload.message);
-    if (!message) return; // invalid payloads are dropped
-    if (this.#peer?.id === payload.from) {
-      this.#deliver(this.#peer, message);
-      return;
+    if (!message || (HOST_ONLY.has(message.type) && this.role !== 'guest')) return;
+    this.#emit({ type: 'message', from: { ...this.#other }, message });
+    if (message.type === 'leave' && this.role === 'guest') {
+      if (this.#peer) {
+        this.#peer = null;
+        this.#emit({ type: 'peer_left', peer: { ...this.#other } });
+      }
+      void this.close(false, true).catch(() => undefined);
     }
-    if (this.#early.length >= EARLY_MAX) this.#early.shift();
-    this.#early.push({ from: payload.from, at: Date.now(), message });
-  }
-
-  #flushEarly(peer: Member): void {
-    const oldest = Date.now() - EARLY_TTL_MS;
-    for (const entry of this.#early.splice(0)) {
-      if (entry.from === peer.id && entry.at >= oldest) this.#deliver(peer, entry.message);
-    }
-  }
-
-  #deliver(peer: Member, message: RoomMessage): void {
-    if (HOST_ONLY.has(message.type) && peer.role !== 'host') return;
-    this.#emit({ type: 'message', from: { id: peer.id, role: peer.role }, message });
   }
 
   async #broadcast(message: RoomMessage): Promise<void> {
-    // With the socket down, channel.send() would fall back to one REST call per message
+    // With the socket down, send() would fall back to REST. Progress must wait for the socket instead.
     if (!this.#connected) throw new RoomError('network');
-    const result = await this.#channel.send({
-      type: 'broadcast',
-      event: BROADCAST_EVENT,
-      payload: { from: this.#selfId, message }
-    });
-    if (result !== 'ok') throw new RoomError('network');
+    try {
+      const result = await this.#channel.send({ type: 'broadcast', event: BROADCAST_EVENT, payload: { message } });
+      if (result !== 'ok') throw new RoomError('network');
+    } catch (cause) {
+      throw toRoomError(cause);
+    }
   }
 
-  #sendProgress(message: ProgressMessage): Promise<void> {
-    this.#lastProgressAt = Date.now();
-    return this.#broadcast(message);
-  }
-
-  // Only the latest progress matters, so one waiting replaces the other. Offline it waits for the reconnection.
   #queueProgress(message: ProgressMessage): Promise<void> {
-    const wait = this.#lastProgressAt + PROGRESS_INTERVAL_MS - Date.now();
-    if (this.#connected && (message.finished || wait <= 0)) {
-      this.#clearProgressQueue();
-      return this.#sendProgress(message);
-    }
+    // A late animation frame cannot replace a final result that is still awaiting acknowledgement.
+    if (this.#queuedProgress?.finished && !message.finished) return Promise.resolve();
     this.#queuedProgress = message;
-    if (this.#connected) this.#progressTimer ??= setTimeout(() => this.#flushProgress(), wait);
-    return Promise.resolve();
+    return this.#flushProgress();
   }
 
-  #clearProgressQueue(): void {
-    if (this.#progressTimer) clearTimeout(this.#progressTimer);
+  #cancelProgressTimer(): void {
+    if (this.#progressTimer !== null) clearTimeout(this.#progressTimer);
     this.#progressTimer = null;
-    this.#queuedProgress = null;
   }
 
-  #flushProgress(): void {
-    const queued = this.#queuedProgress;
-    this.#clearProgressQueue();
-    if (queued && !this.#closed) {
-      this.#sendProgress(queued).catch(() => this.#emit({ type: 'error', code: 'network' }));
+  #flushProgress(force = false): Promise<void> {
+    if (this.#closed || !this.#connected || !this.#queuedProgress) return Promise.resolve();
+    if (this.#progressFlight) return this.#progressFlight;
+    const wait = this.#lastProgressAt + PROGRESS_INTERVAL_MS - Date.now();
+    if (!force && !this.#queuedProgress.finished && wait > 0) {
+      this.#progressTimer ??= setTimeout(() => {
+        this.#progressTimer = null;
+        void this.#flushProgress().catch(() => undefined);
+      }, wait);
+      return Promise.resolve();
     }
+    this.#cancelProgressTimer();
+    const queued = this.#queuedProgress;
+    const version = this.#connectionVersion;
+    this.#lastProgressAt = Date.now();
+    this.#progressFlight = this.#broadcast(queued).then(() => {
+      // An ACK from before a disconnect cannot acknowledge a retry in the new connection.
+      if (this.#connected && version === this.#connectionVersion && this.#queuedProgress === queued) {
+        this.#queuedProgress = null;
+      }
+    }, (cause: unknown) => {
+      const error = toRoomError(cause);
+      if (version === this.#connectionVersion) this.#onConnectionLost(error);
+      throw error;
+    }).finally(() => {
+      this.#progressFlight = null;
+      if (this.#connected && this.#queuedProgress) void this.#flushProgress().catch(() => undefined);
+    });
+    return this.#progressFlight;
   }
 
-  async #close(sendLeave: boolean): Promise<void> {
-    if (this.#closed) return;
+  /** releaseSeat=false is used after a successful RPC has already moved this user to another room. */
+  close(sendLeave: boolean, releaseSeat: boolean): Promise<void> {
+    if (this.#closePromise) return this.#closePromise;
     this.#closed = true;
-    this.#clearProgressQueue();
-    if (sendLeave) await this.#broadcast({ type: 'leave' }).catch(() => undefined);
-    this.#connected = false;
-    this.#peer = null;
-    await this.#channel.untrack().catch(() => undefined);
-    await this.#client.removeChannel(this.#channel).catch(() => undefined);
+    this.#settleJoin?.(new RoomError('room_closed'));
+    this.#cancelProgressTimer();
+    this.#queuedProgress = null;
+    this.#closePromise = (async () => {
+      try {
+        if (sendLeave && this.#connected) await this.#broadcast({ type: 'leave' }).catch(() => undefined);
+        if (releaseSeat) await roomRpc(this.#client, 'leave_room', { p_code: this.code });
+      } finally {
+        this.#connected = false;
+        this.#peer = null;
+        try {
+          await this.#channel.untrack().catch(() => undefined);
+        } finally {
+          await this.#client.removeChannel(this.#channel).catch(() => undefined);
+          this.#onClosed();
+          this.#emit({ type: 'closed' });
+          this.#listeners.clear();
+          this.#backlog.length = 0;
+        }
+      }
+    })();
+    return this.#closePromise;
   }
 
   async send(message: RoomMessage): Promise<void> {
     if (this.#closed) throw new RoomError('room_closed');
     const clean = parseRoomMessage(message);
     if (!clean || (HOST_ONLY.has(clean.type) && this.role !== 'host')) throw new RoomError('invalid_message');
-    if (clean.type === 'leave') return this.leave();
+    if (clean.type === 'leave') return this.close(true, true);
     if (clean.type === 'progress') return this.#queueProgress(clean);
     return this.#broadcast(clean);
   }
@@ -500,7 +492,7 @@ class Room {
     try {
       this.#offsetMs = (await this.#deps.getServerTime()).offsetMs;
     } catch {
-      // The offset measured when joining is still good enough
+      // The offset measured when joining is still good enough.
     }
     const startAtServerMs = Math.round(Date.now() + this.#offsetMs + leadMs);
     await this.send({ type: 'start', startAtServerMs });
@@ -510,80 +502,134 @@ class Room {
   localStartTimeFor(startAtServerMs: number): number {
     return startAtServerMs - this.#offsetMs;
   }
+}
 
-  async leave(): Promise<void> {
-    if (this.#closed) return;
-    await this.#close(this.#joined);
-    this.#emit({ type: 'closed' });
-    this.#listeners.clear();
+interface RoomAdmission {
+  code: string;
+  seat: 1 | 2;
+}
+
+const RPC_CODES: ReadonlySet<string> = new Set<RoomErrorCode>([
+  'not_authenticated', 'profile_required', 'rate_limited', 'invalid_code', 'room_not_found', 'room_full'
+]);
+
+function toRoomError(cause: unknown): RoomError {
+  if (cause instanceof RoomError) return cause;
+  if (isRecord(cause) && typeof cause.message === 'string' && RPC_CODES.has(cause.message)) {
+    return new RoomError(cause.message as RoomErrorCode, { cause });
   }
+  const code = toRankingError(cause).code;
+  return new RoomError(code === 'not_authenticated' || code === 'rate_limited' ? code : 'network', { cause });
+}
 
-  handle(): RoomHandle {
-    return {
-      code: this.code,
-      role: this.role,
-      onEvent: (listener) => {
-        this.#listeners.add(listener);
-        if (this.#backlog.length > 0) {
-          queueMicrotask(() => {
-            for (const event of this.#backlog.splice(0)) this.#emit(event);
-          });
-        }
-        return () => this.#listeners.delete(listener);
-      },
-      send: (message) => this.send(message),
-      getPeers: () => (this.#peer ? [{ id: this.#peer.id, role: this.#peer.role }] : []),
-      scheduleStart: (leadMs = START_LEAD_MS) => this.scheduleStart(leadMs),
-      localStartTimeFor: (startAtServerMs) => this.localStartTimeFor(startAtServerMs),
-      leave: () => this.leave()
-    };
+async function roomRpc(client: SupabaseClient, name: string, params?: { p_code: string }): Promise<unknown> {
+  try {
+    const { data, error } = await client.rpc(name, params);
+    if (error) throw error;
+    return data;
+  } catch (cause) {
+    throw toRoomError(cause);
   }
 }
 
-async function openRoom(deps: RoomDeps, code: string, role: RoomRole): Promise<RoomHandle> {
+function parseAdmission(data: unknown, requestedCode?: string): RoomAdmission {
+  if (!isRecord(data) || typeof data.code !== 'string' || normalizeRoomCode(data.code) !== data.code
+    || (data.seat !== 1 && data.seat !== 2) || (requestedCode && data.code !== requestedCode)
+    || (!requestedCode && data.seat !== 1)) throw new RoomError('network');
+  return { code: data.code, seat: data.seat };
+}
+
+interface ClientRooms {
+  current: Room | null;
+  opening: Map<string, Promise<RoomHandle>>;
+  tail: Promise<unknown>;
+}
+
+// RealtimeClient.channel() reuses a topic's existing channel. Share openings across service instances so
+// attaching a second set of listeners can never throw and remove the channel used by the first instance.
+const CLIENT_ROOMS = new WeakMap<SupabaseClient, ClientRooms>();
+
+async function openRoom(deps: RoomDeps, requestedCode?: string): Promise<RoomHandle> {
   let client: SupabaseClient | null;
   try {
     client = await deps.getClient();
-  } catch (error) {
-    throw new RoomError('network', { cause: error });
+  } catch (cause) {
+    throw toRoomError(cause);
   }
   if (!client) throw new RoomError('not_configured');
-  const { data, error } = await client.auth.getSession();
-  if (error) {
-    throw new RoomError(toRankingError(error).code === 'not_authenticated' ? 'not_authenticated' : 'network', { cause: error });
+  const activeClient = client;
+  let registry = CLIENT_ROOMS.get(client);
+  if (!registry) {
+    registry = { current: null, opening: new Map(), tail: Promise.resolve() };
+    CLIENT_ROOMS.set(client, registry);
   }
-  if (!data.session) throw new RoomError('not_authenticated');
+  const rooms = registry;
+  const key = requestedCode ?? 'create';
+  const pending = rooms.opening.get(key);
+  if (pending) return pending;
 
-  let offsetMs: number;
+  const opening = rooms.tail.then(async () => {
+    let session;
+    try {
+      const { data, error } = await activeClient.auth.getSession();
+      if (error) throw error;
+      session = data.session;
+    } catch (cause) {
+      throw toRoomError(cause);
+    }
+    if (!session?.access_token) throw new RoomError('not_authenticated');
+    const previous = rooms.current;
+    if (requestedCode && previous?.code === requestedCode && previous.userId === session.user.id && !previous.closed) {
+      return previous.handle();
+    }
+    if (previous?.closed) await previous.close(false, false).catch(() => undefined);
+    // A channel not owned by this service must never be removed by our failure cleanup.
+    const hasForeignChannel = (code: string) => activeClient.getChannels?.()
+      .some((channel) => channel.topic === `realtime:room:${code}` || channel.topic === `room:${code}`);
+    if (requestedCode && hasForeignChannel(requestedCode)) throw new RoomError('room_closed');
+
+    let offsetMs: number;
+    try {
+      offsetMs = (await deps.getServerTime()).offsetMs;
+      await activeClient.realtime.setAuth(session.access_token);
+    } catch (cause) {
+      throw toRoomError(cause);
+    }
+    const admission = parseAdmission(await roomRpc(activeClient, requestedCode ? 'join_room' : 'create_room',
+      requestedCode ? { p_code: requestedCode } : undefined), requestedCode);
+    if (previous && !previous.closed) await previous.close(true, false);
+    if (hasForeignChannel(admission.code)) throw new RoomError('room_closed');
+    let room: Room | undefined;
+    try {
+      room = new Room(activeClient, deps, admission, session.user.id, offsetMs, () => {
+        if (rooms.current === room) rooms.current = null;
+      });
+      rooms.current = room;
+      await room.join();
+      return room.handle();
+    } catch (cause) {
+      if (room) await room.close(false, true).catch(() => undefined);
+      else await roomRpc(activeClient, 'leave_room', { p_code: admission.code }).catch(() => undefined);
+      throw toRoomError(cause);
+    }
+  });
+  rooms.opening.set(key, opening);
+  rooms.tail = opening.catch(() => undefined);
   try {
-    offsetMs = (await deps.getServerTime()).offsetMs;
-    // Private channels authorize with the session token, which has to be set before subscribing
-    await client.realtime.setAuth();
-  } catch (cause) {
-    throw new RoomError('network', { cause });
+    return await opening;
+  } finally {
+    if (rooms.opening.get(key) === opening) rooms.opening.delete(key);
   }
-
-  const room = new Room(client, deps, code, role, offsetMs);
-  await room.join();
-  return room.handle();
 }
 
 export function createRoomService(overrides: Partial<RoomDeps> = {}): RoomService {
   const deps: RoomDeps = { ...DEFAULT_DEPS, ...overrides };
   return {
-    async createRoom() {
-      for (let attempt = 1; ; attempt++) {
-        try {
-          return await openRoom(deps, generateRoomCode(deps.randomBytes), 'host');
-        } catch (error) {
-          if (!(error instanceof RoomError) || error.code !== 'room_full' || attempt >= CREATE_ATTEMPTS) throw error;
-        }
-      }
-    },
+    createRoom: () => openRoom(deps),
     async joinRoom(code) {
       const normalized = normalizeRoomCode(code);
       if (!normalized) throw new RoomError('invalid_code');
-      return openRoom(deps, normalized, 'guest');
+      return openRoom(deps, normalized);
     }
   };
 }

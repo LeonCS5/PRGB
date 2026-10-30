@@ -217,6 +217,8 @@ export interface RankingDataExport {
   }[];
   registered_parts: { song_id: number; part_id: number; title: string; track_name: string; registered_at: string }[];
   register_part_quota: { window_start: string; used: number }[]; // Songsterr fetches per hour, kept 1 day
+  room_seats: { code: string; seat: 1 | 2; joined_at: string }[];
+  room_create_quota: string[]; // At most ten creation timestamps from the rolling hourly limit
 }
 
 export interface ExportedScore {

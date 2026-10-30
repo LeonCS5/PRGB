@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ServerTime } from './rankingApi';
 import {
   ROOM_CODE_ALPHABET,
+  PROGRESS_INTERVAL_MS,
   createRoomService,
-  generateRoomCode,
   normalizeRoomCode,
   parseRoomMessage,
   type ProgressMessage,
@@ -18,13 +18,44 @@ import {
 // socket drops: reports an error, forgets the presence and reports SUBSCRIBED again on rejoining.
 type Listener = { type: string; event: string; callback: (payload: unknown) => void };
 type StatusCallback = (status: string, error?: Error) => void;
-type Payload = { from: string; message: Record<string, unknown> };
-type ChannelOptions = { config: { private: boolean; presence: { key: string } } };
+type Payload = { message: Record<string, unknown>; from?: string; role?: string };
+type ChannelOptions = { config: { private: boolean; broadcast?: { self: boolean; ack: boolean }; presence: { key: string } } };
 
 class FakeHub {
   readonly channels = new Set<FakeChannel>();
+  readonly rooms = new Map<string, [string, string | null]>();
   refuseJoin: string | null = null;
   silent = false;
+
+  release(userId: string): void {
+    for (const [code, room] of this.rooms) {
+      if (room[0] === userId) this.rooms.delete(code);
+      else if (room[1] === userId) room[1] = null;
+    }
+  }
+
+  rpc(userId: string, name: string, args?: { p_code?: string }): { data: unknown; error: { message: string } | null } {
+    if (name === 'leave_room') {
+      const room = this.rooms.get(args?.p_code ?? '');
+      if (room?.[0] === userId) this.rooms.delete(args!.p_code!);
+      else if (room?.[1] === userId) room[1] = null;
+      return { data: null, error: null };
+    }
+    if (name === 'create_room') {
+      const code = this.rooms.size === 0 ? 'AB9A9A' : 'CCCCCC';
+      this.release(userId);
+      this.rooms.set(code, [userId, null]);
+      return { data: { code, seat: 1 }, error: null };
+    }
+    const room = this.rooms.get(args?.p_code ?? '');
+    if (!room) return { data: null, error: { message: 'room_not_found' } };
+    if (room[0] === userId) return { data: { code: args?.p_code, seat: 1 }, error: null };
+    if (room[1] === userId) return { data: { code: args?.p_code, seat: 2 }, error: null };
+    if (room[1] && room[1] !== userId) return { data: null, error: { message: 'room_full' } };
+    this.release(userId);
+    room[1] = userId;
+    return { data: { code: args?.p_code, seat: 2 }, error: null };
+  }
 
   members(topic: string): FakeChannel[] {
     return [...this.channels].filter((channel) => channel.topic === topic);
@@ -69,17 +100,23 @@ class FakeChannel {
   readonly topic: string;
   readonly key: string;
   readonly isPrivate: boolean;
+  readonly broadcastConfig: ChannelOptions['config']['broadcast'];
   readonly listeners: Listener[] = [];
   readonly sent: Payload[] = [];
   readonly sentAt: number[] = [];
   meta: Record<string, unknown> | null = null;
   status: StatusCallback | null = null;
+  sendResult = 'ok';
+  sendGate: Promise<string> | null = null;
+  throwOnSubscribe = false;
+  removed = false;
 
   constructor(hub: FakeHub, topic: string, options: ChannelOptions) {
     this.hub = hub;
     this.topic = topic;
     this.key = options.config.presence.key;
     this.isPrivate = options.config.private;
+    this.broadcastConfig = options.config.broadcast;
   }
 
   on(type: string, filter: { event: string }, callback: (payload: unknown) => void): this {
@@ -88,9 +125,11 @@ class FakeChannel {
   }
 
   subscribe(callback: StatusCallback): this {
+    if (this.throwOnSubscribe) throw new Error('synchronous subscription failure');
     this.status = callback;
     if (this.hub.silent) return this;
     setTimeout(() => {
+      if (this.removed) return;
       if (this.hub.refuseJoin) {
         callback('CHANNEL_ERROR', new Error(this.hub.refuseJoin));
         return;
@@ -116,8 +155,9 @@ class FakeChannel {
   async send(args: { type: string; event: string; payload: Payload }): Promise<string> {
     this.sent.push(args.payload);
     this.sentAt.push(Date.now());
-    this.hub.broadcast(this, args.event, args.payload);
-    return 'ok';
+    const result = this.sendGate ? await this.sendGate : this.sendResult;
+    if (result === 'ok') this.hub.broadcast(this, args.event, args.payload);
+    return result;
   }
 
   presenceState(): Record<string, Record<string, unknown>[]> {
@@ -137,14 +177,19 @@ class FakeChannel {
 
 function fakeClient(hub: FakeHub, session = true) {
   const channels: FakeChannel[] = [];
+  const userId = `user-${++ids}`;
   return {
     channels,
+    getChannels: () => channels.filter((channel) => !channel.removed),
     auth: {
-      getSession: vi.fn(async () => ({ data: { session: session ? { user: { id: 'user-id' } } : null }, error: null })),
+      getSession: vi.fn(async () => ({ data: { session: session ? { user: { id: userId }, access_token: 'session-token' } : null }, error: null })),
       signInAnonymously: vi.fn()
     },
     realtime: { setAuth: vi.fn(async () => undefined) },
+    rpc: vi.fn(async (name: string, args?: { p_code?: string }) => hub.rpc(userId, name, args)),
     channel: vi.fn((topic: string, options: ChannelOptions) => {
+      const existing = channels.find((channel) => channel.topic === topic && !channel.removed);
+      if (existing) return existing; // supabase-js reuses a channel on the same topic
       const channel = new FakeChannel(hub, topic, options);
       channels.push(channel);
       return channel;
@@ -152,6 +197,8 @@ function fakeClient(hub: FakeHub, session = true) {
     removeChannel: vi.fn(async (channel: FakeChannel) => {
       await new Promise((resolve) => setTimeout(resolve, 1)); // a round trip to the server
       hub.channels.delete(channel);
+      channel.removed = true;
+      channel.listeners.length = 0;
       hub.syncPresence(channel.topic);
       return 'ok';
     })
@@ -159,25 +206,20 @@ function fakeClient(hub: FakeHub, session = true) {
 }
 
 const TOPIC = 'room:AB9A9A';
-const CODE_BYTES = Uint8Array.from([0, 1, 31, 32, 255, 64]); // AB9A9A
 let ids = 0;
 
 interface PlayerOptions {
   session?: boolean;
   offsetMs?: number;
-  codes?: Uint8Array[];
   serverTime?: () => Promise<ServerTime>;
 }
 
 function player(hub: FakeHub, options: PlayerOptions = {}) {
   const client = fakeClient(hub, options.session);
-  const codes = [...(options.codes ?? [])];
   const offsetMs = options.offsetMs ?? 0;
   const service = createRoomService({
     getClient: async () => client as unknown as SupabaseClient,
     getServerTime: options.serverTime ?? (async () => ({ serverTimeMs: Date.now() + offsetMs, offsetMs, roundTripMs: 20 })),
-    randomBytes: (length) => (codes.shift() ?? CODE_BYTES).slice(0, length),
-    newId: () => `client-${String(++ids).padStart(4, '0')}`,
     joinTimeoutMs: 100
   });
   return { client, ...service };
@@ -226,11 +268,9 @@ afterEach(() => {
 });
 
 describe('room codes', () => {
-  it('uses 6 symbols of an alphabet without look-alikes, from random bytes', () => {
+  it('uses an alphabet without look-alikes for server-issued codes', () => {
     expect(ROOM_CODE_ALPHABET).toHaveLength(32);
     expect(ROOM_CODE_ALPHABET).not.toMatch(/[01IO]/);
-    expect(generateRoomCode(() => CODE_BYTES)).toBe('AB9A9A');
-    expect(generateRoomCode()).toMatch(new RegExp(`^[${ROOM_CODE_ALPHABET}]{6}$`));
   });
 
   it('normalizes what the player types and refuses impossible codes', () => {
@@ -282,6 +322,7 @@ describe('entering a room', () => {
     await expect(anonymous.joinRoom('AB9A9A')).rejects.toMatchObject({ code: 'not_authenticated' });
     expect(anonymous.client.auth.signInAnonymously).not.toHaveBeenCalled();
     expect(anonymous.client.channel).not.toHaveBeenCalled();
+    expect(anonymous.client.rpc).not.toHaveBeenCalled();
     const unconfigured = createRoomService({ getClient: async () => null });
     await expect(unconfigured.joinRoom('AB9A9A')).rejects.toMatchObject({ code: 'not_configured' });
     await expect(player(hub).joinRoom('ABC')).rejects.toMatchObject({ code: 'invalid_code' });
@@ -306,27 +347,29 @@ describe('entering a room', () => {
 
     const [hostChannel] = hostPlayer.client.channels;
     const [guestChannel] = guestPlayer.client.channels;
-    expect([host.code, host.role, guest.role]).toEqual(['AB9A9A', 'host', 'guest']);
+    expect([host.code, host.role, host.seat, guest.role, guest.seat]).toEqual(['AB9A9A', 'host', 1, 'guest', 2]);
     expect(guestChannel).toMatchObject({ topic: TOPIC, isPrivate: true });
-    expect(guestPlayer.client.realtime.setAuth).toHaveBeenCalled();
+    expect(guestPlayer.client.realtime.setAuth).toHaveBeenCalledWith('session-token');
+    expect(hostPlayer.client.rpc).toHaveBeenCalledWith('create_room', undefined);
+    expect(guestPlayer.client.rpc).toHaveBeenCalledWith('join_room', { p_code: host.code });
+    expect(guestChannel.broadcastConfig).toEqual({ self: false, ack: true });
     expect(hostEvents).toEqual([{ type: 'peer_joined', peer: { id: guestChannel.key, role: 'guest' } }]);
     expect(guestEvents).toEqual([{ type: 'peer_joined', peer: { id: hostChannel.key, role: 'host' } }]);
     expect(host.getPeers()).toEqual([{ id: guestChannel.key, role: 'guest' }]);
     expect(guest.getPeers()).toEqual([{ id: hostChannel.key, role: 'host' }]);
   });
 
-  it('shares no user id: presence holds a random id, the role and the join time', async () => {
+  it('shares only the assigned seat in presence', async () => {
     const { hostChannel } = await duel();
-    expect(hostChannel.meta).toEqual({ role: 'host', joinedAt: expect.any(Number) });
-    expect(JSON.stringify([hostChannel.key, hostChannel.meta, hostChannel.sent])).not.toContain('user-id');
+    expect(hostChannel.meta).toEqual({ seat: 1 });
+    expect(JSON.stringify([hostChannel.key, hostChannel.meta, hostChannel.sent])).not.toContain('user-');
   });
 
   it('turns a third player away with room_full and closes its channel', async () => {
     const { hub, host } = await duel();
     const third = player(hub);
     await expect(third.joinRoom(host.code)).rejects.toMatchObject({ code: 'room_full' });
-    // Already gone when the call rejects, so trying the code again gets a new channel
-    expect(hub.channels.has(third.client.channels[0])).toBe(false);
+    expect(third.client.channel).not.toHaveBeenCalled();
     await settle();
     expect(hub.members(TOPIC).filter((channel) => channel.meta)).toHaveLength(2);
     expect(host.getPeers()).toHaveLength(1);
@@ -348,13 +391,90 @@ describe('entering a room', () => {
       .toEqual(['room_not_found', 'room_not_found']);
   });
 
-  it('picks another code when the one drawn is already hosted', async () => {
+  it('uses the code returned by the server', async () => {
     const hub = new FakeHub();
     await player(hub).createRoom();
-    const other = player(hub, { codes: [CODE_BYTES, Uint8Array.from([2, 2, 2, 2, 2, 2])] });
+    const other = player(hub);
     const room = await other.createRoom();
     expect([room.code, room.role]).toEqual(['CCCCCC', 'host']);
-    expect(other.client.removeChannel).toHaveBeenCalledTimes(1);
+    expect(other.client.channel).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['profile_required', 'rate_limited'])('preserves the RPC error %s', async (code) => {
+    const p = player(new FakeHub());
+    p.client.rpc.mockResolvedValueOnce({ data: null, error: { message: code } });
+    await expect(p.createRoom()).rejects.toMatchObject({ code });
+    expect(p.client.channel).not.toHaveBeenCalled();
+  });
+
+  it('restores the host role from the server on reentry', async () => {
+    const p = player(new FakeHub());
+    p.client.rpc.mockResolvedValueOnce({ data: { code: 'ABC234', seat: 1 }, error: null });
+    const handle = await p.joinRoom('ABC234');
+    expect(handle).toMatchObject({ code: 'ABC234', seat: 1, role: 'host' });
+  });
+
+  it('deduplicates the same topic across simultaneous openings and service instances', async () => {
+    const hub = new FakeHub();
+    const host = await player(hub).createRoom();
+    const p = player(hub);
+    const otherService = createRoomService({
+      getClient: async () => p.client as unknown as SupabaseClient,
+      getServerTime: async () => ({ serverTimeMs: Date.now(), offsetMs: 0, roundTripMs: 0 })
+    });
+    const [first, second] = await Promise.all([p.joinRoom(host.code), otherService.joinRoom(host.code.toLowerCase())]);
+    expect(first).toBe(second);
+    expect(await p.joinRoom(host.code)).toBe(first);
+    expect(p.client.channel).toHaveBeenCalledTimes(1);
+    expect(p.client.removeChannel).not.toHaveBeenCalled();
+    await first.send(HELLO);
+  });
+
+  it('cleans a synchronous subscription failure and permits retrying the same topic', async () => {
+    const hub = new FakeHub();
+    const host = await player(hub).createRoom();
+    const p = player(hub);
+    const create = p.client.channel.getMockImplementation()!;
+    p.client.channel.mockImplementationOnce((topic, options) => {
+      const channel = create(topic, options);
+      channel.throwOnSubscribe = true;
+      return channel;
+    });
+    await expect(p.joinRoom(host.code)).rejects.toMatchObject({ code: 'network' });
+    expect(p.client.channels[0].listeners).toEqual([]);
+    expect(p.client.removeChannel).toHaveBeenCalledTimes(1);
+    expect(await p.joinRoom(host.code)).toMatchObject({ role: 'guest' });
+    expect(hub.members(TOPIC)).toHaveLength(2);
+  });
+
+  it('does not close a current room when entering another code fails', async () => {
+    const hub = new FakeHub();
+    const p = player(hub);
+    const current = await p.createRoom();
+    await expect(p.joinRoom('ZZZZZZ')).rejects.toMatchObject({ code: 'room_not_found' });
+    expect(p.client.removeChannel).not.toHaveBeenCalled();
+    expect(await p.joinRoom(current.code)).toBe(current);
+    await current.send(HELLO);
+  });
+
+  it('deduplicates an overlapping create request', async () => {
+    const p = player(new FakeHub());
+    const [first, second] = await Promise.all([p.createRoom(), p.createRoom()]);
+    expect(first).toBe(second);
+    expect(p.client.rpc.mock.calls.filter(([name]) => name === 'create_room')).toHaveLength(1);
+    expect(p.client.channel).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves a foreign channel untouched when it already owns the topic', async () => {
+    const hub = new FakeHub();
+    await player(hub).createRoom();
+    const p = player(hub);
+    const foreign = p.client.channel(TOPIC, { config: { private: true, presence: { key: '2' } } });
+    hub.channels.add(foreign);
+    await expect(p.joinRoom('AB9A9A')).rejects.toMatchObject({ code: 'room_closed' });
+    expect(p.client.removeChannel).not.toHaveBeenCalled();
+    expect(hub.channels.has(foreign)).toBe(true);
+    expect(p.client.rpc.mock.calls.some(([name]) => name === 'leave_room')).toBe(false);
   });
 
   it('reports not_authenticated when Realtime refuses the channel, and network when it does not answer', async () => {
@@ -362,10 +482,10 @@ describe('entering a room', () => {
     hub.refuseJoin = 'Unauthorized: You do not have permissions to read from this Channel topic: room:AB9A9A';
     await expect(player(hub).createRoom()).rejects.toMatchObject({ code: 'not_authenticated' });
     hub.refuseJoin = 'Something else';
-    await expect(player(hub).joinRoom('AB9A9A')).rejects.toMatchObject({ code: 'network' });
+    await expect(player(hub).createRoom()).rejects.toMatchObject({ code: 'network' });
     const silent = new FakeHub();
     silent.silent = true;
-    await expect(player(silent).joinRoom('AB9A9A')).rejects.toMatchObject({ code: 'network' });
+    await expect(player(silent).createRoom()).rejects.toMatchObject({ code: 'network' });
   });
 });
 
@@ -380,13 +500,13 @@ describe('messages', () => {
     await expect(guest.send({ type: 'select_song', songId: 7, partId: 0, title: 'T', artist: 'A', trackName: 'L' }))
       .rejects.toMatchObject({ code: 'invalid_message' });
     await expect(guest.send({ type: 'ready' } as never)).rejects.toMatchObject({ code: 'invalid_message' });
-    // Forged broadcasts: host-only messages from the guest, garbage, and someone who holds no seat
+    // A forged identity cannot grant the guest the host's powers.
     const forge = (from: string, message: Record<string, unknown>) =>
       guestChannel.send({ type: 'broadcast', event: 'room', payload: { from, message } });
-    await forge(guestChannel.key, { type: 'start', startAtServerMs: 5 });
-    await forge(guestChannel.key, { type: 'select_song', songId: 7, partId: 0, title: 'T', artist: 'A', trackName: 'L' });
+    await forge(hostChannel.key, { type: 'start', startAtServerMs: 5 });
+    await forge(hostChannel.key, { type: 'select_song', songId: 7, partId: 0, title: 'T', artist: 'A', trackName: 'L' });
     await forge(guestChannel.key, { type: 'progress', score: -3 });
-    await forge('stranger', { type: 'ready', ready: true });
+    await guestChannel.send({ type: 'broadcast', event: 'room', payload: { role: 'host', message: { type: 'ready', ready: true } } });
     await settle();
 
     expect(hostEvents).toEqual([{
@@ -399,6 +519,19 @@ describe('messages', () => {
       from: { id: hostChannel.key, role: 'host' },
       message: { type: 'select_song', songId: 7, partId: 0, title: 'Song', artist: 'Band', trackName: 'Lead' }
     }]);
+    expect(hostChannel.sent[0]).not.toHaveProperty('from');
+    expect(guestChannel.sent[0]).not.toHaveProperty('from');
+  });
+
+  it('ignores payload.from and derives the sender from the opposite seat', async () => {
+    const { hostEvents, guestChannel } = await duel();
+    for (const from of ['1', '2', 'stranger']) {
+      await guestChannel.send({ type: 'broadcast', event: 'room', payload: { from, message: { type: 'ready', ready: true } } });
+    }
+    await guestChannel.send({ type: 'broadcast', event: 'room', payload: { message: HELLO } });
+    await settle();
+    expect(hostEvents).toHaveLength(4);
+    for (const event of hostEvents) expect(event).toMatchObject({ type: 'message', from: { id: '2', role: 'guest' } });
   });
 
   it('keeps what happens before the first listener, as the host greeting a guest still joining', async () => {
@@ -415,21 +548,21 @@ describe('messages', () => {
     expect(messagesIn(events)).toEqual([HELLO]);
   });
 
-  it('keeps messages that arrive before the sender shows up in presence', async () => {
+  it('delivers messages before the sender appears in presence, without electing a role', async () => {
     const hub = new FakeHub();
     const host = await player(hub).createRoom();
     const events = record(host);
-    const early = new FakeChannel(hub, TOPIC, { config: { private: true, presence: { key: 'early-guest' } } });
+    const early = new FakeChannel(hub, TOPIC, { config: { private: true, presence: { key: '2' } } });
     hub.channels.add(early);
-    await early.send({ type: 'broadcast', event: 'room', payload: { from: 'early-guest', message: HELLO } });
+    await early.send({ type: 'broadcast', event: 'room', payload: { message: HELLO } });
     await settle();
-    expect(events).toEqual([]);
-    await early.track({ role: 'guest', joinedAt: Date.now() });
+    expect(events).toEqual([{ type: 'message', from: { id: '2', role: 'guest' }, message: HELLO }]);
+    await early.track({ seat: 2 });
     await settle();
-    expect(events.map((event) => event.type)).toEqual(['peer_joined', 'message']);
+    expect(events.map((event) => event.type)).toEqual(['message', 'peer_joined']);
   });
 
-  it('sends progress at most 4 times per second, keeping the latest, and finished at once', async () => {
+  it('sends progress at most twice per second, keeping the latest, and finished at once', async () => {
     const { guest, guestChannel } = await duel();
     vi.useFakeTimers();
     const sentProgress = () => guestChannel.sent.filter(({ message }) => message.type === 'progress');
@@ -441,11 +574,12 @@ describe('messages', () => {
     await vi.advanceTimersByTimeAsync(300);
 
     const sent = sentProgress();
-    expect(sent.length).toBeGreaterThanOrEqual(4);
-    expect(sent.length).toBeLessThanOrEqual(5);
+    expect(PROGRESS_INTERVAL_MS).toBe(500);
+    expect(sent.length).toBeGreaterThanOrEqual(2);
+    expect(sent.length).toBeLessThanOrEqual(3);
     expect(sent.at(-1)?.message.score).toBe(20);
     const times = guestChannel.sentAt.slice(-sent.length);
-    for (let i = 1; i < times.length; i++) expect(times[i] - times[i - 1]).toBeGreaterThanOrEqual(250);
+    for (let i = 1; i < times.length; i++) expect(times[i] - times[i - 1]).toBeGreaterThanOrEqual(500);
 
     await guest.send(progress(21));
     await guest.send(progress(22, true));
@@ -497,11 +631,15 @@ describe('leaving and connection problems', () => {
     expect(hostEvents.map((event) => (event.type === 'message' ? event.message.type : event.type))).toEqual(['leave', 'peer_left']);
     expect(guestEvents).toEqual([{ type: 'closed' }]);
     expect(guestPlayer.client.removeChannel).toHaveBeenCalledTimes(1);
+    expect(guestPlayer.client.rpc.mock.calls.filter(([name]) => name === 'leave_room')).toEqual([
+      ['leave_room', { p_code: host.code }]
+    ]);
     expect(host.getPeers()).toEqual([]);
     expect(guest.getPeers()).toEqual([]);
     await expect(guest.send(HELLO)).rejects.toMatchObject({ code: 'room_closed' });
     await guest.leave(); // a second call does nothing
     expect(guestPlayer.client.removeChannel).toHaveBeenCalledTimes(1);
+    expect(guestPlayer.client.rpc.mock.calls.filter(([name]) => name === 'leave_room')).toHaveLength(1);
   });
 
   it('treats sending leave as leaving', async () => {
@@ -512,7 +650,7 @@ describe('leaving and connection problems', () => {
 
   it('survives a dropped connection: no REST fallback, same seat, queued progress goes out', async () => {
     const { hub, guest, guestChannel, hostEvents, guestEvents } = await duel();
-    const joinedAt = guestChannel.meta?.joinedAt;
+    const seat = guestChannel.meta?.seat;
 
     hub.drop(guestChannel);
     hub.drop(guestChannel); // Realtime keeps retrying: one warning is enough
@@ -529,7 +667,7 @@ describe('leaving and connection problems', () => {
     hub.restore(guestChannel);
     await settle();
     expect(guestEvents.at(-1)).toEqual({ type: 'reconnected' });
-    expect(guestChannel.meta?.joinedAt).toBe(joinedAt);
+    expect(guestChannel.meta?.seat).toBe(seat);
     expect(guestChannel.sent).toHaveLength(sentBefore + 1);
     expect(guestChannel.sent.at(-1)?.message).toMatchObject({ type: 'progress', score: 60, finished: true });
     expect(hostEvents.map((event) => event.type)).toEqual(['peer_left', 'peer_joined', 'message']);
@@ -543,22 +681,119 @@ describe('leaving and connection problems', () => {
     await expect(guest.send(HELLO)).rejects.toMatchObject({ code: 'room_closed' });
   });
 
-  it('gives up the seat if the presence says another guest arrived first', async () => {
-    const { hub, guestEvents } = await duel();
+  it('does not change its seat based on a forged Presence arrival time', async () => {
+    const { hub, guest, guestEvents } = await duel();
     const earlier = new FakeChannel(hub, TOPIC, { config: { private: true, presence: { key: 'earlier-guest' } } });
     hub.channels.add(earlier);
     await earlier.track({ role: 'guest', joinedAt: 0 });
     await settle();
-    expect(guestEvents).toEqual([{ type: 'error', code: 'room_full' }, { type: 'closed' }]);
+    expect(guestEvents).toEqual([]);
+    expect(guest).toMatchObject({ role: 'guest', seat: 2 });
+    await guest.send(HELLO);
   });
 
-  it('ignores presence entries without a valid role or time', async () => {
+  it('ignores presence entries without the other server seat', async () => {
     const { hub, host } = await duel();
     const odd = new FakeChannel(hub, TOPIC, { config: { private: true, presence: { key: 'odd' } } });
     hub.channels.add(odd);
     await odd.track({ role: 'referee', joinedAt: 0 });
     await settle();
     expect(host.getPeers()).toHaveLength(1);
+  });
+
+  it('ends the guest connection when the host leaves', async () => {
+    const { host, guest, guestEvents } = await duel();
+    await host.leave();
+    await settle();
+    expect(guestEvents.map((event) => event.type === 'message' ? event.message.type : event.type))
+      .toEqual(['leave', 'peer_left', 'closed']);
+    await expect(guest.send(HELLO)).rejects.toMatchObject({ code: 'room_closed' });
+  });
+
+  it('cancels a pending throttle on disconnect and preserves finished over later samples', async () => {
+    const { hub, guest, guestChannel } = await duel();
+    vi.useFakeTimers();
+    await guest.send(progress(1));
+    await guest.send(progress(2));
+    hub.drop(guestChannel);
+    await guest.send(progress(3, true));
+    await guest.send(progress(4));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(guestChannel.sent.map(({ message }) => message)).toEqual([progress(1)]);
+    expect(vi.getTimerCount()).toBe(0);
+    hub.restore(guestChannel);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(guestChannel.sent.map(({ message }) => message)).toEqual([progress(1), progress(3, true)]);
+  });
+
+  it('retains finished after a failed send and retries it after reconnecting', async () => {
+    const { hub, guest, guestChannel } = await duel();
+    guestChannel.sendResult = 'error';
+    await Promise.allSettled([guest.send(progress(10, true))]);
+    hub.drop(guestChannel);
+    await guest.send(progress(11));
+    guestChannel.sendResult = 'ok';
+    hub.restore(guestChannel);
+    await settle();
+    expect(guestChannel.sent.map(({ message }) => message)).toEqual([progress(10, true), progress(10, true)]);
+  });
+
+  it('keeps an in-flight finished until acknowledgment succeeds', async () => {
+    const { hub, guest, guestChannel } = await duel();
+    let acknowledge!: (result: string) => void;
+    guestChannel.sendGate = new Promise((resolve) => { acknowledge = resolve; });
+    const sent = Promise.allSettled([guest.send(progress(20, true))]);
+    hub.drop(guestChannel);
+    await guest.send(progress(21));
+    acknowledge('error');
+    await sent;
+    guestChannel.sendGate = null;
+    hub.restore(guestChannel);
+    await settle();
+    expect(guestChannel.sent.map(({ message }) => message)).toEqual([progress(20, true), progress(20, true)]);
+  });
+
+  it('does not let an acknowledgment from the old connection erase a pending finished', async () => {
+    const { hub, guest, guestChannel } = await duel();
+    let acknowledge!: (result: string) => void;
+    guestChannel.sendGate = new Promise((resolve) => { acknowledge = resolve; });
+    const sending = guest.send(progress(30, true));
+    hub.drop(guestChannel);
+    hub.restore(guestChannel);
+    await settle();
+    guestChannel.sendGate = null;
+    acknowledge('ok');
+    await sending;
+    await settle();
+    expect(guestChannel.sent.map(({ message }) => message)).toEqual([progress(30, true), progress(30, true)]);
+    hub.drop(guestChannel);
+    hub.restore(guestChannel);
+    await settle();
+    expect(guestChannel.sent).toHaveLength(2);
+  });
+
+  it('removes the channel and listeners even when leave_room fails', async () => {
+    const { guest, guestPlayer, guestChannel } = await duel();
+    guestPlayer.client.rpc.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await expect(guest.leave()).rejects.toMatchObject({ code: 'network' });
+    expect(guestChannel.removed).toBe(true);
+    expect(guestChannel.listeners).toEqual([]);
+    await expect(guest.leave()).rejects.toMatchObject({ code: 'network' });
+    expect(guestPlayer.client.rpc.mock.calls.filter(([name]) => name === 'leave_room')).toHaveLength(1);
+    expect(guestPlayer.client.removeChannel).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears pending timers and listeners when leaving', async () => {
+    const { guest, guestChannel } = await duel();
+    vi.useFakeTimers();
+    await guest.send(progress(1));
+    await guest.send(progress(2));
+    const leaving = guest.leave();
+    await vi.runAllTimersAsync();
+    await leaving;
+    expect(vi.getTimerCount()).toBe(0);
+    expect(guestChannel.listeners).toEqual([]);
+    expect(guestChannel.sent.filter(({ message }) => message.type === 'progress')).toHaveLength(1);
   });
 
   it('stops delivering to a listener that was removed', async () => {

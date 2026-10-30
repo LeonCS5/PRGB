@@ -28,7 +28,8 @@ afterAll(async () => {
 
 const PUBLIC_RPCS = ['get_leaderboard', 'server_time'];
 const PLAYER_RPCS = [
-  'create_profile', 'delete_my_account', 'export_my_data', 'get_my_position', 'get_my_profile',
+  'create_profile', 'create_room', 'delete_my_account', 'export_my_data', 'get_my_position', 'get_my_profile',
+  'is_room_member', 'join_room', 'leave_room',
   'reaccept_terms', 'start_session', 'submit_score', 'touch_last_seen', 'update_nickname'
 ];
 
@@ -92,7 +93,7 @@ describe('access control', () => {
       where n.nspname = 'public' and c.relkind = 'r'`);
     expect(rows.map((r) => r.table).sort()).toEqual([
       'blocked_terms', 'moderation_allowlist', 'moderation_confusables', 'play_sessions', 'profiles',
-      'register_part_quota', 'scores_best', 'scores_weekly', 'song_parts'
+      'register_part_quota', 'room_create_quota', 'room_seats', 'scores_best', 'scores_weekly', 'song_parts'
     ]);
     for (const row of rows) expect(row, row.table).toMatchObject({ rls: true, anon: false, authenticated: false });
   });
@@ -561,8 +562,8 @@ describe('export_my_data', () => {
 
     const data = await rpc<Record<string, unknown>>(db, userId, 'public.export_my_data()');
     expect(Object.keys(data).sort()).toEqual(
-      ['account', 'exported_at', 'play_sessions', 'profile', 'register_part_quota', 'registered_parts', 'scores_best',
-        'scores_weekly']);
+      ['account', 'exported_at', 'play_sessions', 'profile', 'register_part_quota', 'registered_parts',
+        'room_create_quota', 'room_seats', 'scores_best', 'scores_weekly']);
     expect(data.account).toEqual({ id: userId, created_at: expect.any(String), is_anonymous: true });
     expect(data.profile).toMatchObject({ nickname: 'Titular Export', consent_version: 'v1' });
     expect(data.scores_best).toEqual([expect.objectContaining({ song_id: mine.songId, score: 4200, title: 'Música' })]);

@@ -1,5 +1,5 @@
 import { RealtimeClient, type SupabaseClient } from '@supabase/supabase-js';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createRoomService, type RoomEvent, type RoomHandle } from './roomChannel';
 
 // The room service on the real Realtime client, with only the network replaced: a tiny Phoenix server in memory
@@ -58,9 +58,31 @@ class FakeSocket {
 
 class FakeServer {
   readonly topics = new Map<string, Map<FakeSocket, Member>>();
+  readonly rooms = new Map<string, [string, string | null]>();
   readonly joins: Record<string, unknown>[] = [];
+  readonly broadcasts: Record<string, unknown>[] = [];
   refuse: string | null = null;
   #refs = 0;
+
+  rpc(userId: string, name: string, args?: { p_code: string }) {
+    if (name === 'leave_room') {
+      const room = this.rooms.get(args?.p_code ?? '');
+      if (room?.[0] === userId) this.rooms.delete(args!.p_code);
+      else if (room?.[1] === userId) room[1] = null;
+      return { data: null, error: null };
+    }
+    if (name === 'create_room') {
+      const code = 'AB9A9A';
+      this.rooms.set(code, [userId, null]);
+      return { data: { code, seat: 1 }, error: null };
+    }
+    const room = this.rooms.get(args?.p_code ?? '');
+    if (!room) return { data: null, error: { message: 'room_not_found' } };
+    if (room[0] === userId) return { data: { code: args?.p_code, seat: 1 }, error: null };
+    if (room[1] && room[1] !== userId) return { data: null, error: { message: 'room_full' } };
+    room[1] = userId;
+    return { data: { code: args?.p_code, seat: 2 }, error: null };
+  }
 
   socketClass(): new (url: string) => FakeSocket {
     const server = this as FakeServer;
@@ -131,6 +153,8 @@ class FakeServer {
         this.#diff(topic, {}, leaves);
       }
     } else if (event === 'broadcast') {
+      this.broadcasts.push(payload);
+      this.#reply(socket, frame, 'ok');
       for (const [other] of members) {
         if (other !== socket) other.deliver({ topic, event: 'broadcast', ref: null, payload });
       }
@@ -145,13 +169,24 @@ class FakeServer {
   dropConnection(role: 'host' | 'guest'): void {
     for (const members of this.topics.values()) {
       for (const [socket, member] of members) {
-        if (member.meta?.role === role) socket.close(1006, 'network');
+        if (member.meta?.seat === (role === 'host' ? 1 : 2)) socket.close(1006, 'network');
       }
     }
   }
 }
 
+const clients: RealtimeClient[] = [];
+let userIds = 0;
+
+afterEach(async () => {
+  for (const realtime of clients.splice(0)) {
+    await realtime.removeAllChannels();
+    realtime.disconnect();
+  }
+});
+
 function realClient(server: FakeServer) {
+  const userId = `user-${++userIds}`;
   const realtime = new RealtimeClient('ws://realtime.test/socket', {
     params: { apikey: 'public-key' },
     transport: server.socketClass() as never,
@@ -160,9 +195,12 @@ function realClient(server: FakeServer) {
     reconnectAfterMs: () => 5,
     timeout: 1000
   });
+  clients.push(realtime);
   const client = {
-    auth: { getSession: async () => ({ data: { session: { user: { id: 'user-id' } } }, error: null }) },
+    auth: { getSession: async () => ({ data: { session: { user: { id: userId }, access_token: 'session-token' } }, error: null }) },
     realtime,
+    rpc: async (name: string, args?: { p_code: string }) => server.rpc(userId, name, args),
+    getChannels: () => realtime.getChannels(),
     channel: (...args: Parameters<RealtimeClient['channel']>) => realtime.channel(...args),
     removeChannel: (channel: Parameters<RealtimeClient['removeChannel']>[0]) => realtime.removeChannel(channel)
   };
@@ -198,7 +236,7 @@ describe('rooms on the real Realtime client', () => {
     await vi.waitFor(() => expect(types(guestEvents)).toEqual(['peer_joined']));
     expect(server.joins).toHaveLength(2);
     for (const join of server.joins) {
-      expect(join).toMatchObject({ access_token: 'session-token', config: { private: true, broadcast: { self: false } } });
+      expect(join).toMatchObject({ access_token: 'session-token', config: { private: true, broadcast: { self: false, ack: true } } });
     }
 
     await guest.send({ type: 'hello', nickname: 'Ana Lima', ready: true });
@@ -211,6 +249,7 @@ describe('rooms on the real Realtime client', () => {
     const start = guestEvents.at(-1);
     expect(start?.type === 'message' && start.message).toMatchObject({ type: 'start' });
     expect(localStart).toBeGreaterThan(Date.now());
+    for (const broadcast of server.broadcasts) expect(broadcast.payload).not.toHaveProperty('from');
 
     await guest.leave();
     await vi.waitFor(() => expect(types(hostEvents).slice(-2)).toEqual(['leave', 'peer_left']));
