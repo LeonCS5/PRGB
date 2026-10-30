@@ -74,6 +74,8 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
 
   if (!isOpen) return null;
 
+  // Duo routes channel 1 and channel 2 to one player each; the choice comes back when the duo ends
+  const isDuoMode = currentChannelMode === 'duo';
   const isMonitoring = toneSettings?.isMonitoringEnabled ?? true;
 
   return (
@@ -242,7 +244,8 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
               <button
                 type="button"
                 onClick={() => onChannelModeChange('ch1')}
-                className={`rounded-xl py-2.5 px-3 text-xs font-semibold border transition cursor-pointer ${
+                disabled={isDuoMode}
+                className={`rounded-xl py-2.5 px-3 text-xs font-semibold border transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
                   currentChannelMode === 'ch1'
                     ? 'border-amp-500 bg-amp-700/60 text-amp-300 shadow-sm shadow-amp-500/30'
                     : 'border-ink-700 bg-ink-800 text-ink-300 hover:border-ink-500'
@@ -253,7 +256,8 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
               <button
                 type="button"
                 onClick={() => onChannelModeChange('ch2')}
-                className={`rounded-xl py-2.5 px-3 text-xs font-semibold border transition cursor-pointer ${
+                disabled={isDuoMode}
+                className={`rounded-xl py-2.5 px-3 text-xs font-semibold border transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
                   currentChannelMode === 'ch2'
                     ? 'border-amp-500 bg-amp-700/60 text-amp-300 shadow-sm shadow-amp-500/30'
                     : 'border-ink-700 bg-ink-800 text-ink-300 hover:border-ink-500'
@@ -264,7 +268,8 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
               <button
                 type="button"
                 onClick={() => onChannelModeChange('both')}
-                className={`rounded-xl py-2.5 px-3 text-xs font-semibold border transition cursor-pointer ${
+                disabled={isDuoMode}
+                className={`rounded-xl py-2.5 px-3 text-xs font-semibold border transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
                   currentChannelMode === 'both'
                     ? 'border-amp-500 bg-amp-700/60 text-amp-300 shadow-sm shadow-amp-500/30'
                     : 'border-ink-700 bg-ink-800 text-ink-300 hover:border-ink-500'
@@ -274,7 +279,9 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
               </button>
             </div>
             <p className="text-[11px] text-ink-400 mt-1.5">
-              Interfaces como Focusrite, Behringer ou Realtek costumam ter a guitarra no Canal 1 ou Canal 2.
+              {isDuoMode
+                ? 'Modo dupla: guitarra 1 no Canal 1 e guitarra 2 no Canal 2. Saia da dupla para trocar o canal.'
+                : 'Interfaces como Focusrite, Behringer ou Realtek costumam ter a guitarra no Canal 1 ou Canal 2.'}
             </p>
           </div>
 
