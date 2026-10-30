@@ -60,7 +60,7 @@ export const InputLevelMeter: React.FC = () => {
       <div className="h-2 overflow-hidden rounded-full bg-ink-700">
         <div className={'h-full rounded-full ' + LEVEL_COLORS[state].bar} style={{ width: `${fill}%` }} />
       </div>
-      <p className="mt-1 flex items-center justify-between gap-2 font-mono text-xs font-bold">
+      <p className="mt-1 flex items-center justify-between gap-1 whitespace-nowrap font-mono text-[10px] font-bold sm:text-xs">
         <span className={LEVEL_COLORS[state].text}>{isAudioRunning ? LEVEL_LABELS[state] : 'Desligado'}</span>
         <span className="text-ink-300">{Number.isFinite(db) && peak > 0 ? `${Math.round(db)} dB` : '--'}</span>
       </p>

@@ -16,7 +16,7 @@ import { getAudioErrorMessage } from '../context/uiErrors';
 import { AudioRouteNotice, InputLevelMeter } from './AudioRouting';
 import { audioDeviceName, canChooseAudioOutput, isSystemAlias } from '../services/audioDevices';
 import { SoundFX } from '../services/synthAudio';
-import { AMP_PRESETS, type AmpPresetId, type Tone3000Settings } from '../services/tone3000Amp';
+import { AMP_PRESETS, type AmpPresetId, type AmpSettings } from '../services/ampEngine';
 
 interface AudioSettingsModalProps {
   isOpen: boolean;
@@ -26,7 +26,7 @@ interface AudioSettingsModalProps {
   currentChannelMode: InputChannelMode;
   onDeviceChange: (deviceId: string) => void;
   onChannelModeChange: (mode: InputChannelMode) => void;
-  onOpenTone3000Rack?: () => void;
+  onOpenAmpRack?: () => void;
 }
 
 export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
@@ -37,7 +37,7 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
   currentChannelMode,
   onDeviceChange,
   onChannelModeChange,
-  onOpenTone3000Rack
+  onOpenAmpRack
 }) => {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [outputs, setOutputs] = useState<MediaDeviceInfo[]>([]);
@@ -46,9 +46,9 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
   const [deviceAttempt, setDeviceAttempt] = useState(0);
   const [isConnecting, setIsConnecting] = useState(false);
   const { isAudioRunning, startAudio, outputDeviceId, changeOutputDevice } = useAudioSession();
-  const tone3000 = audioEngine.getTone3000();
-  const [toneSettings, setToneSettings] = useState<Tone3000Settings | null>(
-    tone3000 ? tone3000.getSettings() : null
+  const ampEngine = audioEngine.getAmp();
+  const [toneSettings, setToneSettings] = useState<AmpSettings | null>(
+    ampEngine ? ampEngine.getSettings() : null
   );
 
   useEffect(() => {
@@ -72,12 +72,12 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
     });
 
     let unsubscribe: (() => void) | undefined;
-    if (tone3000) {
-      setToneSettings(tone3000.getSettings());
-      unsubscribe = tone3000.subscribe((s) => setToneSettings(s));
+    if (ampEngine) {
+      setToneSettings(ampEngine.getSettings());
+      unsubscribe = ampEngine.subscribe((s) => setToneSettings(s));
     }
     return () => { cancelled = true; unsubscribe?.(); };
-  }, [isOpen, audioEngine, tone3000, deviceAttempt]);
+  }, [isOpen, audioEngine, ampEngine, deviceAttempt]);
 
   if (!isOpen) return null;
 
@@ -102,7 +102,7 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
           <div>
             <h2 id="AudioSettingsModal-title" className="font-display text-xl font-bold">Interface de Áudio & Guitarra</h2>
             <p className="text-xs text-ink-300">
-              Modo RAW 48kHz de baixa latência + Motor TONE3000
+              Modo RAW 48kHz de baixa latência + Motor PRGB Amp
             </p>
           </div>
         </div>
@@ -126,7 +126,7 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
               {isConnecting ? 'Conectando...' : 'Conectar / tentar novamente'}
             </button>
           )}
-          {/* TONE3000 Guitar Monitoring Card */}
+          {/* PRGB Amp monitoring Card */}
           <div className="rounded-2xl border border-amp-500/40 bg-gradient-to-b from-amp-700/40 via-ink-900 to-ink-900 p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
@@ -135,7 +135,7 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
                 </div>
                 <div>
                   <span className="text-sm font-bold text-ink-100 block">
-                    Ouvir Som da Guitarra (TONE3000)
+                    Ouvir Som da Guitarra (PRGB Amp)
                   </span>
                   <span className="text-[11px] text-ink-300">
                     Monitoramento em tempo real nos fones/caixas
@@ -145,7 +145,7 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
 
               <button
                 type="button"
-                onClick={() => tone3000?.setMonitoringEnabled(!isMonitoring)}
+                onClick={() => ampEngine?.setMonitoringEnabled(!isMonitoring)}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 cursor-pointer ${
                   isMonitoring
                     ? 'border-hit/80 bg-hit/10 text-hit shadow-sm shadow-hit/20'
@@ -161,11 +161,11 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
             <div>
               <div className="text-[11px] font-bold text-ink-300 uppercase tracking-wider mb-1.5 flex items-center justify-between">
                 <span>Timbre / Amplificador</span>
-                {onOpenTone3000Rack && (
+                {onOpenAmpRack && (
                   <button
                     onClick={() => {
                       onClose();
-                      onOpenTone3000Rack();
+                      onOpenAmpRack();
                     }}
                     className="text-[11px] text-amp-400 hover:underline flex items-center gap-1 font-semibold cursor-pointer"
                   >
@@ -182,7 +182,7 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
                     <button
                       key={pid}
                       type="button"
-                      onClick={() => tone3000?.setPreset(pid)}
+                      onClick={() => ampEngine?.setPreset(pid)}
                       className={`py-2 px-2.5 rounded-xl text-xs font-bold border transition truncate cursor-pointer ${
                         isSel
                           ? 'border-amp-500 bg-amp-700/60 text-amp-300'
@@ -211,7 +211,7 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
                 max={1}
                 step={0.01}
                 value={toneSettings?.masterVolume ?? 0.75}
-                onChange={(e) => tone3000?.setMasterVolume(Number(e.target.value))}
+                onChange={(e) => ampEngine?.setMasterVolume(Number(e.target.value))}
                 className="w-full accent-amp-400 h-1.5 bg-ink-800 rounded-lg cursor-pointer"
               />
             </div>
@@ -329,16 +329,16 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
         </div>
 
         <div className="mt-6 flex items-center justify-between">
-          {onOpenTone3000Rack && (
+          {onOpenAmpRack && (
             <button
               onClick={() => {
                 onClose();
-                onOpenTone3000Rack();
+                onOpenAmpRack();
               }}
               className="flex items-center gap-2 text-xs font-bold text-amp-400 hover:text-amp-300 transition cursor-pointer"
             >
               <Zap size={14} />
-              Configurar Rack TONE3000
+              Configurar Rack PRGB Amp
             </button>
           )}
 

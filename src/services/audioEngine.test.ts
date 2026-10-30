@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AudioEngine, STANDARD_TUNING, computeNsdf, estimateStringAndFret, type InputChannelMode } from './audioEngine';
 
-vi.mock('./tone3000Amp', () => ({
-  Tone3000AmpEngine: class {
+vi.mock('./ampEngine', () => ({
+  AmpEngine: class {
     inputNode = {};
     processGate = vi.fn();
   }
@@ -208,10 +208,10 @@ describe('AudioEngine lifecycle', () => {
   it('reuses the AudioContext and amp across reconnections', async () => {
     const engine = new AudioEngine();
     await engine.start('a', 'ch1');
-    const amp = engine.getTone3000();
+    const amp = engine.getAmp();
     await engine.start('b', 'ch2');
     expect(contexts).toHaveLength(1);
-    expect(engine.getTone3000()).toBe(amp);
+    expect(engine.getAmp()).toBe(amp);
     expect(streams.map((s) => s.stopped)).toEqual([true, false]);
   });
 
@@ -268,7 +268,7 @@ describe('AudioEngine lifecycle', () => {
     await engine.start('a');
     await engine.dispose();
     expect(contexts[0].state).toBe('closed');
-    expect(engine.getTone3000()).toBeNull();
+    expect(engine.getAmp()).toBeNull();
     await engine.start('a');
     expect(contexts).toHaveLength(2);
   });
@@ -498,7 +498,7 @@ describe('AudioEngine lifecycle', () => {
     it('duo opens the amp gate with the louder guitar', async () => {
       const engine = new AudioEngine();
       await engine.start('a', 'duo');
-      const gate = vi.mocked(engine.getTone3000()!.processGate);
+      const gate = vi.mocked(engine.getAmp()!.processGate);
       const [first, second] = contexts[0].analysers;
       first.signal = sine(220, 0.1);
       second.signal = sine(329.63, 0.5);

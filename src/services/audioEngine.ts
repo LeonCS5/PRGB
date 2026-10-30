@@ -1,5 +1,5 @@
 // Professional Guitar/Bass Audio Engine for Real-Time Pitch Detection
-// Raw 48 kHz capture (no OS processing) feeding the TONE3000 monitor and the PRGB game
+// Raw 48 kHz capture (no OS processing) feeding the PRGB Amp monitor and the PRGB game
 
 export interface DetectedPitch {
   frequency: number; // Hz
@@ -17,7 +17,7 @@ export interface DetectedPitch {
 
 import { LOOPBACK_TONE_GAIN, LOOPBACK_TONE_HZ, routeAudioContext, toneCameBack, toneLevel } from './audioDevices';
 import { SoundFX } from './synthAudio';
-import { Tone3000AmpEngine } from './tone3000Amp';
+import { AmpEngine } from './ampEngine';
 
 export interface ActiveAudioInput {
   label: string;
@@ -101,7 +101,7 @@ export class AudioEngine {
   private splitterNode: ChannelSplitterNode | null = null;
   private mergerNode: ChannelMergerNode | null = null;
   private playerInputs: PlayerInput[] = [];
-  private tone3000: Tone3000AmpEngine | null = null;
+  private ampEngine: AmpEngine | null = null;
   // Lives as long as the AudioContext; fades the amp input so (re)connections don't click
   private monitorGain: GainNode | null = null;
   // NSDF scratch space, reused every frame and by both players
@@ -299,7 +299,7 @@ export class AudioEngine {
     this.channelMode = channelMode;
     if (onPitch) this.onPitchCallback = onPitch;
 
-    // The AudioContext (and the TONE3000 chain bound to it) is reused across
+    // The AudioContext (and the PRGB Amp chain bound to it) is reused across
     // reconnections so switching device/channel doesn't rebuild the amp or click.
     if (!this.audioContext || this.audioContext.state === 'closed') {
       // webkitAudioContext (old Safari) isn't part of the DOM lib typings
@@ -308,7 +308,7 @@ export class AudioEngine {
         sampleRate: 48000,
         latencyHint: 'interactive'
       });
-      this.tone3000 = null;
+      this.ampEngine = null;
       this.monitorGain = null;
       await this.applyOutputDevice();
     }
@@ -374,14 +374,14 @@ export class AudioEngine {
       this.playerInputs = [input];
     }
 
-    // Initialize and route to TONE3000 Amp Modeler for live low-latency guitar monitoring
-    if (!this.tone3000) {
-      this.tone3000 = new Tone3000AmpEngine(this.audioContext);
+    // Initialize and route to PRGB Amp Modeler for live low-latency guitar monitoring
+    if (!this.ampEngine) {
+      this.ampEngine = new AmpEngine(this.audioContext);
     }
     if (!this.monitorGain) {
       this.monitorGain = this.audioContext.createGain();
       this.monitorGain.gain.value = 0;
-      this.monitorGain.connect(this.tone3000.inputNode);
+      this.monitorGain.connect(this.ampEngine.inputNode);
     }
     this.mergerNode.connect(this.monitorGain);
 
@@ -408,7 +408,7 @@ export class AudioEngine {
   }
 
   /**
-   * Stop audio capture. Keeps the AudioContext and TONE3000 chain alive for the next start().
+   * Stop audio capture. Keeps the AudioContext and PRGB Amp chain alive for the next start().
    */
   stop(): Promise<void> {
     return this.enqueue(() => this.stopNow());
@@ -446,7 +446,7 @@ export class AudioEngine {
   }
 
   /**
-   * Stop capture and fully release the AudioContext and TONE3000 chain
+   * Stop capture and fully release the AudioContext and PRGB Amp chain
    */
   dispose(): Promise<void> {
     return this.enqueue(async () => {
@@ -455,7 +455,7 @@ export class AudioEngine {
         await this.audioContext.close();
       }
       this.audioContext = null;
-      this.tone3000 = null;
+      this.ampEngine = null;
       this.monitorGain = null;
     });
   }
@@ -538,9 +538,9 @@ export class AudioEngine {
       this.trackMirroring(this.playerInputs[0], this.playerInputs[1]);
     }
 
-    // Real-time TONE3000 noise gate processing; the amp is shared, so the louder guitar opens it
-    if (this.tone3000) {
-      this.tone3000.processGate(loudest);
+    // Real-time PRGB Amp noise gate processing; the amp is shared, so the louder guitar opens it
+    if (this.ampEngine) {
+      this.ampEngine.processGate(loudest);
     }
 
     for (const input of this.playerInputs) {
@@ -744,7 +744,7 @@ export class AudioEngine {
     return mirrored / AudioEngine.MIRROR_FRAMES >= AudioEngine.MIRROR_MIN_SHARE;
   }
 
-  getTone3000(): Tone3000AmpEngine | null {
-    return this.tone3000;
+  getAmp(): AmpEngine | null {
+    return this.ampEngine;
   }
 }

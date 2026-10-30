@@ -40,7 +40,7 @@ import { OnlinePracticeGame } from './components/OnlinePracticeGame';
 import { RoomModal } from './components/RoomModal';
 import { SongSearchModal } from './components/SongSearchModal';
 import { AudioSettingsModal } from './components/AudioSettingsModal';
-import { Tone3000AmpRack } from './components/Tone3000AmpRack';
+import { AmpRack } from './components/AmpRack';
 import { AudioSessionProvider, useAudioSession, useLatestPitch } from './context/AudioSessionContext';
 import { ModalsProvider, useModals } from './context/ModalsContext';
 import { readPreferences, savePreferences } from './context/preferences';
@@ -147,7 +147,7 @@ const LandingPitch: React.FC = () => {
 const AppContent: React.FC = () => {
   const {
     audioEngine,
-    tone3000,
+    ampEngine,
     isAudioRunning,
     audioError,
     dismissAudioError,
@@ -160,10 +160,10 @@ const AppContent: React.FC = () => {
   const {
     isSearchOpen,
     isSettingsOpen,
-    isTone3000RackOpen,
+    isAmpRackOpen,
     setSearchOpen: setIsSearchOpen,
     setSettingsOpen: setIsSettingsOpen,
-    setTone3000RackOpen: setIsTone3000RackOpen
+    setAmpRackOpen: setIsAmpRackOpen
   } = useModals();
   const { isConfigured: isRankingOn, hasAccount, openAccount } = useRanking();
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
@@ -355,7 +355,7 @@ const AppContent: React.FC = () => {
           <ErrorNotice message={audioError} onDismiss={dismissAudioError}
             actionLabel="Abrir configurações de áudio" onAction={() => {
               setIsSearchOpen(false);
-              setIsTone3000RackOpen(false);
+              setIsAmpRackOpen(false);
               setIsSettingsOpen(true);
               dismissAudioError();
             }} />
@@ -398,12 +398,12 @@ const AppContent: React.FC = () => {
             setIsRoomModalOpen(true);
           }}
           onOpenAudioSettings={() => setIsSettingsOpen(true)}
-          tone3000={tone3000}
-          onOpenTone3000Rack={() => setIsTone3000RackOpen(true)}
+          ampEngine={ampEngine}
+          onOpenAmpRack={() => setIsAmpRackOpen(true)}
         />
       ) : isFreePlayOpen ? (
         <FreePlay onExit={() => setIsFreePlayOpen(false)} onOpenAudioSettings={() => setIsSettingsOpen(true)}
-          onOpenTone3000Rack={() => setIsTone3000RackOpen(true)} />
+          onOpenAmpRack={() => setIsAmpRackOpen(true)} />
       ) : session ? (
         /* Practice mode */
         <>
@@ -424,8 +424,8 @@ const AppContent: React.FC = () => {
               setIsSearchOpen(true);
             }}
             onOpenAudioSettings={() => setIsSettingsOpen(true)}
-            tone3000={tone3000}
-            onOpenTone3000Rack={() => setIsTone3000RackOpen(true)}
+            ampEngine={ampEngine}
+            onOpenAmpRack={() => setIsAmpRackOpen(true)}
             rankedStart={session.mode === 'solo' ? session.rankedStart : null}
             onRankedTabOutdated={session.mode === 'solo' ? () => reloadOutdatedPart(session) : undefined}
           />
@@ -518,10 +518,10 @@ const AppContent: React.FC = () => {
                 </button>
                 <button onClick={() => {
                   if (!isAudioRunning) void handleStartAudio();
-                  setIsTone3000RackOpen(true);
+                  setIsAmpRackOpen(true);
                 }} className="flex min-h-24 cursor-pointer items-center gap-3 px-5 py-4 text-left transition hover:bg-ink-800">
                   <Zap size={23} className="text-amp-400" aria-hidden="true" />
-                  <span className="flex-1"><span className="block text-sm font-semibold">Timbre do amp</span><span className="mt-1 block text-xs text-ink-300">Motor TONE3000</span></span><ArrowUpRight size={16} className="text-ink-300" aria-hidden="true" />
+                  <span className="flex-1"><span className="block text-sm font-semibold">Timbre do amp</span><span className="mt-1 block text-xs text-ink-300">Motor PRGB Amp</span></span><ArrowUpRight size={16} className="text-ink-300" aria-hidden="true" />
                 </button>
               </div>
               <div className="mt-4"><LandingPitch /></div>
@@ -537,7 +537,7 @@ const AppContent: React.FC = () => {
                 </div>
                 <div className="grid gap-4 md:grid-cols-3">
                   {[
-                    { icon: Zap, label: '01 / TIMBRE', title: 'O calor das válvulas.', description: 'Amp valvulado em tempo real com TONE3000. Ajuste o ganho, o gabinete e o reverb até encontrar o seu som.', detail: 'TONE3000 · Amp + gabinete + reverb', color: 'text-amp-300', surface: 'bg-amp-500/10 border-amp-500/20' },
+                    { icon: Zap, label: '01 / TIMBRE', title: 'O calor das válvulas.', description: 'Amp valvulado em tempo real com PRGB Amp. Ajuste o ganho, o gabinete e o reverb até encontrar o seu som.', detail: 'PRGB Amp · Amp + gabinete + reverb', color: 'text-amp-300', surface: 'bg-amp-500/10 border-amp-500/20' },
                     { icon: AudioLines, label: '02 / ENTRADA', title: 'Plugue. Afine. Toque.', description: 'Escolha sua interface e use o afinador integrado. Entrada de baixa latência para acompanhar cada movimento da palheta.', detail: 'Sua guitarra no centro de tudo', color: 'text-signal-300', surface: 'bg-signal-500/10 border-signal-500/20' },
                     { icon: Target, label: '03 / PRÁTICA', title: 'Cada nota conta.', description: 'Acompanhe as tablaturas, acerte as notas e construa seu combo. Perfeito, Bom ou Errou: veja seu progresso enquanto toca.', detail: 'Tablaturas e metadados via Songsterr', color: 'text-hit', surface: 'bg-hit/10 border-hit/20' }
                   ].map(({ icon: Icon, label, title, description, detail, color, surface }) => (
@@ -653,14 +653,14 @@ const AppContent: React.FC = () => {
         currentChannelMode={channelMode}
         onDeviceChange={handleDeviceChange}
         onChannelModeChange={handleChannelModeChange}
-        onOpenTone3000Rack={() => setIsTone3000RackOpen(true)}
+        onOpenAmpRack={() => setIsAmpRackOpen(true)}
       />
 
-      {/* TONE3000 Guitar Amp Modeler & Monitoring Rack */}
-      <Tone3000AmpRack
-        isOpen={isTone3000RackOpen}
-        onClose={() => setIsTone3000RackOpen(false)}
-        tone3000={tone3000}
+      {/* PRGB Amp & Monitoring Rack */}
+      <AmpRack
+        isOpen={isAmpRackOpen}
+        onClose={() => setIsAmpRackOpen(false)}
+        ampEngine={ampEngine}
       />
 
       <RankingModals />

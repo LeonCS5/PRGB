@@ -14,7 +14,7 @@
 **PRGB** (Play Real Guitar in Browser) é um aplicativo web gratuito de prática de guitarra que permite ao usuário:
 
 1. **Conectar sua guitarra real** via interface de áudio USB (Focusrite, Behringer, Realtek, etc.)
-2. **Ouvir o som processado** em tempo real pelo motor DSP **TONE3000** (emulação de amplificador valvulado, gabinete, noise gate, reverb)
+2. **Ouvir o som processado** em tempo real pelo motor DSP **PRGB Amp** (emulação de amplificador valvulado, gabinete, noise gate, reverb)
 3. **Tocar junto com tablaturas** baixadas da API do Songsterr (1M+ músicas), com detecção de pitch e gamificação (score, combo, acertos Perfect/Good/Miss)
 
 **Sem servidor próprio.** O jogo roda 100% no navegador (todo o áudio via Web Audio API, nunca enviado); ranking e salas online, opcionais e só com consentimento 18+, usam Supabase gerenciado (Auth anônimo, RPC security definer, Edge Function, Realtime — região São Paulo). Regras em AGENTS.md › Regras INVIOLÁVEIS 1 e 11.
@@ -59,7 +59,7 @@ src/
 │   └── legal.ts                     # Cópia legal (LGPD): Política de Privacidade, Termos, LEGAL_VERSION
 │
 ├── context/
-│   ├── AudioSessionContext.tsx      # AudioEngine, TONE3000, device/canal, erros; pitch via useLatestPitch
+│   ├── AudioSessionContext.tsx      # AudioEngine, PRGB Amp, device/canal, erros; pitch via useLatestPitch
 │   ├── gameSession.ts               # Tipos de sessão de jogo (GamePart, SoloSession, DuoSession, RunSummary)
 │   ├── legalRoute.ts                # Roteamento por hash (#privacidade / #termos) sem router library
 │   ├── localData.ts                 # Exportar/apagar dados locais; flag de sessão de ranking
@@ -95,7 +95,7 @@ src/
 │   ├── RankingAccountModal.tsx / RankingEntryModal.tsx / RankingModals.tsx  # Modais de ranking
 │   ├── ResultPanel.tsx              # Painel de resultado após a música
 │   ├── SongSearchModal.tsx          # Modal de busca de músicas no Songsterr
-│   └── Tone3000AmpRack.tsx          # Modal do rack completo do amp modeler TONE3000
+│   └── AmpRack.tsx          # Modal do rack completo do amp modeler PRGB Amp
 │
 ├── services/
 │   ├── audioEngine.ts               # ⭐ Engine de captura de áudio + detecção de pitch (NSDF/MPM)
@@ -107,7 +107,7 @@ src/
 │   ├── scoring.ts                   # Motor de scoring: judgeNote, multiplier, accuracy
 │   ├── songsterrApi.ts              # Client da API Songsterr: busca, meta, download de tabs, normalização
 │   ├── synthAudio.ts                # Sintetizador de notas, MetronomeScheduler e efeitos sonoros do jogo
-│   ├── tone3000Amp.ts               # ⭐ DSP engine: preamp, waveshaper, tone stack, cab sim, reverb
+│   ├── ampEngine.ts               # ⭐ DSP engine: preamp, waveshaper, tone stack, cab sim, reverb
 │   ├── *.test.ts                    # Testes Vitest de cada service
 │   └── backend/
 │       ├── rankingApi.ts            # RPCs do ranking (createProfile, submitScore, getLeaderboard, etc.)
@@ -150,7 +150,7 @@ Guitarra → Interface USB → getUserMedia(48kHz RAW) → ChannelSplitter
     │                                              └── Ambos (Mono Mix)
     │                                                      │
     ▼                                                      ▼
-AnalyserNode ← Merger ← (Channel selecionado)      TONE3000 Input
+AnalyserNode ← Merger ← (Channel selecionado)      PRGB Amp Input
     │                                                      │
     ▼                                               ┌──────┴──────┐
  Pitch Detection (NSDF)                        Noise Gate    PreGain
@@ -181,7 +181,7 @@ AnalyserNode ← Merger ← (Channel selecionado)      TONE3000 Input
 ### TypeScript
 - **Strict mode** habilitado (noUnusedLocals, noUnusedParameters, erasableSyntaxOnly)
 - Interfaces sempre com `export interface` (não `type` para objetos com métodos)
-- Classes para services (AudioEngine, Tone3000AmpEngine, SongsterrApi)
+- Classes para services (AudioEngine, AmpEngine, SongsterrApi)
 - Componentes React: `React.FC<Props>` com arrow functions exportadas como `export const`
 
 ### Styling
@@ -212,7 +212,7 @@ O backlog fica **só** no `AGENTS.md` (seção "Problemas Conhecidos"), com dono
 ## 7. Regras para Agentes
 
 ### OBRIGATÓRIO
-- **Nunca alterar a cadeia DSP do TONE3000** sem entender o signal routing completo (seção 4)
+- **Nunca alterar a cadeia DSP do PRGB Amp** sem entender o signal routing completo (seção 4)
 - **Nunca instalar ESLint** — o projeto usa oxlint exclusivamente
 - **Nunca migrar de Tailwind CSS** para outra solução de styling
 - **Nunca adicionar servidor próprio** — só Supabase gerenciado, para ranking/salas, e o jogo funciona sem ele
@@ -262,11 +262,11 @@ npm run lint
 
 1. **Landing Page** → Usuário vê tela inicial com opções "Tocar Metallica" ou "Buscar Música"
 2. **Conectar Áudio** → Ao clicar em qualquer botão, `getUserMedia` é chamado (permissão de mic)
-3. **TONE3000 Ativo** → Som da guitarra começa a sair pelos fones/caixas em tempo real
+3. **PRGB Amp Ativo** → Som da guitarra começa a sair pelos fones/caixas em tempo real
 4. **Carregar Música** → Tab é baixada do Songsterr CDN e parseada em `NoteEvent[]`
 5. **Jogo (PracticeGame)** → Canvas mostra rails coloridos com notas scrollando. Pitch detection compara nota tocada com nota da tab
 6. **Scoring** → Perfect (±55ms + MIDI match), Good (±130ms + MIDI match), Miss (passou da hit line)
-7. **Modais** → Usuário pode ajustar interface de áudio, trocar preset do TONE3000, buscar outra música
+7. **Modais** → Usuário pode ajustar interface de áudio, trocar preset do PRGB Amp, buscar outra música
 
 ---
 
@@ -274,7 +274,7 @@ npm run lint
 
 | Termo | Significado |
 |---|---|
-| TONE3000 | Motor DSP de emulação de amplificador de guitarra (criado neste projeto) |
+| PRGB Amp | Motor DSP de emulação de amplificador de guitarra (criado neste projeto) |
 | NSDF/MPM | Normalized Square Difference Function — algoritmo de detecção de pitch |
 | Cab Sim | Cabinet Simulation — emulação de gabinete de alto-falante de guitarra |
 | Tone Stack | Equalizador de 4 bandas (Bass, Mid, Treble, Presence) |

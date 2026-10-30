@@ -54,7 +54,7 @@ describe('buildLocalDataExport', () => {
       preferences: {
         deviceId: '',
         channelMode: 'ch1',
-        tone3000: null,
+        ampEngine: null,
         lastSong: null,
         nickname: null
       }
@@ -78,7 +78,7 @@ describe('buildLocalDataExport', () => {
   });
 
   it('includes saved preferences when the storage has them', () => {
-    ls.setItem(PREFS_KEY, JSON.stringify({ deviceId: 'dev-xyz', channelMode: 'ch2', tone3000: null, lastSong: null, nickname: null }));
+    ls.setItem(PREFS_KEY, JSON.stringify({ deviceId: 'dev-xyz', channelMode: 'ch2', ampEngine: null, lastSong: null, nickname: null }));
     const result = JSON.parse(buildLocalDataExport()) as Record<string, unknown>;
     expect((result.preferences as Record<string, unknown>).deviceId).toBe('dev-xyz');
     expect((result.preferences as Record<string, unknown>).channelMode).toBe('ch2');

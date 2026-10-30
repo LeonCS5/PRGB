@@ -1,6 +1,6 @@
 import type { InputChannelMode } from '../services/audioEngine';
 import { validateNickname } from '../services/nickname';
-import { AMP_PRESETS, type Tone3000Settings } from '../services/tone3000Amp';
+import { AMP_PRESETS, type AmpSettings } from '../services/ampEngine';
 
 export interface SavedSong {
   songId: number;
@@ -12,7 +12,7 @@ export interface Preferences {
   inputChosen: boolean; // the player picked the input: the app must not move to the interface by itself
   outputDeviceId: string;
   channelMode: InputChannelMode;
-  tone3000: Tone3000Settings | null;
+  ampEngine: AmpSettings | null;
   lastSong: SavedSong | null;
   nickname: string | null; // local only, used to sign challenge links
 }
@@ -25,7 +25,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const inRange = (value: unknown, min: number, max: number): value is number =>
   typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
 
-const isToneSettings = (value: unknown): value is Tone3000Settings => {
+const isToneSettings = (value: unknown): value is AmpSettings => {
   if (!isRecord(value)) return false;
   return typeof value.isMonitoringEnabled === 'boolean'
     && typeof value.preset === 'string' && Object.hasOwn(AMP_PRESETS, value.preset)
@@ -50,7 +50,7 @@ const isSavedSong = (value: unknown): value is SavedSong =>
   && Number.isInteger(value.partId);
 
 export const readPreferences = (): Preferences => {
-  const defaults: Preferences = { deviceId: '', inputChosen: false, outputDeviceId: '', channelMode: 'ch1', tone3000: null, lastSong: null, nickname: null };
+  const defaults: Preferences = { deviceId: '', inputChosen: false, outputDeviceId: '', channelMode: 'ch1', ampEngine: null, lastSong: null, nickname: null };
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     const value: unknown = raw ? JSON.parse(raw) : null;
@@ -61,7 +61,7 @@ export const readPreferences = (): Preferences => {
       outputDeviceId: typeof value.outputDeviceId === 'string' ? value.outputDeviceId : defaults.outputDeviceId,
       channelMode: value.channelMode === 'ch1' || value.channelMode === 'ch2' || value.channelMode === 'both'
         ? value.channelMode : defaults.channelMode,
-      tone3000: isToneSettings(value.tone3000) ? value.tone3000 : null,
+      ampEngine: isToneSettings(value.ampEngine) ? value.ampEngine : null,
       lastSong: isSavedSong(value.lastSong) ? value.lastSong : null,
       nickname: readNickname(value.nickname)
     };

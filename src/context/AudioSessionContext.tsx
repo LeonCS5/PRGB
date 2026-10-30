@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { audioDeviceName, isSystemAlias, looksLikeInstrumentInput, pickInstrumentInput, pickMonitorOutput } from '../services/audioDevices';
 import { AudioEngine, type ActiveAudioInput, type DetectedPitch, type InputChannelMode, type PlayerSlot } from '../services/audioEngine';
-import type { Tone3000AmpEngine } from '../services/tone3000Amp';
+import type { AmpEngine } from '../services/ampEngine';
 import { readPreferences, savePreferences } from './preferences';
 import { getAudioErrorMessage } from './uiErrors';
 
@@ -10,7 +10,7 @@ export type AudioRouteAlert = { kind: 'moved'; outputName: string } | { kind: 'm
 
 export interface AudioSessionValue {
   audioEngine: AudioEngine;
-  tone3000: Tone3000AmpEngine | null;
+  ampEngine: AmpEngine | null;
   isAudioRunning: boolean;
   audioError: string | null;
   dismissAudioError: () => void;
@@ -75,7 +75,7 @@ const AudioSessionContext = createContext<AudioSessionValue | null>(null);
 export const AudioSessionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [audioEngine] = useState(() => new AudioEngine());
   const [preferences] = useState(readPreferences);
-  const initializedAmp = useRef<Tone3000AmpEngine | null>(null);
+  const initializedAmp = useRef<AmpEngine | null>(null);
 
   const [isAudioRunning, setIsAudioRunning] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
@@ -83,7 +83,7 @@ export const AudioSessionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [pitchStore] = useState(createPitchStore);
   const [selectedDeviceId, setSelectedDeviceId] = useState(preferences.deviceId);
   const [channelMode, setChannelMode] = useState<InputChannelMode>(preferences.channelMode);
-  const [tone3000, setTone3000] = useState<Tone3000AmpEngine | null>(null);
+  const [ampEngine, setAmpEngine] = useState<AmpEngine | null>(null);
   const [activeInput, setActiveInput] = useState<ActiveAudioInput | null>(null);
   const [outputDeviceId, setOutputDeviceId] = useState(preferences.outputDeviceId);
   const [outputName, setOutputName] = useState('');
@@ -121,9 +121,9 @@ export const AudioSessionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         }
         // Player 2 only exists in duo mode; don't leave its last note behind
         if (mode !== 'duo') pitchStore.publish(null, 1);
-        const amp = audioEngine.getTone3000();
+        const amp = audioEngine.getAmp();
         if (amp && initializedAmp.current !== amp) {
-          const settings = readPreferences().tone3000 ?? preferences.tone3000;
+          const settings = readPreferences().ampEngine ?? preferences.ampEngine;
           if (settings) {
             amp.setMonitoringEnabled(false);
             amp.setPreset(settings.preset);
@@ -144,7 +144,7 @@ export const AudioSessionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         setActiveInput(audioEngine.getActiveInput());
         void refreshOutputName(readPreferences().outputDeviceId);
         setChannelMode(mode);
-        setTone3000(amp);
+        setAmpEngine(amp);
         setIsAudioRunning(true);
       } catch (err) {
         setIsAudioRunning(false);
@@ -214,15 +214,15 @@ export const AudioSessionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, [selectedDeviceId, channelMode]);
 
   useEffect(() => {
-    if (!tone3000) return;
-    savePreferences({ tone3000: tone3000.getSettings() });
-    return tone3000.subscribe((settings) => savePreferences({ tone3000: settings }));
-  }, [tone3000]);
+    if (!ampEngine) return;
+    savePreferences({ ampEngine: ampEngine.getSettings() });
+    return ampEngine.subscribe((settings) => savePreferences({ ampEngine: settings }));
+  }, [ampEngine]);
 
   const value = useMemo<AudioSessionValue>(
     () => ({
       audioEngine,
-      tone3000,
+      ampEngine,
       isAudioRunning,
       audioError,
       dismissAudioError,
@@ -239,7 +239,7 @@ export const AudioSessionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       changeOutputDevice,
       changeChannelMode
     }),
-    [audioEngine, tone3000, isAudioRunning, audioError, dismissAudioError, pitchStore, selectedDeviceId, activeInput, outputDeviceId, outputName, routeAlert, channelMode, startAudio, changeDevice, changeOutputDevice, changeChannelMode]
+    [audioEngine, ampEngine, isAudioRunning, audioError, dismissAudioError, pitchStore, selectedDeviceId, activeInput, outputDeviceId, outputName, routeAlert, channelMode, startAudio, changeDevice, changeOutputDevice, changeChannelMode]
   );
 
   return (

@@ -10,7 +10,7 @@ import { getRoomErrorByCode } from '../context/uiErrors';
 import type { GamePart, RunSummary } from '../context/gameSession';
 import { PROGRESS_INTERVAL_MS } from '../services/backend/roomChannel';
 import { accuracyPercent } from '../services/scoring';
-import type { Tone3000AmpEngine } from '../services/tone3000Amp';
+import type { AmpEngine } from '../services/ampEngine';
 
 export interface OnlinePracticeGameProps {
   myPart: GamePart;
@@ -19,8 +19,8 @@ export interface OnlinePracticeGameProps {
   onOpenAudioSettings: () => void;
   onExit: () => void;
   onBackToRoom: () => void;
-  tone3000?: Tone3000AmpEngine | null;
-  onOpenTone3000Rack?: () => void;
+  ampEngine?: AmpEngine | null;
+  onOpenAmpRack?: () => void;
 }
 
 const secondsUntil = (startAtMs: number) => Math.ceil((startAtMs - Date.now()) / 1000);
@@ -55,8 +55,8 @@ export const OnlinePracticeGame: React.FC<OnlinePracticeGameProps> = ({
   onOpenAudioSettings,
   onExit,
   onBackToRoom,
-  tone3000,
-  onOpenTone3000Rack,
+  ampEngine,
+  onOpenAmpRack,
 }) => {
   const { state, controller, leaveRoom } = useRoom();
   const [summary, setSummary] = useState<RunSummary | null>(null);
@@ -102,7 +102,7 @@ export const OnlinePracticeGame: React.FC<OnlinePracticeGameProps> = ({
   return (
     <div className="h-dvh w-full">
       <PracticeGame parts={[myPart]} playerNames={null} challenge={null} onOpenSearch={() => undefined} onExit={exit}
-        onOpenAudioSettings={onOpenAudioSettings} tone3000={tone3000} onOpenTone3000Rack={onOpenTone3000Rack} online={online} />
+        onOpenAudioSettings={onOpenAudioSettings} ampEngine={ampEngine} onOpenAmpRack={onOpenAmpRack} online={online} />
       <Countdown startAtMs={startAtMs} />
       {myRun && (
         <OnlineResultPanel myScore={myRun.score} myAccuracy={accuracyPercent(myRun)} partnerName={partnerName}

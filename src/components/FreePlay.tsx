@@ -23,7 +23,7 @@ import { updateTrail, type PlayedNote } from '../services/noteTrail';
 export interface FreePlayProps {
   onExit: () => void;
   onOpenAudioSettings: () => void;
-  onOpenTone3000Rack?: () => void;
+  onOpenAmpRack?: () => void;
 }
 
 const NOW_LINE_MARGIN = 120; // room right of the line, so a note still ringing stays in view
@@ -47,7 +47,7 @@ const Reading: React.FC<{ label: string; children: React.ReactNode }> = ({ label
   </div>
 );
 
-export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings, onOpenTone3000Rack }) => {
+export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings, onOpenAmpRack }) => {
   const { audioEngine, isAudioRunning, startAudio, audioError, dismissAudioError, getLatestPitch, activeInput, outputName } = useAudioSession();
   const pitch = useLatestPitch();
   const [palette] = useState(readPalette);
@@ -232,8 +232,8 @@ export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings,
           )}
           <button type="button" onClick={clear} className={TOOL_CLASS}><Trash2 size={16} aria-hidden="true" /> Limpar</button>
           <button type="button" onClick={onOpenAudioSettings} className={TOOL_CLASS}><Sliders size={16} aria-hidden="true" /> Áudio</button>
-          {onOpenTone3000Rack && (
-            <button type="button" onClick={onOpenTone3000Rack} className={TOOL_CLASS + ' text-amp-300!'}><Zap size={16} aria-hidden="true" /> Amp</button>
+          {onOpenAmpRack && (
+            <button type="button" onClick={onOpenAmpRack} className={TOOL_CLASS + ' text-amp-300!'}><Zap size={16} aria-hidden="true" /> Amp</button>
           )}
         </div>
       </footer>

@@ -11,7 +11,7 @@
 
 Um app web (React + TypeScript + Vite) de prática de guitarra open-source e gratuito:
 - Captura áudio da guitarra real via interface USB (Web Audio API, 48kHz, sem processamento do OS)
-- Processa o som em tempo real com o motor **TONE3000** (amplificador + gabinete + reverb + noise gate)
+- Processa o som em tempo real com o motor **PRGB Amp** (amplificador + gabinete + reverb + noise gate)
 - Carrega tablaturas de 1M+ músicas da API do Songsterr
 - Renderiza um jogo de prática estilo "rails" em Canvas 2D com detecção de pitch e scoring
 
@@ -56,12 +56,12 @@ PRGB/
 │   │   └── legal.ts                 # Cópia legal (LGPD): Política de Privacidade, Termos de Uso, LEGAL_VERSION, ConsentCopy
 │   │
 │   ├── context/
-│   │   ├── AudioSessionContext.tsx  # AudioEngine, TONE3000, device/canal, erros de áudio; pitch em store próprio (useLatestPitch)
+│   │   ├── AudioSessionContext.tsx  # AudioEngine, PRGB Amp, device/canal, erros de áudio; pitch em store próprio (useLatestPitch)
 │   │   ├── gameSession.ts           # Tipos de sessão de jogo: GamePart, SoloSession, DuoSession, RunSummary, RankedSubmission
 │   │   ├── legalRoute.ts            # Roteamento por hash (#privacidade / #termos) sem biblioteca de router
 │   │   ├── localData.ts             # Exportar/apagar dados locais (records + prefs); flag de sessão de ranking
 │   │   ├── ModalsContext.tsx        # Estado aberto/fechado dos modais
-│   │   ├── preferences.ts           # localStorage versionado (prgb:prefs:v1): device, canal, TONE3000, última música
+│   │   ├── preferences.ts           # localStorage versionado (prgb:prefs:v1): device, canal, PRGB Amp, última música
 │   │   ├── rankedRun.ts             # RankedRunController: máquina de estados de um run ranqueado (sem React)
 │   │   ├── ranking.ts               # RankingContext, RankingApi type, RankingValue; RankingProvider está em RankingProvider.tsx
 │   │   ├── RankingProvider.tsx      # Provider do contexto de ranking (isConfigured, hasAccount, perfil, fluxos de conta)
@@ -73,6 +73,7 @@ PRGB/
 │   │
 │   ├── components/
 │   │   ├── AudioSettingsModal.tsx   # Modal: device selector, afinador, VU meter
+│   │   ├── AudioRouting.tsx         # Medidor de entrada em dB e avisos de rota (microfone do PC, retorno da saída)
 │   │   ├── BrandMark.tsx            # Logo PRGB (palheta) + wordmark
 │   │   ├── ChallengeCard.tsx        # Card de desafio (melhor score pessoal de um amigo)
 │   │   ├── ChallengeSharePanel.tsx  # Painel para compartilhar/aceitar desafio via link
@@ -96,10 +97,11 @@ PRGB/
 │   │   ├── RankingModals.tsx        # Orquestrador dos modais de ranking (entry, account, leaderboard)
 │   │   ├── ResultPanel.tsx          # Painel de resultado após o fim de uma música
 │   │   ├── SongSearchModal.tsx      # Modal: busca Songsterr + seleção de faixa
-│   │   └── Tone3000AmpRack.tsx      # Modal: rack completo do amp modeler
+│   │   └── AmpRack.tsx      # Modal: rack completo do amp modeler
 │   │
 │   ├── services/                    # Cada service tem um *.test.ts (Vitest) ao lado
 │   │   ├── audioEngine.ts           # Captura, channel routing, pitch (NSDF), corda/casa estimadas, fila start/stop com fade
+│   │   ├── audioDevices.ts          # Escolha da entrada, nível, saída e teste de retorno (lógica pura)
 │   │   ├── challenge.ts             # Geração e validação de links de desafio (score pessoal codificado em URL)
 │   │   ├── demoSong.ts              # Exercício original offline (pentatônica de Lá menor), sem direitos de terceiros
 │   │   ├── nickname.ts              # Validação, normalização e filtro de apelidos (look-alikes, blocklist, NFKD)
@@ -108,7 +110,7 @@ PRGB/
 │   │   ├── scoring.ts               # Motor de scoring: judgeNote, acumulação de estado, multiplier, accuracy
 │   │   ├── songsterrApi.ts          # API client + normalizer (cordas 0-indexed no JSON bruto, ties, grace, técnicas, beatGrid)
 │   │   ├── synthAudio.ts            # SFX + MetronomeScheduler (cliques agendados no relógio do AudioContext)
-│   │   ├── tone3000Amp.ts           # DSP chain: preamp→waveshaper→EQ→cab→reverb→output
+│   │   ├── ampEngine.ts           # DSP chain: preamp→waveshaper→EQ→cab→reverb→output
 │   │   └── backend/
 │   │       ├── rankingApi.ts        # RPCs do ranking: createProfile, submitScore, getLeaderboard, registerPart, etc.
 │   │       ├── roomChannel.ts       # Salas online via Supabase Realtime (Broadcast + Presence, host/guest)
@@ -179,7 +181,7 @@ Guitarra → USB Interface → getUserMedia(48kHz, raw, sem noise suppress)
                                 │
                 ┌───────────────┼───────────────┐
                 ▼                               ▼
-         AnalyserNode                     TONE3000 Engine
+         AnalyserNode                     PRGB Amp Engine
          (pitch detect)                        │
                 │                    Gate → PreGain → WaveShaper
                 ▼                              │
@@ -199,7 +201,7 @@ Guitarra → USB Interface → getUserMedia(48kHz, raw, sem noise suppress)
 ## Convenções
 
 ### Código
-- Classes para services (`AudioEngine`, `Tone3000AmpEngine`, `SongsterrApi`)
+- Classes para services (`AudioEngine`, `AmpEngine`, `SongsterrApi`)
 - `React.FC<Props>` para componentes
 - `export interface` para tipos (não `type` para objetos complexos)
 - Variáveis/funções em **inglês**, UI em **Português Brasileiro (pt-BR)**
@@ -212,7 +214,7 @@ Guitarra → USB Interface → getUserMedia(48kHz, raw, sem noise suppress)
   - fontes `font-display` (Space Grotesk, títulos), `font-sans` (Inter), `font-mono` (JetBrains Mono, números/HUD)
 
 ### Marca
-- Nome: **PRGB**. Não usar nomes de produtos de terceiros (ex.: Yousician) em UI, código ou comentários.
+- Nome: **PRGB**. Não usar nomes de produtos de terceiros em UI, código ou comentários.
 - O conteúdo vem do Songsterr: o rodapé precisa manter o aviso de não afiliação.
 - Projeto gratuito; o único "monetizar" é o link "Apoie o projeto" (`VITE_SUPPORT_URL`, com fallback para estrela no GitHub).
 
@@ -233,7 +235,7 @@ Guitarra → USB Interface → getUserMedia(48kHz, raw, sem noise suppress)
 7. **Não usar `setTimeout`/`setInterval`** para timing de áudio — usar `AudioContext.currentTime`.
 8. **Não manipular DOM diretamente** — usar React refs.
 9. **Não usar CSS inline** (`style={{}}`) exceto para valores dinâmicos calculados.
-10. **Não remover ou refatorar o TONE3000** sem entender a cadeia DSP completa documentada acima.
+10. **Não remover ou refatorar o PRGB Amp** sem entender a cadeia DSP completa documentada acima.
 11. **LGPD por padrão.** Dados mínimos (só o apelido é dado pessoal); nenhuma conta antes do consentimento (18+ autodeclarado + aceite com `LEGAL_VERSION` versionado); tabelas sem acesso direto (só RPC `security definer` com `search_path=''`); exportar, corrigir e excluir sempre disponíveis; retenção definida nas migrations; qualquer dado novo exige atualizar `src/content/legal.ts`.
 12. **`VITE_SUPABASE_ANON_KEY` e `VITE_SUPABASE_URL` são as únicas chaves Supabase com prefixo `VITE_`.** Nunca expor a `service_role key` com prefixo `VITE_` — ela daria acesso total ao banco ao cliente.
 
@@ -254,7 +256,7 @@ Mais de um agente trabalha neste repositório. O humano coordena; os agentes seg
    ```
    Cada worktree precisa do seu próprio `npm install`.
 3. **Branch com prefixo do agente** (`codex/…`, `claude/…`, `bob/…`), um problema por branch, commits no padrão `feat:`/`fix:`/`refactor:`/`docs:`/`chore:`.
-4. **Sem sobreposição de arquivos.** Dois agentes não editam o mesmo arquivo ao mesmo tempo. `tone3000Amp.ts`, `audioEngine.ts` e `App.tsx` ficam com um agente por vez.
+4. **Sem sobreposição de arquivos.** Dois agentes não editam o mesmo arquivo ao mesmo tempo. `ampEngine.ts`, `audioEngine.ts` e `App.tsx` ficam com um agente por vez.
 5. **Revisão cruzada antes do merge.** O outro agente revisa `git diff main...<branch>` e roda `npm run lint && npm run build && npm test`. Merge em `main` pelo humano, ou pelo Claude quando o humano delegar, sempre depois da revisão.
 6. **Ao terminar:** atualize o item do backlog (status + branch), deixe o worktree limpo e reporte o que foi verificado e o que ficou pendente.
 
@@ -294,10 +296,10 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 - Item que cruza áreas espera o dono da outra área liberar o arquivo.
 
 ### Rodada 1 — destravar o build (concluída, merge em `main` 4ba14eb)
-- [x] **Build quebrado** — tipos `Float32Array<ArrayBuffer>` em `tone3000Amp.ts` + imports não usados (@claude, `bb447da`, aprovado por @codex)
-- [x] **Canvas não responsivo** — ResizeObserver em `YousicianGame.tsx`, hoje `PracticeGame.tsx` (@codex, `77d100c`, aprovado por @claude)
+- [x] **Build quebrado** — tipos `Float32Array<ArrayBuffer>` em `ampEngine.ts` + imports não usados (@claude, `bb447da`, aprovado por @codex)
+- [x] **Canvas não responsivo** — ResizeObserver em `PracticeGame.tsx` (@codex, `77d100c`, aprovado por @claude)
 - [x] **Estado monolítico** — `AudioSessionContext` + `ModalsContext` (@codex, `77d100c`, aprovado por @claude)
-- [x] **TONE3000 recriada a cada reconexão** — AudioContext e amp reaproveitados entre `start()` (@codex, `77d100c`, aprovado por @claude; não testado com interface real)
+- [x] **PRGB Amp recriada a cada reconexão** — AudioContext e amp reaproveitados entre `start()` (@codex, `77d100c`, aprovado por @claude; não testado com interface real)
 
 ### Rodada 2 — fundação de áudio e parser (concluída, merge em `main` 1a77f10)
 - [x] **Pitch detection incompleta** — `stringEstimate`/`fretEstimate` (posição de casa mais baixa, `setTuning`), fade de ganho na reconexão, fila start/stop, fallback de device (@claude, aprovado por @codex)
@@ -326,6 +328,9 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 ### Rodada 6 — Play Free (concluída em `claude/fase2-base`, sem merge em `main`)
 - [x] **Play Free** — modo livre, sem música nem pontuação: mostra nota, frequência, afinação, corda, casa, nível e clareza, e o histórico nas seis cordas; serve também para testar a entrada de áudio (@bob, revisado e corrigido por @claude; testado no navegador com microfone sintético, não com guitarra)
 
+### Rodada 7 — entrada e saída de áudio (em `claude/entrada-saida-audio`)
+- [x] **Rota de áudio** — sai sozinho do microfone do PC, saída escolhida com `setSinkId`, medidor em dB. Interfaces USB podem devolver a saída para a própria entrada: antes de abrir o monitor no mesmo aparelho, um tom de -40 dBFS testa o retorno. **Não reproduza esse laço em teste**: ele satura a saída da interface (@claude; validado no hardware real, sem guitarra tocando)
+
 ### Pendências conhecidas (sem dono)
 - [ ] **Dupla online com guitarras de verdade** — testada de ponta a ponta no Supabase real com dois navegadores, contas temporárias e microfone sintético (partida, revanche com troca de música, queda e volta, saída do anfitrião, exportação e exclusão de conta) e o ranking com uma partida real aceita pelo servidor, mas nunca por duas pessoas com guitarra. Falta também o caso de sala cheia (`room_full`), que exige uma terceira conta.
 - [ ] **Revisões diferentes da mesma faixa na dupla** — o convidado carrega a revisão atual da tab, sem conferir a anunciada pelo anfitrião. Decisão: não corrigir por ora; é raro e a partida não vale para o ranking.
@@ -343,7 +348,7 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 ## Fluxo do Usuário
 
 ```
-Landing Page → Clica "Tocar" ou "Buscar" → getUserMedia() → TONE3000 Ativo
+Landing Page → Clica "Tocar" ou "Buscar" → getUserMedia() → PRGB Amp Ativo
     │                                                            │
     ▼                                                            ▼
   Songsterr Search → Seleciona Música → Download Tab JSON → Parse para NoteEvent[]
@@ -365,7 +370,7 @@ Landing Page → Clica "Tocar" ou "Buscar" → getUserMedia() → TONE3000 Ativo
 
 | Termo | O que é |
 |---|---|
-| TONE3000 | Motor DSP custom de amp modeling (preamp + cab + reverb + gate) |
+| PRGB Amp | Motor DSP de amp modeling (preamp + cab + reverb + gate) |
 | NSDF | Normalized Square Difference Function — algoritmo de pitch detection |
 | Cab Sim | Cabinet Simulation — filtros que emulam alto-falantes de guitarra |
 | Tone Stack | EQ de 4 bandas (Bass 110Hz, Mid 750Hz, Treble 2.8kHz, Presence 4.5kHz) |
@@ -385,4 +390,4 @@ Landing Page → Clica "Tocar" ou "Buscar" → getUserMedia() → TONE3000 Ativo
 
 ## Dica Final para Agentes
 
-Se estiver em dúvida sobre qualquer aspecto do projeto, **leia os services em `src/services/`** — eles são o coração do app e estão bem documentados com comentários inline. O `tone3000Amp.ts` em particular é o mais complexo e sensível — altere com cuidado. Para a camada de backend, leia `src/services/backend/rankingApi.ts` e as migrations em `supabase/migrations/`.
+Se estiver em dúvida sobre qualquer aspecto do projeto, **leia os services em `src/services/`** — eles são o coração do app e estão bem documentados com comentários inline. O `ampEngine.ts` em particular é o mais complexo e sensível — altere com cuidado. Para a camada de backend, leia `src/services/backend/rankingApi.ts` e as migrations em `supabase/migrations/`.

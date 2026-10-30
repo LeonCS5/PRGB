@@ -53,10 +53,10 @@ import {
 } from '../services/scoring';
 import { getPersonalBest, recordRun } from '../services/records';
 import {
-  Tone3000AmpEngine,
+  AmpEngine,
   AMP_PRESETS,
-  type Tone3000Settings
-} from '../services/tone3000Amp';
+  type AmpSettings
+} from '../services/ampEngine';
 
 export interface OnlineProgress {
   score: number;
@@ -81,8 +81,8 @@ interface PracticeGameProps {
   onOpenSearch: () => void;
   onExit: () => void;
   onOpenAudioSettings: () => void;
-  tone3000?: Tone3000AmpEngine | null;
-  onOpenTone3000Rack?: () => void;
+  ampEngine?: AmpEngine | null;
+  onOpenAmpRack?: () => void;
   rankedStart?: RankedStart | null;
   onRankedTabOutdated?: () => Promise<string | null>;
   devPreset?: GameDevPreset | null;
@@ -129,8 +129,8 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   onOpenSearch,
   onExit,
   onOpenAudioSettings,
-  tone3000,
-  onOpenTone3000Rack,
+  ampEngine,
+  onOpenAmpRack,
   rankedStart = null,
   onRankedTabOutdated,
   devPreset = null,
@@ -160,21 +160,21 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   });
   const rankedHelpId = useId();
 
-  // TONE3000 Amp State
-  const [toneSettings, setToneSettings] = useState<Tone3000Settings | null>(
-    () => tone3000 ? tone3000.getSettings() : null
+  // PRGB Amp State
+  const [toneSettings, setToneSettings] = useState<AmpSettings | null>(
+    () => ampEngine ? ampEngine.getSettings() : null
   );
 
-  const [settingsAmp, setSettingsAmp] = useState(tone3000);
-  if (settingsAmp !== tone3000) {
-    setSettingsAmp(tone3000);
-    setToneSettings(tone3000 ? tone3000.getSettings() : null);
+  const [settingsAmp, setSettingsAmp] = useState(ampEngine);
+  if (settingsAmp !== ampEngine) {
+    setSettingsAmp(ampEngine);
+    setToneSettings(ampEngine ? ampEngine.getSettings() : null);
   }
 
   useEffect(() => {
-    if (!tone3000) return;
-    return tone3000.subscribe((s) => setToneSettings(s));
-  }, [tone3000]);
+    if (!ampEngine) return;
+    return ampEngine.subscribe((s) => setToneSettings(s));
+  }, [ampEngine]);
 
   // Playback state. positionRef is the song clock; currentTimeMs mirrors it for the slider and the synth
   const [isPlaying, setIsPlaying] = useState(() => devPreset?.playing ?? false);
@@ -780,8 +780,8 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
           <button aria-label="Metrônomo" aria-pressed={metronomeEnabled} onClick={() => setMetronomeEnabled(!metronomeEnabled)} className={toolClass + (metronomeEnabled ? ' border-amp-400! text-amp-300!' : '')}><Clock size={16} /><span className="hidden sm:inline">Metrônomo</span></button>
           <button aria-label="Sintetizador da tablatura" aria-pressed={synthAudioEnabled} onClick={() => setSynthAudioEnabled(!synthAudioEnabled)} className={toolClass + (synthAudioEnabled ? ' border-signal-500 text-signal-300' : '')}>{synthAudioEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}<span className="hidden sm:inline">Sintetizador</span></button>
           <button aria-label="Configurações de áudio" onClick={onOpenAudioSettings} className={toolClass}><Sliders size={16} /><span className="hidden sm:inline">Áudio</span></button>
-          <button aria-label="Abrir amplificador TONE3000" onClick={onOpenTone3000Rack} className={toolClass + ' text-amp-300!'}><Zap size={16} /><span>{toneSettings ? AMP_PRESETS[toneSettings.preset]?.badge : 'Amp'}</span></button>
-          <button aria-label={toneSettings?.isMonitoringEnabled ? 'Silenciar guitarra' : 'Ouvir guitarra'} aria-pressed={toneSettings?.isMonitoringEnabled ?? false} onClick={() => { if (tone3000 && toneSettings) tone3000.setMonitoringEnabled(!toneSettings.isMonitoringEnabled); }} className={toolClass}>{toneSettings?.isMonitoringEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}</button>
+          <button aria-label="Abrir PRGB Amp" onClick={onOpenAmpRack} className={toolClass + ' text-amp-300!'}><Zap size={16} /><span>{toneSettings ? AMP_PRESETS[toneSettings.preset]?.badge : 'Amp'}</span></button>
+          <button aria-label={toneSettings?.isMonitoringEnabled ? 'Silenciar guitarra' : 'Ouvir guitarra'} aria-pressed={toneSettings?.isMonitoringEnabled ?? false} onClick={() => { if (ampEngine && toneSettings) ampEngine.setMonitoringEnabled(!toneSettings.isMonitoringEnabled); }} className={toolClass}>{toneSettings?.isMonitoringEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}</button>
           {!isOnline && isRankingOn && <button aria-label="Minha conta do ranking" onClick={openRankingAccount} className={toolClass}><UserRound size={16} /><span className="hidden lg:inline">Minha conta</span></button>}
         </div>
         {!isOnline && ranked.isAvailable && (

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { TONE3000_DEFAULT_SETTINGS } from '../services/tone3000Amp';
+import { AMP_DEFAULT_SETTINGS } from '../services/ampEngine';
 import { clearPreferences, readPreferences, savePreferences } from './preferences';
 
 // ---------------------------------------------------------------------------
@@ -19,8 +19,8 @@ const makeStorage = (initial: Record<string, string> = {}): Storage => {
 
 const STORAGE_KEY = 'prgb:prefs:v1';
 
-// Valid TONE3000 settings that satisfy every range check
-const VALID_TONE3000 = {
+// Valid PRGB Amp settings that satisfy every range check
+const VALID_AMP = {
   isMonitoringEnabled: true,
   preset: 'metal',
   gain: 65,
@@ -55,7 +55,7 @@ describe('readPreferences defaults', () => {
       inputChosen: false,
       outputDeviceId: '',
       channelMode: 'ch1',
-      tone3000: null,
+      ampEngine: null,
       lastSong: null,
       nickname: null
     });
@@ -68,7 +68,7 @@ describe('readPreferences defaults', () => {
       inputChosen: false,
       outputDeviceId: '',
       channelMode: 'ch1',
-      tone3000: null,
+      ampEngine: null,
       lastSong: null,
       nickname: null
     });
@@ -86,7 +86,7 @@ describe('readPreferences with corrupted data', () => {
       inputChosen: false,
       outputDeviceId: '',
       channelMode: 'ch1',
-      tone3000: null,
+      ampEngine: null,
       lastSong: null,
       nickname: null
     });
@@ -116,52 +116,52 @@ describe('readPreferences with corrupted data', () => {
 });
 
 // ---------------------------------------------------------------------------
-// readPreferences — TONE3000 validation
+// readPreferences — PRGB Amp validation
 // ---------------------------------------------------------------------------
-describe('readPreferences tone3000 validation', () => {
-  it('reads a fully valid tone3000 object', () => {
-    ls.setItem(STORAGE_KEY, JSON.stringify({ tone3000: VALID_TONE3000 }));
-    expect(readPreferences().tone3000).toEqual(VALID_TONE3000);
+describe('readPreferences ampEngine validation', () => {
+  it('reads a fully valid ampEngine object', () => {
+    ls.setItem(STORAGE_KEY, JSON.stringify({ ampEngine: VALID_AMP }));
+    expect(readPreferences().ampEngine).toEqual(VALID_AMP);
   });
 
-  it('discards tone3000 when gain is out of range', () => {
-    ls.setItem(STORAGE_KEY, JSON.stringify({ tone3000: { ...VALID_TONE3000, gain: 101 } }));
-    expect(readPreferences().tone3000).toBeNull();
+  it('discards ampEngine when gain is out of range', () => {
+    ls.setItem(STORAGE_KEY, JSON.stringify({ ampEngine: { ...VALID_AMP, gain: 101 } }));
+    expect(readPreferences().ampEngine).toBeNull();
   });
 
-  it('discards tone3000 when bass is out of range', () => {
-    ls.setItem(STORAGE_KEY, JSON.stringify({ tone3000: { ...VALID_TONE3000, bass: 13 } }));
-    expect(readPreferences().tone3000).toBeNull();
+  it('discards ampEngine when bass is out of range', () => {
+    ls.setItem(STORAGE_KEY, JSON.stringify({ ampEngine: { ...VALID_AMP, bass: 13 } }));
+    expect(readPreferences().ampEngine).toBeNull();
   });
 
-  it('discards tone3000 when gateThreshold is out of range', () => {
-    ls.setItem(STORAGE_KEY, JSON.stringify({ tone3000: { ...VALID_TONE3000, gateThreshold: -19 } }));
-    expect(readPreferences().tone3000).toBeNull();
+  it('discards ampEngine when gateThreshold is out of range', () => {
+    ls.setItem(STORAGE_KEY, JSON.stringify({ ampEngine: { ...VALID_AMP, gateThreshold: -19 } }));
+    expect(readPreferences().ampEngine).toBeNull();
   });
 
-  it('discards tone3000 when masterVolume is out of range', () => {
-    ls.setItem(STORAGE_KEY, JSON.stringify({ tone3000: { ...VALID_TONE3000, masterVolume: 1.1 } }));
-    expect(readPreferences().tone3000).toBeNull();
+  it('discards ampEngine when masterVolume is out of range', () => {
+    ls.setItem(STORAGE_KEY, JSON.stringify({ ampEngine: { ...VALID_AMP, masterVolume: 1.1 } }));
+    expect(readPreferences().ampEngine).toBeNull();
   });
 
-  it('discards tone3000 when cabSim is an unknown value', () => {
-    ls.setItem(STORAGE_KEY, JSON.stringify({ tone3000: { ...VALID_TONE3000, cabSim: '8x10_bass' } }));
-    expect(readPreferences().tone3000).toBeNull();
+  it('discards ampEngine when cabSim is an unknown value', () => {
+    ls.setItem(STORAGE_KEY, JSON.stringify({ ampEngine: { ...VALID_AMP, cabSim: '8x10_bass' } }));
+    expect(readPreferences().ampEngine).toBeNull();
   });
 
-  it('discards tone3000 when preset is not a known AMP_PRESETS key', () => {
-    ls.setItem(STORAGE_KEY, JSON.stringify({ tone3000: { ...VALID_TONE3000, preset: 'jazz' } }));
-    expect(readPreferences().tone3000).toBeNull();
+  it('discards ampEngine when preset is not a known AMP_PRESETS key', () => {
+    ls.setItem(STORAGE_KEY, JSON.stringify({ ampEngine: { ...VALID_AMP, preset: 'jazz' } }));
+    expect(readPreferences().ampEngine).toBeNull();
   });
 
-  it('discards tone3000 when isMonitoringEnabled is not a boolean', () => {
-    ls.setItem(STORAGE_KEY, JSON.stringify({ tone3000: { ...VALID_TONE3000, isMonitoringEnabled: 1 } }));
-    expect(readPreferences().tone3000).toBeNull();
+  it('discards ampEngine when isMonitoringEnabled is not a boolean', () => {
+    ls.setItem(STORAGE_KEY, JSON.stringify({ ampEngine: { ...VALID_AMP, isMonitoringEnabled: 1 } }));
+    expect(readPreferences().ampEngine).toBeNull();
   });
 
-  it('discards tone3000 when a numeric field is not finite', () => {
-    ls.setItem(STORAGE_KEY, JSON.stringify({ tone3000: { ...VALID_TONE3000, gain: null } }));
-    expect(readPreferences().tone3000).toBeNull();
+  it('discards ampEngine when a numeric field is not finite', () => {
+    ls.setItem(STORAGE_KEY, JSON.stringify({ ampEngine: { ...VALID_AMP, gain: null } }));
+    expect(readPreferences().ampEngine).toBeNull();
   });
 });
 
@@ -233,7 +233,7 @@ describe('savePreferences partial update', () => {
     ls.setItem(STORAGE_KEY, JSON.stringify({
       deviceId: 'dev-1',
       channelMode: 'ch2',
-      tone3000: VALID_TONE3000,
+      ampEngine: VALID_AMP,
       lastSong: { songId: 5, partId: 1 },
       nickname: null
     }));
@@ -241,13 +241,13 @@ describe('savePreferences partial update', () => {
     const prefs = readPreferences();
     expect(prefs.deviceId).toBe('dev-1');
     expect(prefs.channelMode).toBe('both');
-    expect(prefs.tone3000).toEqual(VALID_TONE3000);
+    expect(prefs.ampEngine).toEqual(VALID_AMP);
     expect(prefs.lastSong).toEqual({ songId: 5, partId: 1 });
   });
 
-  it('saves default TONE3000 settings correctly', () => {
-    savePreferences({ tone3000: TONE3000_DEFAULT_SETTINGS });
-    expect(readPreferences().tone3000).toEqual(TONE3000_DEFAULT_SETTINGS);
+  it('saves default PRGB Amp settings correctly', () => {
+    savePreferences({ ampEngine: AMP_DEFAULT_SETTINGS });
+    expect(readPreferences().ampEngine).toEqual(AMP_DEFAULT_SETTINGS);
   });
 });
 
@@ -292,7 +292,7 @@ describe('clearPreferences', () => {
       inputChosen: false,
       outputDeviceId: '',
       channelMode: 'ch1',
-      tone3000: null,
+      ampEngine: null,
       lastSong: null,
       nickname: null
     });
