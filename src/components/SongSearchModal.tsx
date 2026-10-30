@@ -1,5 +1,5 @@
 import { ModalFrame } from './ModalFrame';
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Search, Music, Disc, Loader2, Sparkles, X, ChevronRight, Trophy, User, Users } from 'lucide-react';
 import { SongsterrApi, type SongsterrSearchResult, type SongsterrMeta, type NormalizedSongTab } from '../services/songsterrApi';
 import type { SavedSong } from '../context/preferences';
@@ -12,7 +12,8 @@ interface SongSearchModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSelectSong: (tab: NormalizedSongTab, song: SavedSong) => void;
-  // Duo: set when the players are ready (names); each picks a part of the chosen song
+  // Duo: set when the players are ready (names); each picks a part of the chosen song.
+  // onSelectDuo must close the modal: onClose means the duo was given up
   duoNames?: [string, string] | null;
   onChooseMode?: (mode: 'solo' | 'duo') => void;
   onSelectDuo?: (parts: [GamePart, GamePart]) => void;
@@ -45,6 +46,9 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState<(() => void) | null>(null);
   const [duoTracks, setDuoTracks] = useState<[number, number]>([0, 0]);
+  // Bumped on close and on each tab load: a load that finishes after it was superseded or the modal
+  // was closed (Esc while loading) is dropped instead of starting a game nobody is waiting for
+  const loadTokenRef = useRef(0);
   // Personal best at 1× of each part; re-read whenever the modal opens, a run may have just ended
   const trackBests = useMemo(
     () => isOpen && selectedSongMeta ? selectedSongMeta.tracks.map((track) => getPersonalBest(selectedSongMeta.songId, track.partId, 1)) : [],
@@ -52,6 +56,11 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
   );
 
   if (!isOpen) return null;
+
+  const close = () => {
+    loadTokenRef.current += 1;
+    onClose();
+  };
 
   const handleSearch = async (e?: React.FormEvent, searchQuery = query) => {
     if (e) e.preventDefault();
@@ -95,6 +104,7 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
 
   const handleSelectTrack = async (trackIndex: number) => {
     if (!selectedSongMeta) return;
+    const token = ++loadTokenRef.current;
 
     setIsLoadingTab(true);
     setError(null);
@@ -103,9 +113,11 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
     try {
       const track = selectedSongMeta.tracks[trackIndex];
       const normalized = await loadSongTrack(selectedSongMeta, trackIndex);
+      if (token !== loadTokenRef.current) return;
       onSelectSong(normalized, { songId: selectedSongMeta.songId, partId: track.partId });
       onClose();
     } catch (err) {
+      if (token !== loadTokenRef.current) return;
       setError(err instanceof Error ? err.message : 'Não foi possível carregar a tablatura. Escolha outra faixa.');
       setRetry(() => () => void handleSelectTrack(trackIndex));
     } finally {
@@ -116,6 +128,7 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
   const handleStartDuo = async () => {
     if (!selectedSongMeta || !onSelectDuo) return;
     const [first, second] = duoTracks;
+    const token = ++loadTokenRef.current;
     setIsLoadingTab(true);
     setError(null);
     setRetry(null);
@@ -123,12 +136,15 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
       const firstTab = await loadSongTrack(selectedSongMeta, first);
       // Same part for both (competition): one download, one tab
       const secondTab = second === first ? firstTab : await loadSongTrack(selectedSongMeta, second);
+      if (token !== loadTokenRef.current) return;
+      // No onClose here: closing the search while picking a duo song means giving up the duo, so the
+      // caller closes the modal itself when the duo starts
       onSelectDuo([
         { tab: firstTab, partId: selectedSongMeta.tracks[first].partId },
         { tab: secondTab, partId: selectedSongMeta.tracks[second].partId }
       ]);
-      onClose();
     } catch (err) {
+      if (token !== loadTokenRef.current) return;
       setError(err instanceof Error ? err.message : 'Não foi possível carregar as tablaturas. Escolha outras faixas.');
       setRetry(() => () => void handleStartDuo());
     } finally {
@@ -137,9 +153,9 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
   };
 
   return (
-    <ModalFrame titleId="SongSearchModal-title" onClose={onClose} className="max-w-2xl flex flex-col">
+    <ModalFrame titleId="SongSearchModal-title" onClose={close} className="max-w-2xl flex flex-col">
         <button
-          onClick={onClose}
+          onClick={close}
           aria-label="Fechar modal"
           className="min-h-10 absolute right-3 top-3 flex size-10 items-center justify-center rounded-xl text-ink-300 transition hover:bg-ink-800 hover:text-ink-100 cursor-pointer"
         >

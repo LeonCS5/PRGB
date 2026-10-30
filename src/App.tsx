@@ -87,6 +87,13 @@ const PracticePreview: React.FC = () => (
 
 const demoPart = (): GamePart => ({ tab: getDemoSong(), partId: 0 });
 
+// The demo has a single part (0): a demo challenge for any other part can't be played, so it's
+// ignored like any other invalid link
+const readValidChallenge = (): Challenge | null => {
+  const challenge = readChallengeFromSearch(window.location.search);
+  return challenge && challenge.songId === DEMO_SONG_ID && challenge.partId !== 0 ? null : challenge;
+};
+
 const soloSession = (part: GamePart, challenge: Challenge | null = null): GameSession =>
   ({ mode: 'solo', key: nextSessionKey(), part, challenge });
 
@@ -155,7 +162,7 @@ const AppContent: React.FC = () => {
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [restoreAttempt, setRestoreAttempt] = useState(0);
   const [defaultError, setDefaultError] = useState<string | null>(null);
-  const [pendingChallenge, setPendingChallenge] = useState<Challenge | null>(() => readChallengeFromSearch(window.location.search));
+  const [pendingChallenge, setPendingChallenge] = useState<Challenge | null>(readValidChallenge);
   const [openedWithChallenge] = useState(() => pendingChallenge !== null);
   const [isLoadingChallenge, setIsLoadingChallenge] = useState(false);
   const [challengeError, setChallengeError] = useState<string | null>(null);
@@ -263,6 +270,7 @@ const AppContent: React.FC = () => {
   // Load default song (Metallica - Creeping Death)
   const handleLoadDefaultSong = async () => {
     songSelectionVersion.current += 1;
+    const version = songSelectionVersion.current;
     setRestoreError(null);
     setDefaultError(null);
     setIsLoadingDefault(true);
@@ -279,9 +287,12 @@ const AppContent: React.FC = () => {
       const track = meta.tracks[trackIndex];
 
       const normalized = await loadSongTrack(meta, trackIndex);
+      // Another song, the demo or a duo was picked while this one loaded: keep that one
+      if (version !== songSelectionVersion.current) return;
       setSession(soloSession({ tab: normalized, partId: track.partId }));
       savePreferences({ lastSong: { songId: meta.songId, partId: track.partId } });
     } catch (err) {
+      if (version !== songSelectionVersion.current) return;
       setDefaultError(err instanceof Error ? err.message : 'Não foi possível carregar a música padrão. Busque outra música.');
     } finally {
       setIsLoadingDefault(false);
@@ -507,7 +518,10 @@ const AppContent: React.FC = () => {
             setIsDuoSetupOpen(true);
           }
         }}
-        onSelectDuo={(parts) => startDuo(parts, duoSearchNames ?? DEFAULT_PLAYER_NAMES)}
+        onSelectDuo={(parts) => {
+          setIsSearchOpen(false);
+          startDuo(parts, duoSearchNames ?? DEFAULT_PLAYER_NAMES);
+        }}
         onSelectSong={(tab, song) => {
           songSelectionVersion.current += 1;
           setRestoreError(null);
