@@ -177,7 +177,11 @@ export const RoomModal: React.FC<RoomModalProps> = ({ isOpen, onClose, onStartGa
     setModalError(null);
     try {
       const profile = await requestAccount();
-      if (profile) await open(profile.nickname);
+      if (profile) {
+        await open(profile.nickname);
+        setIsJoining(false);
+        setJoinCode('');
+      }
     } catch (error) {
       setModalError(getRoomErrorMessage(error));
     } finally {
