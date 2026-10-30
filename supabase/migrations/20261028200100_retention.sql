@@ -3,7 +3,7 @@
 --   * anonymous accounts that never created a profile (sign-up abandoned) are deleted after 2 days;
 --   * accounts idle for 12 months are deleted (auth.users cascades to profile, sessions and scores);
 --   * play sessions are kept 7 days, weekly scores 8 weeks;
---   * song_parts.registered_by is cleared after 7 days.
+--   * song_parts.registered_by is cleared after 7 days, register-part quota rows deleted after 1 day.
 -- Each step runs on its own: a failure is logged as a warning and the other steps still run.
 
 create extension if not exists pg_cron with schema pg_catalog;
@@ -61,6 +61,13 @@ begin
     where s.registered_by is not null and s.registered_at < now() - interval '7 days';
   exception when others then
     raise warning 'purge_expired_ranking_data: song part registrations: % (%)', sqlerrm, sqlstate;
+  end;
+
+  -- The quota only matters within its hour
+  begin
+    delete from public.register_part_quota q where q.window_start < now() - interval '1 day';
+  exception when others then
+    raise warning 'purge_expired_ranking_data: register-part quota: % (%)', sqlerrm, sqlstate;
   end;
 end;
 $$;

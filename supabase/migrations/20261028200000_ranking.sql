@@ -234,6 +234,14 @@ insert into public.song_parts (
   song_id, part_id, revision_id, title, artist, track_name, scorable_notes, duration_ms, max_score
 ) values (-1, 0, 0, 'Pentatônica em Lá menor', 'Exercício PRGB', 'Exercício', 41, 18667, 20100);
 
+-- Songsterr fetches made by register-part per player and clock hour (see consume_register_part_quota)
+create table public.register_part_quota (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  window_start timestamptz not null,
+  used integer not null check (used > 0),
+  primary key (user_id, window_start)
+);
+
 -- revision_id and the numbers are copied from song_parts when the session starts
 create table public.play_sessions (
   id uuid primary key default gen_random_uuid(),
@@ -297,6 +305,7 @@ alter table public.blocked_terms enable row level security;
 alter table public.moderation_allowlist enable row level security;
 alter table public.moderation_confusables enable row level security;
 alter table public.song_parts enable row level security;
+alter table public.register_part_quota enable row level security;
 alter table public.play_sessions enable row level security;
 alter table public.scores_best enable row level security;
 alter table public.scores_weekly enable row level security;
@@ -304,7 +313,7 @@ alter table public.scores_weekly enable row level security;
 -- Supabase grants new tables to the API roles by default; the app only reaches them through the functions
 revoke all on table
   public.profiles, public.blocked_terms, public.moderation_allowlist, public.moderation_confusables,
-  public.song_parts, public.play_sessions,
+  public.song_parts, public.register_part_quota, public.play_sessions,
   public.scores_best, public.scores_weekly
 from public, anon, authenticated;
 
@@ -605,6 +614,11 @@ begin
       ) order by sp.registered_at)
       from public.song_parts sp
       where sp.registered_by = v_uid
+    ), '[]'::jsonb),
+    'register_part_quota', coalesce((
+      select jsonb_agg(jsonb_build_object('window_start', q.window_start, 'used', q.used) order by q.window_start)
+      from public.register_part_quota q
+      where q.user_id = v_uid
     ), '[]'::jsonb)
   );
 end;
@@ -891,6 +905,26 @@ begin
 end;
 $$;
 
+-- Called by the register-part Edge Function (service role only) before each Songsterr fetch: counts the
+-- fetch and returns true while the player is within p_limit fetches this clock hour. The upsert counts
+-- atomically, so concurrent requests cannot go over the limit.
+create function public.consume_register_part_quota(p_user_id uuid, p_limit integer)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_used integer;
+begin
+  insert into public.register_part_quota as q (user_id, window_start, used)
+  values (p_user_id, date_trunc('hour', now()), 1)
+  on conflict (user_id, window_start) do update set used = q.used + 1
+  returning q.used into v_used;
+  return v_used <= p_limit;
+end;
+$$;
+
 -- Clock reference for online rooms. Reads no table, so it runs with the caller's rights (security invoker).
 create function public.server_time()
 returns timestamptz
@@ -929,8 +963,11 @@ revoke all on function
   public.submit_score(uuid, integer, integer, integer, integer, integer, integer),
   public.get_leaderboard(integer, integer, text, integer),
   public.get_my_position(integer, integer, text),
+  public.consume_register_part_quota(uuid, integer),
   public.server_time()
 from public, anon, authenticated;
+
+grant execute on function public.consume_register_part_quota(uuid, integer) to service_role;
 
 -- Signed-in players (Supabase anonymous accounts use the authenticated role)
 grant execute on function

@@ -202,6 +202,7 @@ export interface RankingDataExport {
     submitted_at: string | null;
   }[];
   registered_parts: { song_id: number; part_id: number; title: string; track_name: string; registered_at: string }[];
+  register_part_quota: { window_start: string; used: number }[]; // Songsterr fetches per hour, kept 1 day
 }
 
 export interface ExportedScore {

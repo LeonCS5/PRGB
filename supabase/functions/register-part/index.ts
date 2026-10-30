@@ -87,14 +87,10 @@ const store: RegisterPartStore = {
     return data ? toSongPart(data as SongPartRow) : null;
   },
 
-  async countRegistrationsSince(userId, since) {
-    const { count, error } = await admin
-      .from('song_parts')
-      .select('song_id', { count: 'exact', head: true })
-      .eq('registered_by', userId)
-      .gte('registered_at', since.toISOString());
-    if (error) throw new Error(`song_parts count: ${error.code}`);
-    return count ?? 0;
+  async consumeQuota(userId, limit) {
+    const { data, error } = await admin.rpc('consume_register_part_quota', { p_user_id: userId, p_limit: limit });
+    if (error) throw new Error(`register_part_quota: ${error.code}`);
+    return data === true;
   },
 
   async insertPart(part) {

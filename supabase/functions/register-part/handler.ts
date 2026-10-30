@@ -54,7 +54,8 @@ export interface RegisterPartStore {
   getUserId(jwt: string): Promise<string | null>;
   hasProfile(userId: string): Promise<boolean>;
   findPart(songId: number, partId: number): Promise<SongPart | null>;
-  countRegistrationsSince(userId: string, since: Date): Promise<number>;
+  /** Counts one Songsterr fetch for the player; false once over `limit` this hour (atomic in the database). */
+  consumeQuota(userId: string, limit: number): Promise<boolean>;
   /** Inserts unless the part already exists (a concurrent request won), then returns the stored row. */
   insertPart(part: NewSongPart): Promise<SongPart>;
   /** Replaces the counts of an existing part with those of a newer revision, then returns the stored row. */
@@ -80,7 +81,6 @@ export interface RegisterPartDeps {
   fetch: typeof fetch;
   allowedOrigins?: readonly string[];
   timeoutMs?: number;
-  now?: () => Date;
   log?: (message: string) => void;
 }
 
@@ -135,12 +135,16 @@ async function readRequest(request: Request): Promise<{ songId: number; partId: 
 export function createRegisterPartHandler(deps: RegisterPartDeps): (request: Request) => Promise<Response> {
   const allowedOrigins = deps.allowedOrigins ?? DEFAULT_ALLOWED_ORIGINS;
   const timeoutMs = deps.timeoutMs ?? FETCH_TIMEOUT_MS;
-  const now = deps.now ?? (() => new Date());
   const log = deps.log ?? (() => undefined);
 
   const fetchSongsterr = async (url: string): Promise<Response> => {
     try {
-      return await deps.fetch(url, { headers: SONGSTERR_HEADERS, signal: AbortSignal.timeout(timeoutMs) });
+      // No redirects: only the fixed Songsterr hosts are ever contacted
+      return await deps.fetch(url, {
+        headers: SONGSTERR_HEADERS,
+        redirect: 'error',
+        signal: AbortSignal.timeout(timeoutMs)
+      });
     } catch {
       throw new HttpError(502, 'songsterr_unavailable');
     }
@@ -243,10 +247,7 @@ export function createRegisterPartHandler(deps: RegisterPartDeps): (request: Req
       }
       if (seeded) throw new HttpError(404, 'song_not_found');
 
-      const since = new Date(now().getTime() - 3_600_000);
-      if ((await deps.store.countRegistrationsSince(userId, since)) >= REGISTRATIONS_PER_HOUR) {
-        throw new HttpError(429, 'rate_limited');
-      }
+      if (!(await deps.store.consumeQuota(userId, REGISTRATIONS_PER_HOUR))) throw new HttpError(429, 'rate_limited');
 
       // Songsterr decides the current revision; the one the app sent only triggers the check
       const meta = await fetchMeta(songId);

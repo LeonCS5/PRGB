@@ -80,6 +80,10 @@ describe('retention', () => {
       `insert into public.scores_best (user_id, song_id, part_id, score, accuracy, max_combo, perfect, good, miss)
        values ($1, 1, 0, 100, 100, 1, 1, 0, 0)`, [idle]);
 
+    await db.query(
+      `insert into public.register_part_quota (user_id, window_start, used)
+       values ($1, date_trunc('hour', now()) - interval '2 days', 5), ($1, date_trunc('hour', now()), 1)`, [active]);
+
     await db.query('select public.purge_expired_ranking_data()');
 
     const user = (id: string) => exists('select 1 from auth.users where id = $1', [id]);
@@ -100,6 +104,9 @@ describe('retention', () => {
     const { rows: parts } = await db.query<{ song_id: number; registered_by: string | null }>(
       'select song_id, registered_by from public.song_parts where song_id in (1, 2) order by song_id');
     expect(parts).toEqual([{ song_id: 1, registered_by: null }, { song_id: 2, registered_by: active }]);
+    const { rows: quota } = await db.query<{ used: number }>(
+      'select used from public.register_part_quota where user_id = $1', [active]);
+    expect(quota).toEqual([{ used: 1 }]);
   });
 
   it('runs every step even when one fails', async () => {

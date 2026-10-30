@@ -30,10 +30,11 @@ const tabUrl = (host: string) => `${host}/77/5/img/0.json`;
 
 type Route = Response | Error | 'hang';
 
-function setup(routes: Record<string, Route> = {}, options: { profile?: boolean; recent?: number; parts?: SongPart[] } = {}) {
+function setup(routes: Record<string, Route> = {}, options: { profile?: boolean; quotaLeft?: boolean; parts?: SongPart[] } = {}) {
   const parts = new Map((options.parts ?? []).map((part) => [`${part.songId}/${part.partId}`, part]));
   const inserted: NewSongPart[] = [];
   const updated: NewSongPart[] = [];
+  const quotaLimits: number[] = [];
   const store = (part: NewSongPart): SongPart => {
     const { registeredBy: _registeredBy, ...stored } = part;
     return stored;
@@ -55,7 +56,10 @@ function setup(routes: Record<string, Route> = {}, options: { profile?: boolean;
       getUserId: async (jwt) => (jwt === 'valid-token' ? USER : null),
       hasProfile: async () => options.profile ?? true,
       findPart: async (songId, partId) => parts.get(`${songId}/${partId}`) ?? null,
-      countRegistrationsSince: async () => options.recent ?? 0,
+      consumeQuota: async (_userId, limit) => {
+        quotaLimits.push(limit);
+        return options.quotaLeft ?? true;
+      },
       insertPart: async (part) => {
         inserted.push(part);
         return store(part);
@@ -66,7 +70,7 @@ function setup(routes: Record<string, Route> = {}, options: { profile?: boolean;
       }
     }
   };
-  return { handler: createRegisterPartHandler(deps), fetchMock, inserted, updated, log };
+  return { handler: createRegisterPartHandler(deps), fetchMock, inserted, updated, quotaLimits, log };
 }
 
 const ok = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } });
@@ -195,10 +199,17 @@ describe('register-part handler', () => {
     });
   });
 
-  it('limits new registrations per user and hour', async () => {
-    const { handler, fetchMock } = setup({ [META_URL]: ok(META) }, { recent: REGISTRATIONS_PER_HOUR });
+  it('limits Songsterr fetches per user and hour through the database quota', async () => {
+    const { handler, fetchMock, quotaLimits } = setup({ [META_URL]: ok(META) }, { quotaLeft: false });
     expect(await call(handler, post({ songId: 77, partId: 0 }))).toMatchObject({ status: 429, body: { error: 'rate_limited' } });
+    expect(quotaLimits).toEqual([REGISTRATIONS_PER_HOUR]);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('never follows redirects', async () => {
+    const { handler, fetchMock } = setup({ [META_URL]: ok(META), [tabUrl(SONGSTERR_CDN_HOSTS[0])]: ok(rawDemo) });
+    await call(handler, post({ songId: 77, partId: 0 }));
+    expect(fetchMock.mock.calls.map(([, init]) => init?.redirect)).toEqual(['error', 'error']);
   });
 
   it.each<[string, Record<string, Route>, number, string]>([
@@ -230,7 +241,7 @@ describe('register-part handler', () => {
           throw new Error('profiles: 08006');
         },
         findPart: async () => null,
-        countRegistrationsSince: async () => 0,
+        consumeQuota: async () => true,
         insertPart: async () => {
           throw new Error('unreachable');
         },

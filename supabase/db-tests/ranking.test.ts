@@ -91,8 +91,8 @@ describe('access control', () => {
       from pg_class c join pg_namespace n on n.oid = c.relnamespace
       where n.nspname = 'public' and c.relkind = 'r'`);
     expect(rows.map((r) => r.table).sort()).toEqual([
-      'blocked_terms', 'moderation_allowlist', 'moderation_confusables', 'play_sessions', 'profiles', 'scores_best',
-      'scores_weekly', 'song_parts'
+      'blocked_terms', 'moderation_allowlist', 'moderation_confusables', 'play_sessions', 'profiles',
+      'register_part_quota', 'scores_best', 'scores_weekly', 'song_parts'
     ]);
     for (const row of rows) expect(row, row.table).toMatchObject({ rls: true, anon: false, authenticated: false });
   });
@@ -352,6 +352,25 @@ describe('start_session', () => {
   });
 });
 
+describe('register-part quota', () => {
+  it('counts fetches atomically per player and hour, for the service role only', async () => {
+    const userId = await newPlayer();
+    const other = await newPlayer();
+    const consume = async (id: string) => {
+      const [row] = await callAs<{ ok: boolean }>(
+        db, 'service_role', null, 'select public.consume_register_part_quota($1, 3) as ok', [id]);
+      return row.ok;
+    };
+    expect([await consume(userId), await consume(userId), await consume(userId), await consume(userId)])
+      .toEqual([true, true, true, false]);
+    expect(await consume(other)).toBe(true);
+    await expect(callAs(db, 'authenticated', userId, 'select public.consume_register_part_quota($1, 30)', [userId]))
+      .rejects.toMatchObject({ code: '42501' });
+    const data = await rpc<{ register_part_quota: { used: number }[] }>(db, userId, 'public.export_my_data()');
+    expect(data.register_part_quota).toEqual([expect.objectContaining({ used: 4 })]);
+  });
+});
+
 describe('tab revisions', () => {
   it('copies the revision and its numbers into the session, refusing another revision from the app', async () => {
     const userId = await newPlayer();
@@ -512,7 +531,8 @@ describe('export_my_data', () => {
 
     const data = await rpc<Record<string, unknown>>(db, userId, 'public.export_my_data()');
     expect(Object.keys(data).sort()).toEqual(
-      ['account', 'exported_at', 'play_sessions', 'profile', 'registered_parts', 'scores_best', 'scores_weekly']);
+      ['account', 'exported_at', 'play_sessions', 'profile', 'register_part_quota', 'registered_parts', 'scores_best',
+        'scores_weekly']);
     expect(data.account).toEqual({ id: userId, created_at: expect.any(String), is_anonymous: true });
     expect(data.profile).toMatchObject({ nickname: 'Titular Export', consent_version: 'v1' });
     expect(data.scores_best).toEqual([expect.objectContaining({ song_id: mine.songId, score: 4200, title: 'Música' })]);
