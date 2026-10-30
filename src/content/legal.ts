@@ -440,7 +440,7 @@ export const CONSENT_COPY: ConsentCopy = {
   ],
   nicknameHelp: 'De 3 a 20 caracteres: letras (com ou sem acento), números, espaço, _ (sublinhado), - (hífen) e . (ponto). Não são aceitos palavrões, ofensas nem nomes que imitem outras pessoas ou a equipe do PRGB. No ranking, cada apelido é único. Para proteger sua privacidade, não use seu nome completo.',
   exportLabel: EXPORT_LABEL,
-  exportDescription: 'Baixa um arquivo JSON com os dados da sua conta do ranking: apelido, ID da conta, datas de criação, do aceite e do último acesso, versão do texto aceito e suas pontuações (recordes e ranking semanal). O arquivo pode ser aberto em qualquer editor de texto e não inclui dados de outras pessoas.',
+  exportDescription: 'Baixa um arquivo JSON com os dados da sua conta do ranking: apelido, ID da conta, datas de criação, do aceite e do último acesso, versão do texto aceito, suas pontuações (recordes e ranking semanal), os registros técnicos das partidas e das faixas que você cadastrou e, se houver, sua vaga em sala online. O arquivo pode ser aberto em qualquer editor de texto e não inclui dados de outras pessoas.',
   deleteTitle: DELETE_LABEL,
   deleteDescription: `Apaga na hora sua conta do ranking e tudo o que está ligado a ela: apelido, pontuações e registros das partidas. Não dá para desfazer nem recuperar. Os dados guardados só neste navegador continuam aqui; para apagá-los, use “${CLEAR_LOCAL_LABEL}”.`,
   deleteConfirmLabel: 'Excluir definitivamente',

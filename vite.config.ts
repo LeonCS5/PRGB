@@ -16,7 +16,12 @@ export default defineConfig({
         'fonts/inter-latin-wght-normal.woff2', 'fonts/space-grotesk-latin-wght-normal.woff2',
         'fonts/jetbrains-mono-latin-wght-normal.woff2'
       ]
-      const shellFiles = ['index.html', ...Object.keys(bundle).filter((file) => file.startsWith('assets/')), ...publicFiles]
+      // Lazy chunks (the Supabase client) stay out of the precache: visitors who never open the ranking
+      // shouldn't download them, and the game doesn't need them offline
+      const assets = Object.values(bundle).filter((file) => (
+        file.fileName.startsWith('assets/') && !(file.type === 'chunk' && file.isDynamicEntry)
+      ))
+      const shellFiles = ['index.html', ...assets.map((file) => file.fileName), ...publicFiles]
       const template = readFileSync(new URL('./public/sw.js', import.meta.url), 'utf8')
       const hash = createHash('sha256').update(template)
       for (const file of Object.values(bundle)) {
