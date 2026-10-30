@@ -11,10 +11,14 @@ import type { DevScene } from './devScenes';
 const NOW = '2026-10-29T21:15:00.000Z';
 const DEMO_TARGET: LeaderboardTarget = { songId: DEMO_SONG_ID, partId: 0, title: 'Pentatônica em Lá menor', trackName: 'Exercício' };
 
+const WEEK_ROWS = 2;
+
 const row = (rank: number, nickname: string, score: number, accuracy: number, maxCombo: number, isMe = false): LeaderboardEntry =>
   ({ rank, nickname, score, accuracy, maxCombo, achievedAt: NOW, isMe });
 
-const ALL_TIME: LeaderboardEntry[] = [
+// A function, not a constant: a bundler can't tell that calls at the top of a module have no effects, and would
+// keep these names in production
+const sampleRows = (): LeaderboardEntry[] => [
   row(1, 'Palheta de Ouro', 19450, 100, 41),
   row(2, 'Riffeiro_92', 18300, 98, 37),
   row(3, 'Trastes Tortos', 17150, 95, 33, true),
@@ -22,8 +26,6 @@ const ALL_TIME: LeaderboardEntry[] = [
   row(5, 'Cordas.de.Aço', 12850, 88, 19),
   row(6, 'Solo no Quintal', 9400, 76, 12)
 ];
-const THIS_WEEK = ALL_TIME.slice(0, 2);
-const MY_WEEK_POSITION = row(57, 'Trastes Tortos', 3200, 54, 6, true);
 
 const PROFILE: RankingProfile = {
   nickname: 'Trastes Tortos', ageConfirmedAt: NOW, consentAt: NOW, consentVersion: LEGAL_VERSION, createdAt: NOW, lastSeenAt: NOW
@@ -72,18 +74,19 @@ const createDevApi = (initial: { profile: RankingProfile | null; rows: Leaderboa
       if (score < 1) throw new RankingError('empty_run');
       return { accepted: true, personalBest: true, weeklyBest: true, rankAll: 3, rankWeek: 1 };
     },
-    getLeaderboard: async ({ period = 'all' }) => period === 'all' ? initial.rows : initial.rows.slice(0, THIS_WEEK.length),
-    getMyPosition: async ({ period = 'all' }) => period === 'week' && initial.rows.length > 0 && profile ? MY_WEEK_POSITION : null
+    getLeaderboard: async ({ period = 'all' }) => period === 'all' ? initial.rows : initial.rows.slice(0, WEEK_ROWS),
+    getMyPosition: async ({ period = 'all' }) => period === 'week' && initial.rows.length > 0 && profile ? row(57, profile.nickname, 3200, 54, 6, true) : null
   };
 };
 
 export const rankingDevSetup = (scene: DevScene | null): RankingDevSetup | null => {
-  const signedIn = createDevApi({ profile: PROFILE, rows: ALL_TIME });
+  const rows = sampleRows();
+  const signedIn = createDevApi({ profile: PROFILE, rows });
   switch (scene) {
     case 'ranking-entrada':
-      return { api: createDevApi({ profile: null, rows: ALL_TIME }), entryMode: 'create' };
+      return { api: createDevApi({ profile: null, rows }), entryMode: 'create' };
     case 'ranking-reaceite':
-      return { api: createDevApi({ profile: { ...PROFILE, consentVersion: '2026-01-01' }, rows: ALL_TIME }), entryMode: 'reaccept' };
+      return { api: createDevApi({ profile: { ...PROFILE, consentVersion: '2026-01-01' }, rows }), entryMode: 'reaccept' };
     case 'ranking-conta':
       return { api: signedIn, accountOpen: true };
     case 'ranking-lista':
