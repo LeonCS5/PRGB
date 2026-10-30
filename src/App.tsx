@@ -37,7 +37,7 @@ import { Tone3000AmpRack } from './components/Tone3000AmpRack';
 import { AudioSessionProvider, useAudioSession, useLatestPitch } from './context/AudioSessionContext';
 import { ModalsProvider, useModals } from './context/ModalsContext';
 import { readPreferences, savePreferences } from './context/preferences';
-import { DEFAULT_PLAYER_NAMES, nextSessionKey, type GamePart, type GameSession } from './context/gameSession';
+import { DEFAULT_PLAYER_NAMES, nextSessionKey, type GamePart, type GameSession, type RankedStart } from './context/gameSession';
 
 const supportUrl = import.meta.env.VITE_SUPPORT_URL?.trim();
 const supportHref = supportUrl || 'https://github.com/LeonCS5/PRGB';
@@ -89,7 +89,7 @@ const PracticePreview: React.FC = () => (
   </figure>
 );
 
-const demoPart = (): GamePart => ({ tab: getDemoSong(), partId: 0 });
+const demoPart = (): GamePart => ({ tab: getDemoSong(), partId: 0, revisionId: null });
 
 // The demo has a single part (0): a demo challenge for any other part can't be played, so it's
 // ignored like any other invalid link
@@ -98,8 +98,8 @@ const readValidChallenge = (): Challenge | null => {
   return challenge && challenge.songId === DEMO_SONG_ID && challenge.partId !== 0 ? null : challenge;
 };
 
-const soloSession = (part: GamePart, challenge: Challenge | null = null): GameSession =>
-  ({ mode: 'solo', key: nextSessionKey(), part, challenge });
+const soloSession = (part: GamePart, challenge: Challenge | null = null, rankedStart: RankedStart | null = null): GameSession =>
+  ({ mode: 'solo', key: nextSessionKey(), part, challenge, rankedStart });
 
 const duoSession = (parts: [GamePart, GamePart], names: [string, string]): GameSession =>
   ({ mode: 'duo', key: nextSessionKey(), parts, names });
@@ -195,7 +195,7 @@ const AppContent: React.FC = () => {
         const trackIndex = meta.tracks.findIndex((track) => track.partId === savedSong.partId);
         if (trackIndex < 0) throw new Error('A faixa salva não está mais disponível.');
         const normalized = await loadSongTrack(meta, trackIndex);
-        if (!cancelled && version === songSelectionVersion.current) setSession(soloSession({ tab: normalized, partId: savedSong.partId }));
+        if (!cancelled && version === songSelectionVersion.current) setSession(soloSession({ tab: normalized, partId: savedSong.partId, revisionId: meta.revisionId }));
       } catch (err) {
         if (!cancelled && version === songSelectionVersion.current) {
           setRestoreError(`Não foi possível restaurar a última música. ${err instanceof Error ? err.message : 'Busque uma música para continuar.'}`);
@@ -251,7 +251,7 @@ const AppContent: React.FC = () => {
         const meta = await getSongMetadata(challenge.songId);
         const trackIndex = meta.tracks.findIndex((track) => track.partId === challenge.partId);
         if (trackIndex < 0) throw new Error('A faixa deste desafio não está mais disponível no Songsterr. Escolha outra música.');
-        part = { tab: await loadSongTrack(meta, trackIndex), partId: challenge.partId };
+        part = { tab: await loadSongTrack(meta, trackIndex), partId: challenge.partId, revisionId: meta.revisionId };
       }
       if (version !== songSelectionVersion.current) return;
       setPendingChallenge(null);
@@ -294,7 +294,7 @@ const AppContent: React.FC = () => {
       const normalized = await loadSongTrack(meta, trackIndex);
       // Another song, the demo or a duo was picked while this one loaded: keep that one
       if (version !== songSelectionVersion.current) return;
-      setSession(soloSession({ tab: normalized, partId: track.partId }));
+      setSession(soloSession({ tab: normalized, partId: track.partId, revisionId: meta.revisionId }));
       savePreferences({ lastSong: { songId: meta.songId, partId: track.partId } });
     } catch (err) {
       if (version !== songSelectionVersion.current) return;
@@ -537,12 +537,12 @@ const AppContent: React.FC = () => {
           setIsSearchOpen(false);
           startDuo(parts, duoSearchNames ?? DEFAULT_PLAYER_NAMES);
         }}
-        onSelectSong={(tab, song) => {
+        onSelectSong={(tab, song, revisionId) => {
           songSelectionVersion.current += 1;
           setRestoreError(null);
           setDefaultError(null);
           ensureSoloAudio();
-          setSession(soloSession({ tab, partId: song.partId }));
+          setSession(soloSession({ tab, partId: song.partId, revisionId }));
           if (song.songId !== DEMO_SONG_ID) savePreferences({ lastSong: song });
         }}
       />

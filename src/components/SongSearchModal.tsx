@@ -11,7 +11,7 @@ import type { GamePart } from '../context/gameSession';
 interface SongSearchModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelectSong: (tab: NormalizedSongTab, song: SavedSong) => void;
+  onSelectSong: (tab: NormalizedSongTab, song: SavedSong, revisionId: number) => void;
   // Duo: set when the players are ready (names); each picks a part of the chosen song.
   // onSelectDuo must close the modal: onClose means the duo was given up
   duoNames?: [string, string] | null;
@@ -114,7 +114,7 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
       const track = selectedSongMeta.tracks[trackIndex];
       const normalized = await loadSongTrack(selectedSongMeta, trackIndex);
       if (token !== loadTokenRef.current) return;
-      onSelectSong(normalized, { songId: selectedSongMeta.songId, partId: track.partId });
+      onSelectSong(normalized, { songId: selectedSongMeta.songId, partId: track.partId }, selectedSongMeta.revisionId);
       onClose();
     } catch (err) {
       if (token !== loadTokenRef.current) return;
@@ -139,9 +139,10 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
       if (token !== loadTokenRef.current) return;
       // No onClose here: closing the search while picking a duo song means giving up the duo, so the
       // caller closes the modal itself when the duo starts
+      const { revisionId } = selectedSongMeta;
       onSelectDuo([
-        { tab: firstTab, partId: selectedSongMeta.tracks[first].partId },
-        { tab: secondTab, partId: selectedSongMeta.tracks[second].partId }
+        { tab: firstTab, partId: selectedSongMeta.tracks[first].partId, revisionId },
+        { tab: secondTab, partId: selectedSongMeta.tracks[second].partId, revisionId }
       ]);
     } catch (err) {
       if (token !== loadTokenRef.current) return;
