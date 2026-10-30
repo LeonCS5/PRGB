@@ -1,8 +1,12 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { AudioEngine, type DetectedPitch, type InputChannelMode, type PlayerSlot } from '../services/audioEngine';
+import { audioDeviceName, isSystemAlias, looksLikeInstrumentInput, pickInstrumentInput, pickMonitorOutput } from '../services/audioDevices';
+import { AudioEngine, type ActiveAudioInput, type DetectedPitch, type InputChannelMode, type PlayerSlot } from '../services/audioEngine';
 import type { Tone3000AmpEngine } from '../services/tone3000Amp';
 import { readPreferences, savePreferences } from './preferences';
 import { getAudioErrorMessage } from './uiErrors';
+
+// The output was feeding the input: 'moved' to other speakers, or 'muted' when there is no safe place to go
+export type AudioRouteAlert = { kind: 'moved'; outputName: string } | { kind: 'muted' };
 
 export interface AudioSessionValue {
   audioEngine: AudioEngine;
@@ -14,9 +18,14 @@ export interface AudioSessionValue {
   // Duo: frames since the last start in which both guitars had a detected note (capped at 1000)
   getDuoFramesBothPlaying: () => number;
   selectedDeviceId: string;
+  activeInput: ActiveAudioInput | null;
+  outputDeviceId: string;
+  outputName: string; // what is playing, so that a wrong route can be seen at a glance
+  routeAlert: AudioRouteAlert | null;
   channelMode: InputChannelMode;
   startAudio: (deviceId?: string, mode?: InputChannelMode) => Promise<void>;
   changeDevice: (deviceId: string) => Promise<void>;
+  changeOutputDevice: (deviceId: string) => Promise<void>;
   changeChannelMode: (mode: InputChannelMode) => Promise<void>;
 }
 
@@ -75,13 +84,41 @@ export const AudioSessionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [selectedDeviceId, setSelectedDeviceId] = useState(preferences.deviceId);
   const [channelMode, setChannelMode] = useState<InputChannelMode>(preferences.channelMode);
   const [tone3000, setTone3000] = useState<Tone3000AmpEngine | null>(null);
+  const [activeInput, setActiveInput] = useState<ActiveAudioInput | null>(null);
+  const [outputDeviceId, setOutputDeviceId] = useState(preferences.outputDeviceId);
+  const [outputName, setOutputName] = useState('');
+  const [routeAlert, setRouteAlert] = useState<AudioRouteAlert | null>(null);
+
+  const refreshOutputName = useCallback(async (deviceId: string) => {
+    const outputs = await audioEngine.getAudioOutputDevices();
+    const playing = outputs.find((device) => device.deviceId === (deviceId || 'default')) ?? outputs[0];
+    setOutputName(playing ? audioDeviceName(playing.label) : '');
+  }, [audioEngine]);
+
+  // Nothing was chosen yet and the system's default input is usually the computer's microphone
+  const findInstrumentInput = useCallback(async () => {
+    if (audioEngine.getSelectedDeviceId() || readPreferences().inputChosen) return null;
+    return pickInstrumentInput(await audioEngine.getAudioInputDevices());
+  }, [audioEngine]);
 
   const startAudio = useCallback(
     async (deviceId = selectedDeviceId, mode = channelMode) => {
       setAudioError(null);
       try {
         pitchStore.resetBothPlayingFrames();
-        await audioEngine.start(deviceId, mode, pitchStore.publish);
+        const output = readPreferences().outputDeviceId;
+        if (!await audioEngine.setOutputDevice(output)) {
+          setOutputDeviceId('');
+          savePreferences({ outputDeviceId: '' });
+        }
+        // With the permission already given the names are known, so the microphone is not even opened
+        const known = deviceId ? null : await findInstrumentInput();
+        await audioEngine.start(known?.deviceId ?? deviceId, mode, pitchStore.publish);
+        // On a first run the names only appear once the browser has been given a device to open
+        if (!looksLikeInstrumentInput(audioEngine.getActiveInput()?.label ?? '')) {
+          const found = await findInstrumentInput();
+          if (found) await audioEngine.start(found.deviceId, mode, pitchStore.publish);
+        }
         // Player 2 only exists in duo mode; don't leave its last note behind
         if (mode !== 'duo') pitchStore.publish(null, 1);
         const amp = audioEngine.getTone3000();
@@ -104,6 +141,8 @@ export const AudioSessionProvider: React.FC<{ children: React.ReactNode }> = ({ 
           initializedAmp.current = amp;
         }
         setSelectedDeviceId(audioEngine.getSelectedDeviceId());
+        setActiveInput(audioEngine.getActiveInput());
+        void refreshOutputName(readPreferences().outputDeviceId);
         setChannelMode(mode);
         setTone3000(amp);
         setIsAudioRunning(true);
@@ -114,16 +153,50 @@ export const AudioSessionProvider: React.FC<{ children: React.ReactNode }> = ({ 
         setAudioError(getAudioErrorMessage(err));
       }
     },
-    [audioEngine, selectedDeviceId, channelMode, preferences, pitchStore]
+    [audioEngine, selectedDeviceId, channelMode, preferences, pitchStore, findInstrumentInput, refreshOutputName]
   );
 
   const changeDevice = useCallback(
     async (deviceId: string) => {
+      savePreferences({ inputChosen: true });
       setSelectedDeviceId(deviceId);
       if (isAudioRunning) await startAudio(deviceId, channelMode);
     },
     [isAudioRunning, channelMode, startAudio]
   );
+
+  const changeOutputDevice = useCallback(
+    async (deviceId: string) => {
+      const id = isSystemAlias(deviceId) ? '' : deviceId;
+      setRouteAlert(null);
+      const applied = await audioEngine.setOutputDevice(id);
+      const saved = applied ? id : '';
+      savePreferences({ outputDeviceId: saved });
+      setOutputDeviceId(saved);
+      await refreshOutputName(saved);
+    },
+    [audioEngine, refreshOutputName]
+  );
+
+  useEffect(() => {
+    audioEngine.setFeedbackListener(() => {
+      const moveAway = async () => {
+        const inputGroup = audioEngine.getActiveInput()?.groupId ?? '';
+        // A chosen output is the player's call: it stays, silent, until they pick another
+        const target = readPreferences().outputDeviceId
+          ? null
+          : pickMonitorOutput(await audioEngine.getAudioOutputDevices(), inputGroup);
+        if (!target) {
+          setRouteAlert({ kind: 'muted' });
+          return;
+        }
+        await changeOutputDevice(target.deviceId);
+        setRouteAlert({ kind: 'moved', outputName: audioDeviceName(target.label) });
+      };
+      void moveAway();
+    });
+    return () => audioEngine.setFeedbackListener(null);
+  }, [audioEngine, changeOutputDevice]);
 
   const changeChannelMode = useCallback(
     async (mode: InputChannelMode) => {
@@ -156,12 +229,17 @@ export const AudioSessionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       getLatestPitch: pitchStore.getSnapshot,
       getDuoFramesBothPlaying: pitchStore.getBothPlayingFrames,
       selectedDeviceId,
+      activeInput,
+      outputDeviceId,
+      outputName,
+      routeAlert,
       channelMode,
       startAudio,
       changeDevice,
+      changeOutputDevice,
       changeChannelMode
     }),
-    [audioEngine, tone3000, isAudioRunning, audioError, dismissAudioError, pitchStore, selectedDeviceId, channelMode, startAudio, changeDevice, changeChannelMode]
+    [audioEngine, tone3000, isAudioRunning, audioError, dismissAudioError, pitchStore, selectedDeviceId, activeInput, outputDeviceId, outputName, routeAlert, channelMode, startAudio, changeDevice, changeOutputDevice, changeChannelMode]
   );
 
   return (

@@ -3,6 +3,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Mic, Sliders, Trash2, Zap } from 'lucide-react';
+import { AudioRouteNotice, InputLevelMeter } from './AudioRouting';
 import { BrandMark } from './BrandMark';
 import { ErrorNotice } from './ErrorNotice';
 import {
@@ -15,6 +16,7 @@ import {
   type LaneLayout,
 } from './practiceLanes';
 import { useAudioSession, useLatestPitch } from '../context/AudioSessionContext';
+import { audioDeviceName } from '../services/audioDevices';
 import { STANDARD_TUNING } from '../services/audioEngine';
 import { updateTrail, type PlayedNote } from '../services/noteTrail';
 
@@ -46,7 +48,7 @@ const Reading: React.FC<{ label: string; children: React.ReactNode }> = ({ label
 );
 
 export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings, onOpenTone3000Rack }) => {
-  const { audioEngine, isAudioRunning, startAudio, audioError, dismissAudioError, getLatestPitch } = useAudioSession();
+  const { audioEngine, isAudioRunning, startAudio, audioError, dismissAudioError, getLatestPitch, activeInput, outputName } = useAudioSession();
   const pitch = useLatestPitch();
   const [palette] = useState(readPalette);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -161,7 +163,6 @@ export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings,
     setRecent([]);
   };
 
-  const inputLevel = pitch ? Math.round(Math.min(100, pitch.volume * 250)) : 0;
   const position = pitch?.stringEstimate != null && pitch.fretEstimate != null
     ? `Corda ${pitch.stringEstimate} · casa ${pitch.fretEstimate}`
     : 'Fora do braço';
@@ -177,7 +178,15 @@ export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings,
             <h1 className="truncate text-base font-bold sm:text-xl">Play Free</h1>
             <p className="truncate text-xs text-ink-300">Toque à vontade: o PRGB só escuta e mostra as notas.</p>
           </div>
+          {activeInput && (
+            <button type="button" onClick={onOpenAudioSettings} aria-label="Escolher entrada e saída de áudio"
+              className="ml-auto hidden min-w-0 cursor-pointer rounded-lg border border-ink-700 bg-ink-850 px-3 py-1 text-left font-mono text-[11px] leading-4 text-ink-200 transition hover:border-ink-500 sm:block">
+              <span className="block truncate">Entrada: {audioDeviceName(activeInput.label)}</span>
+              <span className="block truncate">Saída: {outputName || 'padrão do sistema'}</span>
+            </button>
+          )}
         </div>
+        <div className="mt-2 empty:hidden"><AudioRouteNotice /></div>
 
         <div className="mt-3 flex gap-2 [@media(max-height:500px)]:mt-1">
           <div className="flex w-28 shrink-0 flex-col items-center justify-center rounded-xl border border-signal-500/30 bg-signal-500/5 sm:w-32">
@@ -192,14 +201,7 @@ export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings,
                 : '--'}
             </Reading>
             <Reading label="POSIÇÃO"><span className="text-xs sm:whitespace-nowrap sm:text-[11px]">{pitch ? position : '--'}</span></Reading>
-            <Reading label="ENTRADA">
-              <div className="flex items-center gap-2">
-                <div className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-ink-700">
-                  <div className="h-full rounded-full bg-signal-400" style={{ width: `${inputLevel}%` }} />
-                </div>
-                <span className="text-xs">{inputLevel}%</span>
-              </div>
-            </Reading>
+            <Reading label="ENTRADA"><InputLevelMeter /></Reading>
             <Reading label="CLAREZA">{pitch ? `${Math.round(pitch.clarity * 100)}%` : '--'}</Reading>
             <Reading label="NOTAS"><span className="text-amp-300">{total}</span></Reading>
           </div>

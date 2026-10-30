@@ -9,6 +9,8 @@ export interface SavedSong {
 
 export interface Preferences {
   deviceId: string;
+  inputChosen: boolean; // the player picked the input: the app must not move to the interface by itself
+  outputDeviceId: string;
   channelMode: InputChannelMode;
   tone3000: Tone3000Settings | null;
   lastSong: SavedSong | null;
@@ -48,13 +50,15 @@ const isSavedSong = (value: unknown): value is SavedSong =>
   && Number.isInteger(value.partId);
 
 export const readPreferences = (): Preferences => {
-  const defaults: Preferences = { deviceId: '', channelMode: 'ch1', tone3000: null, lastSong: null, nickname: null };
+  const defaults: Preferences = { deviceId: '', inputChosen: false, outputDeviceId: '', channelMode: 'ch1', tone3000: null, lastSong: null, nickname: null };
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     const value: unknown = raw ? JSON.parse(raw) : null;
     if (!isRecord(value)) return defaults;
     return {
       deviceId: typeof value.deviceId === 'string' ? value.deviceId : defaults.deviceId,
+      inputChosen: value.inputChosen === true,
+      outputDeviceId: typeof value.outputDeviceId === 'string' ? value.outputDeviceId : defaults.outputDeviceId,
       channelMode: value.channelMode === 'ch1' || value.channelMode === 'ch2' || value.channelMode === 'both'
         ? value.channelMode : defaults.channelMode,
       tone3000: isToneSettings(value.tone3000) ? value.tone3000 : null,

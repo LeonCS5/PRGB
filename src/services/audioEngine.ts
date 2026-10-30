@@ -15,7 +15,17 @@ export interface DetectedPitch {
   attackId: number;
 }
 
+import { LOOPBACK_TONE_GAIN, LOOPBACK_TONE_HZ, routeAudioContext, toneCameBack, toneLevel } from './audioDevices';
+import { SoundFX } from './synthAudio';
 import { Tone3000AmpEngine } from './tone3000Amp';
+
+export interface ActiveAudioInput {
+  label: string;
+  groupId: string;
+  channelCount: number;
+  sampleRate: number;
+  latencyMs: number | null;
+}
 
 // 'duo': two players on one interface, guitar 1 on channel 1 and guitar 2 on channel 2
 export type InputChannelMode = 'ch1' | 'ch2' | 'both' | 'duo';
@@ -111,6 +121,10 @@ export class AudioEngine {
   private selectedDeviceId = '';
   private channelMode: InputChannelMode = 'both';
   private tunings: [number[], number[]] = [STANDARD_TUNING, STANDARD_TUNING];
+  private inputRms = 0;
+  private inputPeak = 0;
+  private outputDeviceId = '';
+  private onFeedback: (() => void) | null = null;
 
   // Guitar frequency bounds (E1 ~ 41 Hz for 4-string bass up to E6 ~ 1319 Hz, fret 24 of the high E)
   private readonly MIN_FREQ = 40;
@@ -153,6 +167,103 @@ export class AudioEngine {
       console.warn('Failed to enumerate audio devices:', err);
       return [];
     }
+  }
+
+  async getAudioOutputDevices(): Promise<MediaDeviceInfo[]> {
+    if (!navigator.mediaDevices?.enumerateDevices) return [];
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      return devices.filter((d) => d.kind === 'audiooutput');
+    } catch (err) {
+      console.warn('Failed to enumerate audio devices:', err);
+      return [];
+    }
+  }
+
+  /** The speakers everything plays on: the amp here and the game sounds in SoundFX. '' is the system default. */
+  async setOutputDevice(deviceId: string): Promise<boolean> {
+    this.outputDeviceId = deviceId;
+    const applied = await this.applyOutputDevice();
+    if (this.isRunning) {
+      this.rampMonitorGain(0);
+      await this.openMonitor();
+    }
+    return applied;
+  }
+
+  private async openMonitor(): Promise<void> {
+    if (await this.outputLoopsBack()) this.onFeedback?.();
+    else this.rampMonitorGain(1);
+  }
+
+  // Only an output on the same hardware as the input can return to it, so nothing plays in any other case
+  private async outputLoopsBack(): Promise<boolean> {
+    const ctx = this.audioContext;
+    const input = this.playerInputs[0];
+    const inputGroup = this.getActiveInput()?.groupId;
+    if (!ctx || !input || !inputGroup) return false;
+    const outputs = await this.getAudioOutputDevices();
+    const playing = outputs.find((device) => device.deviceId === (this.outputDeviceId || 'default'));
+    if (playing?.groupId !== inputGroup) return false;
+
+    const listen = () => {
+      input.analyser.getFloatTimeDomainData(input.buffer);
+      return toneLevel(input.buffer, LOOPBACK_TONE_HZ, ctx.sampleRate);
+    };
+    await AudioEngine.waitForAudioTime(ctx, ctx.currentTime + 0.1);
+    const quiet = listen();
+    const tone = ctx.createOscillator();
+    tone.frequency.value = LOOPBACK_TONE_HZ;
+    const level = ctx.createGain();
+    level.gain.value = LOOPBACK_TONE_GAIN;
+    tone.connect(level);
+    level.connect(ctx.destination);
+    tone.start();
+    let heard = 0;
+    for (const delay of [0.15, 0.08, 0.08]) {
+      await AudioEngine.waitForAudioTime(ctx, ctx.currentTime + delay);
+      heard = Math.max(heard, listen());
+    }
+    tone.stop();
+    level.disconnect();
+    return toneCameBack(quiet, heard);
+  }
+
+  // Speakers can be unplugged between sessions: the sound then stays on the system default
+  private async applyOutputDevice(): Promise<boolean> {
+    try {
+      if (this.audioContext) await routeAudioContext(this.audioContext, this.outputDeviceId);
+      await SoundFX.setOutputDevice(this.outputDeviceId);
+      return true;
+    } catch (err) {
+      console.warn('Selected audio output unavailable, using system default:', err);
+      this.outputDeviceId = '';
+      return false;
+    }
+  }
+
+  /** Called when what the output plays comes back through the input; the monitor stays closed. */
+  setFeedbackListener(listener: (() => void) | null): void {
+    this.onFeedback = listener;
+  }
+
+  /** The signal itself, loudest channel, whether or not a note was found in it. */
+  getInputLevel(): { rms: number; peak: number } {
+    return { rms: this.inputRms, peak: this.inputPeak };
+  }
+
+  getActiveInput(): ActiveAudioInput | null {
+    const track = this.mediaStream?.getAudioTracks?.()[0];
+    if (!track) return null;
+    // latency is in the spec but not in the DOM typings yet
+    const settings: MediaTrackSettings & { latency?: number } = track.getSettings();
+    return {
+      label: track.label,
+      groupId: settings.groupId ?? '',
+      channelCount: settings.channelCount ?? 1,
+      sampleRate: settings.sampleRate ?? this.audioContext?.sampleRate ?? 48000,
+      latencyMs: typeof settings.latency === 'number' ? settings.latency * 1000 : null,
+    };
   }
 
   /**
@@ -199,6 +310,7 @@ export class AudioEngine {
       });
       this.tone3000 = null;
       this.monitorGain = null;
+      await this.applyOutputDevice();
     }
 
     if (this.audioContext.state === 'suspended') {
@@ -272,10 +384,10 @@ export class AudioEngine {
       this.monitorGain.connect(this.tone3000.inputNode);
     }
     this.mergerNode.connect(this.monitorGain);
-    this.rampMonitorGain(1);
 
     this.isRunning = true;
     this.loopDetection();
+    await this.openMonitor();
   }
 
   private createPlayerInput(ctx: AudioContext, slot: PlayerSlot): PlayerInput {
@@ -304,6 +416,8 @@ export class AudioEngine {
 
   private async stopNow(): Promise<void> {
     this.isRunning = false;
+    this.inputRms = 0;
+    this.inputPeak = 0;
     if (this.animationFrameId !== null) {
       cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = null;
@@ -400,6 +514,7 @@ export class AudioEngine {
 
     // Calculate RMS volume level
     let loudest = 0;
+    let peak = 0;
     for (const input of this.playerInputs) {
       const buffer = input.buffer;
       input.analyser.getFloatTimeDomainData(buffer);
@@ -412,10 +527,13 @@ export class AudioEngine {
       for (let i = 0; i < buffer.length; i++) {
         buffer[i] -= mean;
         sumSquares += buffer[i] * buffer[i];
+        peak = Math.max(peak, Math.abs(buffer[i]));
       }
       input.rms = Math.sqrt(sumSquares / buffer.length);
       loudest = Math.max(loudest, input.rms);
     }
+    this.inputRms = loudest;
+    this.inputPeak = peak;
     if (this.channelMode === 'duo' && this.playerInputs.length === 2) {
       this.trackMirroring(this.playerInputs[0], this.playerInputs[1]);
     }

@@ -13,6 +13,9 @@ import { AudioEngine, type InputChannelMode } from '../services/audioEngine';
 import { useAudioSession, useLatestPitch } from '../context/AudioSessionContext';
 import { ErrorNotice } from './ErrorNotice';
 import { getAudioErrorMessage } from '../context/uiErrors';
+import { AudioRouteNotice, InputLevelMeter } from './AudioRouting';
+import { audioDeviceName, canChooseAudioOutput, isSystemAlias } from '../services/audioDevices';
+import { SoundFX } from '../services/synthAudio';
 import { AMP_PRESETS, type AmpPresetId, type Tone3000Settings } from '../services/tone3000Amp';
 
 interface AudioSettingsModalProps {
@@ -37,11 +40,12 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
   onOpenTone3000Rack
 }) => {
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+  const [outputs, setOutputs] = useState<MediaDeviceInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [deviceError, setDeviceError] = useState<string | null>(null);
   const [deviceAttempt, setDeviceAttempt] = useState(0);
   const [isConnecting, setIsConnecting] = useState(false);
-  const { isAudioRunning, startAudio } = useAudioSession();
+  const { isAudioRunning, startAudio, outputDeviceId, changeOutputDevice } = useAudioSession();
   const tone3000 = audioEngine.getTone3000();
   const [toneSettings, setToneSettings] = useState<Tone3000Settings | null>(
     tone3000 ? tone3000.getSettings() : null
@@ -52,6 +56,9 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
     let cancelled = false;
     setLoading(true);
     setDeviceError(null);
+    void audioEngine.getAudioOutputDevices().then((list) => {
+      if (!cancelled) setOutputs(list);
+    });
     audioEngine.getAudioInputDevices().then((devs) => {
       if (cancelled) return;
       setDevices(devs);
@@ -210,6 +217,8 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
             </div>
           </div>
 
+          <AudioRouteNotice />
+
           {/* Device Selector */}
           <div>
             <label className="text-sm font-semibold text-ink-200 block mb-2">
@@ -225,14 +234,44 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
                 className="w-full rounded-xl border border-ink-700 bg-ink-800 px-4 py-3 text-sm text-ink-100 focus:border-amp-500 focus:outline-none focus:ring-1 focus:ring-amp-500"
               >
                 <option value="">Dispositivo Padrão do Sistema</option>
-                {devices.map((d) => (
+                {devices.filter((d) => !isSystemAlias(d.deviceId)).map((d) => (
                   <option key={d.deviceId} value={d.deviceId}>
-                    {d.label || `Microfone / Interface ${d.deviceId.slice(0, 8)}`}
+                    {d.label ? audioDeviceName(d.label) : `Microfone / Interface ${d.deviceId.slice(0, 8)}`}
                   </option>
                 ))}
               </select>
             )}
+            <p className="mt-1.5 text-xs leading-5 text-ink-300">
+              O navegador só enxerga as entradas do sistema. Escolha aqui a da guitarra e feche os apps de música abertos, porque eles podem prender a interface e deixá-la muda para o navegador.
+            </p>
           </div>
+
+          {canChooseAudioOutput() && (
+            <div>
+              <label htmlFor="audio-output" className="text-sm font-semibold text-ink-200 block mb-2">
+                Saída de Áudio
+              </label>
+              <div className="flex gap-2">
+                <select
+                  id="audio-output"
+                  value={outputDeviceId}
+                  onChange={(e) => void changeOutputDevice(e.target.value)}
+                  className="min-w-0 flex-1 rounded-xl border border-ink-700 bg-ink-800 px-4 py-3 text-sm text-ink-100 focus:border-amp-500 focus:outline-none"
+                >
+                  <option value="">Dispositivo Padrão do Sistema</option>
+                  {outputs.filter((d) => !isSystemAlias(d.deviceId)).map((d) => (
+                    <option key={d.deviceId} value={d.deviceId}>
+                      {d.label ? audioDeviceName(d.label) : `Saída ${d.deviceId.slice(0, 8)}`}
+                    </option>
+                  ))}
+                </select>
+                <button type="button" onClick={() => SoundFX.playPerfectHit()}
+                  className="shrink-0 cursor-pointer rounded-xl border border-ink-700 bg-ink-800 px-3 text-xs font-semibold text-ink-200 transition hover:border-ink-500">
+                  Testar som
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Channel Routing */}
           <div>
@@ -316,7 +355,6 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
 
 const AudioInputMeter: React.FC = () => {
   const latestPitch = useLatestPitch();
-  const volumePercent = latestPitch ? Math.round(latestPitch.volume * 100) : 0;
   return (
     <div className="rounded-xl border border-ink-800 bg-ink-950 p-4 space-y-3">
       <div className="flex items-center justify-between text-xs">
@@ -324,14 +362,8 @@ const AudioInputMeter: React.FC = () => {
           <Volume2 size={15} />
           Sinal de Entrada da Interface (VU Meter)
         </span>
-        <span className="font-mono font-bold text-amp-400">{volumePercent}%</span>
       </div>
-      <div className="h-3 w-full overflow-hidden rounded-full bg-ink-800 p-0.5">
-        <div
-          className="h-full rounded-full transition-all duration-75 bg-gradient-to-r from-hit via-amp-400 to-amp-500"
-          style={{ width: `${Math.min(100, volumePercent * 2.5)}%` }}
-        />
-      </div>
+      <InputLevelMeter />
 
       {/* Live Tuner Pitch Display */}
       <div className="mt-2 pt-3 border-t border-ink-800/80 flex items-center justify-between">

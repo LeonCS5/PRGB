@@ -1,15 +1,23 @@
 // Web Audio Synthesizer for Song Playback, Metronome, and Hit Sounds
 
+import { routeAudioContext } from './audioDevices';
 import type { BeatMark } from './songsterrApi';
 
 export class SoundFX {
   private static ctx: AudioContext | null = null;
+  private static outputDeviceId = '';
+
+  static async setOutputDevice(deviceId: string): Promise<void> {
+    this.outputDeviceId = deviceId;
+    if (this.ctx && this.ctx.state !== 'closed') await routeAudioContext(this.ctx, deviceId);
+  }
 
   static getContext(): AudioContext {
     if (!this.ctx || this.ctx.state === 'closed') {
       // webkitAudioContext (old Safari) isn't part of the DOM lib typings
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       this.ctx = new AudioCtx();
+      if (this.outputDeviceId) void routeAudioContext(this.ctx, this.outputDeviceId).catch(() => undefined);
     }
     if (this.ctx.state === 'suspended') {
       this.ctx.resume();

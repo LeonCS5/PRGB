@@ -52,6 +52,8 @@ describe('readPreferences defaults', () => {
   it('returns defaults when localStorage is empty', () => {
     expect(readPreferences()).toEqual({
       deviceId: '',
+      inputChosen: false,
+      outputDeviceId: '',
       channelMode: 'ch1',
       tone3000: null,
       lastSong: null,
@@ -63,6 +65,8 @@ describe('readPreferences defaults', () => {
     ls.setItem(STORAGE_KEY, JSON.stringify([1, 2, 3]));
     expect(readPreferences()).toEqual({
       deviceId: '',
+      inputChosen: false,
+      outputDeviceId: '',
       channelMode: 'ch1',
       tone3000: null,
       lastSong: null,
@@ -79,6 +83,8 @@ describe('readPreferences with corrupted data', () => {
     ls.setItem(STORAGE_KEY, '{ not valid json }');
     expect(readPreferences()).toEqual({
       deviceId: '',
+      inputChosen: false,
+      outputDeviceId: '',
       channelMode: 'ch1',
       tone3000: null,
       lastSong: null,
@@ -283,6 +289,8 @@ describe('clearPreferences', () => {
     clearPreferences();
     expect(readPreferences()).toEqual({
       deviceId: '',
+      inputChosen: false,
+      outputDeviceId: '',
       channelMode: 'ch1',
       tone3000: null,
       lastSong: null,
