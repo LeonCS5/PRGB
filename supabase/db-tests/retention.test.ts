@@ -30,7 +30,7 @@ const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISO
 
 describe('retention', () => {
   it('schedules a daily purge', async () => {
-    const { rows } = await db.query('select * from cron.job');
+    const { rows } = await db.query("select * from cron.job where jobname = 'prgb-ranking-retention'");
     expect(rows).toEqual([{
       jobname: 'prgb-ranking-retention',
       schedule: '17 6 * * *',

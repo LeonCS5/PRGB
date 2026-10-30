@@ -5,6 +5,7 @@
 // Realtime server itself, Supabase's non-superuser postgres role, PostgREST and GoTrue.
 
 import { PGlite } from '@electric-sql/pglite';
+import { pgcrypto } from '@electric-sql/pglite/contrib/pgcrypto';
 import { readFileSync, readdirSync } from 'node:fs';
 
 const MIGRATIONS_DIR = new URL('../migrations/', import.meta.url);
@@ -21,6 +22,8 @@ export const SUPABASE_SHIM = `
 create role anon nologin noinherit;
 create role authenticated nologin noinherit;
 create role service_role nologin noinherit bypassrls;
+
+create schema extensions;
 
 create schema auth;
 grant usage on schema auth to anon, authenticated, service_role;
@@ -75,19 +78,20 @@ $$;
 `;
 
 /**
- * Fresh database with the shim and every migration in order. The retention migration (pg_cron) is only
- * applied when asked, on top of the cron stub.
+ * Fresh database with the shim, real pgcrypto and every migration in order. The ranking retention
+ * migration is optional; room retention always runs on top of the cron stub.
  */
 export async function createDatabase(options: { retention?: boolean } = {}): Promise<PGlite> {
-  const db = new PGlite();
+  const db = new PGlite({ extensions: { pgcrypto } });
   await db.exec(SUPABASE_SHIM);
+  await db.exec(CRON_STUB);
   for (const file of migrationFiles()) {
     let sql = readFileSync(new URL(file, MIGRATIONS_DIR), 'utf8');
     if (file.endsWith('_retention.sql')) {
       if (!options.retention) continue;
       if (!sql.includes(CREATE_PG_CRON)) throw new Error('The retention migration no longer creates pg_cron as expected');
-      sql = CRON_STUB + sql.replace(CREATE_PG_CRON, '');
     }
+    sql = sql.replaceAll(CREATE_PG_CRON, '');
     await db.exec(sql);
   }
   return db;
