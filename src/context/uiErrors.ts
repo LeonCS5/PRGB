@@ -1,4 +1,37 @@
+import { LEGAL_CONTACT } from '../content/legal';
+import { toRankingError, type RankingErrorCode } from '../services/backend/rankingApi';
+import { NICKNAME_ERROR_MESSAGES } from '../services/nickname';
 import { SongsterrApi, type NormalizedSongTab, type SongsterrMeta } from '../services/songsterrApi';
+
+const RANKING_ERROR_MESSAGES: Record<RankingErrorCode, string> = {
+  not_configured: 'O ranking não está disponível neste site.',
+  network: 'Sem conexão com o ranking. Verifique sua internet e tente novamente.',
+  unknown: 'Não foi possível falar com o ranking agora. Tente novamente em instantes.',
+  not_authenticated: 'Sua sessão do ranking não vale mais. Entre no ranking de novo para continuar.',
+  invalid_input: 'O ranking recusou os dados enviados. Recarregue a página e tente novamente.',
+  rate_limited: 'Muitas tentativas em pouco tempo. Espere alguns minutos e tente de novo.',
+  consent_required: 'Para entrar no ranking, confirme sua idade e aceite os termos.',
+  nickname_invalid: NICKNAME_ERROR_MESSAGES.chars,
+  nickname_blocked: NICKNAME_ERROR_MESSAGES.offensive,
+  nickname_taken: 'Esse apelido já está em uso.',
+  profile_exists: 'Este navegador já tem uma conta no ranking.',
+  profile_required: 'Entre no ranking para continuar.',
+  part_unregistered: 'Esta faixa ainda não entrou no ranking. Tente novamente.',
+  revision_mismatch: 'A tablatura desta música mudou no Songsterr. Recarregue a música e tente de novo.',
+  session_invalid: 'O ranking não encontrou esta partida. Toque de novo para valer.',
+  session_too_short: 'A partida durou menos que a música, por isso não entrou no ranking.',
+  session_expired: 'A partida ficou aberta por mais de 2 horas e expirou. Toque de novo para valer.',
+  already_submitted: 'Esta jogada já foi enviada ao ranking.',
+  score_implausible: `O servidor recusou esta pontuação porque ela não combina com a música. Se foi engano, peça a revisão pelo e-mail ${LEGAL_CONTACT.email}.`,
+  empty_run: 'Nenhuma nota foi acertada nesta jogada, por isso ela não entrou no ranking.',
+  song_not_found: 'O Songsterr não encontrou esta música.',
+  part_not_found: 'O Songsterr não encontrou esta faixa.',
+  songsterr_unavailable: 'O Songsterr não respondeu agora. Tente novamente em instantes.',
+  tab_invalid: 'Esta tablatura não pode entrar no ranking.',
+  tab_empty: 'Esta faixa não tem notas para pontuar, por isso não pode entrar no ranking.'
+};
+
+export const getRankingErrorMessage = (error: unknown): string => RANKING_ERROR_MESSAGES[toRankingError(error).code];
 
 export const getAudioErrorMessage = (error: unknown): string => {
   const name = error instanceof Error ? error.name : '';

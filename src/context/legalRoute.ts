@@ -7,7 +7,22 @@ export interface LegalRoute {
   sectionId: string | null;
 }
 
+export interface LegalLabelPart {
+  text: string;
+  href: string | null; // the document quoted by this part of the label; null for plain text
+}
+
 const DOCUMENTS: readonly LegalDocument[] = [PRIVACY_POLICY, TERMS_OF_USE];
+
+/**
+ * Splits a consent label around the document titles it quotes, so they can be rendered as links. The links
+ * point at the app's root: the current address may carry ?demo, which would open the game there instead.
+ */
+export const splitLegalLabel = (label: string): LegalLabelPart[] =>
+  label.split(new RegExp(`(${DOCUMENTS.map((document) => document.title).join('|')})`)).filter(Boolean).map((text) => {
+    const document = DOCUMENTS.find((item) => item.title === text);
+    return { text, href: document ? `${import.meta.env.BASE_URL}#${document.id}` : null };
+  });
 
 export const resolveLegalRoute = (hash: string): LegalRoute | null => {
   let id: string;
