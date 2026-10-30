@@ -81,6 +81,7 @@ const PartSelector: React.FC<{
 }> = ({ songId, currentPartId, onSelect }) => {
   const [meta, setMeta] = useState<SongsterrMeta | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const selectId = useId();
 
   useEffect(() => {
@@ -91,9 +92,19 @@ const PartSelector: React.FC<{
       if (!cancelled) setLoadError(error instanceof Error ? error.message : 'Não foi possível carregar as faixas.');
     });
     return () => { cancelled = true; };
-  }, [songId]);
+  }, [songId, loadAttempt]);
 
-  if (loadError) return <p className="mt-4 text-xs text-miss">{loadError}</p>;
+  // Dismissing retries too: with no tracks loaded there would be nothing left to show
+  const retry = () => {
+    setLoadError(null);
+    setLoadAttempt((attempt) => attempt + 1);
+  };
+
+  if (loadError) return (
+    <div className="mt-4">
+      <ErrorNotice message={loadError} onDismiss={retry} actionLabel="Tentar novamente" onAction={retry} />
+    </div>
+  );
   if (!meta) {
     return (
       <p className="mt-4 flex items-center gap-2 text-xs text-ink-300">
@@ -313,7 +324,7 @@ export const RoomModal: React.FC<RoomModalProps> = ({ isOpen, onClose, onStartGa
               </button>
             )}
             {hasSelection && (
-              <button type="button" disabled={readyBlocker !== null} onClick={() => controller.setReady(!state.myReady)}
+              <button type="button" disabled={isBusy || readyBlocker !== null} onClick={() => controller.setReady(!state.myReady)}
                 className={primaryButton + ' mt-4 w-full'}>
                 {readyBlocker ?? (state.myReady ? <><Check size={16} aria-hidden="true" /> Pronto! Clique para cancelar</> : 'Estou pronto')}
               </button>
