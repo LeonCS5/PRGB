@@ -76,6 +76,7 @@ describe('when the backend is not configured or unreachable', () => {
     ['ensureAnonymousSession', () => api.ensureAnonymousSession()],
     ['getMyProfile', () => api.getMyProfile()],
     ['createProfile', () => api.createProfile({ nickname: 'Ana', ageConfirmed: true, consent: true, consentVersion: 'v1' })],
+    ['reacceptTerms', () => api.reacceptTerms({ ageConfirmed: true, consent: true, consentVersion: 'v1' })],
     ['updateNickname', () => api.updateNickname('Ana')],
     ['touchLastSeen', () => api.touchLastSeen()],
     ['exportMyData', () => api.exportMyData()],
@@ -164,6 +165,17 @@ describe('session and profile', () => {
     await rejectsWith(api.createProfile({ nickname: 'Ana', ageConfirmed: true, consent: true, consentVersion: 'v1' }),
       'not_authenticated');
     expect(client.rpc).toHaveBeenCalledTimes(2);
+  });
+
+  it('records a new acceptance of the terms', async () => {
+    useClient(fakeClient({ rpc: { data: { ...PROFILE, consentVersion: '2026-11' }, error: null, status: 200 } }));
+    expect(await api.reacceptTerms({ ageConfirmed: true, consent: true, consentVersion: '2026-11' }))
+      .toMatchObject({ consentVersion: '2026-11' });
+    expect(client.rpc).toHaveBeenCalledWith('reaccept_terms', {
+      p_age_confirmed: true, p_consent: true, p_consent_version: '2026-11'
+    });
+    useClient(fakeClient({ rpc: { data: null, error: { message: 'profile_required', code: 'P0001' }, status: 400 } }));
+    await rejectsWith(api.reacceptTerms({ ageConfirmed: true, consent: true, consentVersion: 'v2' }), 'profile_required');
   });
 
   it('surfaces the server codes', async () => {

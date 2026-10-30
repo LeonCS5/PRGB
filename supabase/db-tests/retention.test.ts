@@ -1,25 +1,13 @@
 import type { PGlite } from '@electric-sql/pglite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { callAs, createDatabase, createUser, readMigration } from './harness.ts';
-
-// pg_cron does not exist in PGlite: drop the extension statement and record cron.schedule calls instead
-const CREATE_PG_CRON = 'create extension if not exists pg_cron with schema pg_catalog;';
-const CRON_STUB = `
-create schema cron;
-create table cron.job (jobname text primary key, schedule text not null, command text not null);
-create function cron.schedule(job_name text, schedule text, command text) returns bigint language sql as $$
-  insert into cron.job values (job_name, schedule, command)
-  on conflict (jobname) do update set schedule = excluded.schedule, command = excluded.command;
-  select 1::bigint;
-$$;
-`;
+import { CREATE_PG_CRON, callAs, createDatabase, createUser, readMigration } from './harness.ts';
 
 let db: PGlite;
 
 beforeAll(async () => {
-  const retention = readMigration('retention');
-  expect(retention).toContain(CREATE_PG_CRON);
-  db = await createDatabase(CRON_STUB, retention.replace(CREATE_PG_CRON, ''));
+  // pg_cron is stubbed by the harness
+  expect(readMigration('retention')).toContain(CREATE_PG_CRON);
+  db = await createDatabase({ retention: true });
 }, 30_000);
 
 afterAll(async () => {

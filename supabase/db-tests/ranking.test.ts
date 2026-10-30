@@ -29,7 +29,7 @@ afterAll(async () => {
 const PUBLIC_RPCS = ['get_leaderboard', 'server_time'];
 const PLAYER_RPCS = [
   'create_profile', 'delete_my_account', 'export_my_data', 'get_my_position', 'get_my_profile',
-  'start_session', 'submit_score', 'touch_last_seen', 'update_nickname'
+  'reaccept_terms', 'start_session', 'submit_score', 'touch_last_seen', 'update_nickname'
 ];
 
 let partCounter = 1000;
@@ -329,6 +329,36 @@ describe('update_nickname and touch_last_seen', () => {
     const { rows } = await db.query<{ recent: boolean }>(
       "select last_seen_at > now() - interval '1 minute' as recent from public.profiles where id = $1", [userId]);
     expect(rows[0].recent).toBe(true);
+  });
+});
+
+describe('reaccept_terms', () => {
+  const reaccept = (userId: string | null, age: boolean, consent: boolean, version: string | null) =>
+    callAs<{ value: Record<string, unknown> }>(db, 'authenticated', userId,
+      'select public.reaccept_terms($1, $2, $3) as value', [age, consent, version]).then(([row]) => row.value);
+
+  it('records the new acceptance and returns the profile', async () => {
+    const userId = await newPlayer();
+    await db.query(
+      `update public.profiles set consent_at = now() - interval '200 days', age_confirmed_at = now() - interval '200 days'
+       where id = $1`, [userId]);
+    const profile = await reaccept(userId, true, true, '2026-11');
+    expect(profile).toMatchObject({ consentVersion: '2026-11' });
+    const { rows } = await db.query<{ recent: boolean }>(
+      `select consent_at > now() - interval '1 minute' and age_confirmed_at > now() - interval '1 minute' as recent
+       from public.profiles where id = $1`, [userId]);
+    expect(rows).toEqual([{ recent: true }]);
+  });
+
+  it('requires both confirmations, a valid version, a profile and a session', async () => {
+    const userId = await newPlayer();
+    await expectError(reaccept(userId, false, true, 'v2'), 'consent_required');
+    await expectError(reaccept(userId, true, false, 'v2'), 'consent_required');
+    await expectError(reaccept(userId, true, true, 'v 2'), 'consent_required');
+    await expectError(reaccept(await createUser(db), true, true, 'v2'), 'profile_required');
+    await expectError(reaccept(null, true, true, 'v2'), 'not_authenticated');
+    const { rows } = await db.query('select consent_version from public.profiles where id = $1', [userId]);
+    expect(rows).toEqual([{ consent_version: 'v1' }]);
   });
 });
 

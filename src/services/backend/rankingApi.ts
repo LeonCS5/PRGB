@@ -125,11 +125,14 @@ export interface RankingProfile {
   lastSeenAt: string;
 }
 
-export interface CreateProfileInput {
-  nickname: string;
+export interface TermsAcceptance {
   ageConfirmed: boolean; // 18+, self-declared
   consent: boolean;
   consentVersion: string; // version of the text the player accepted: 1-32 of [0-9A-Za-z._-]
+}
+
+export interface CreateProfileInput extends TermsAcceptance {
+  nickname: string;
 }
 
 /**
@@ -409,6 +412,16 @@ export async function createProfile(input: CreateProfileInput): Promise<RankingP
     await signInAnonymously(client);
     return create();
   }
+}
+
+/** Records a new acceptance when the terms change (needs a profile): consent_required, profile_required. */
+export async function reacceptTerms(input: TermsAcceptance): Promise<RankingProfile> {
+  const client = await requireClient();
+  return parseProfile(await callRpc(client, 'reaccept_terms', {
+    p_age_confirmed: input.ageConfirmed,
+    p_consent: input.consent,
+    p_consent_version: input.consentVersion
+  }));
 }
 
 export async function updateNickname(nickname: string): Promise<RankingProfile> {
