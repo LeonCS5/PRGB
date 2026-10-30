@@ -28,6 +28,7 @@ import { LegalPage } from './components/LegalPage';
 import { readHash, resolveLegalRoute, subscribeToHash } from './context/legalRoute';
 import { consumeLocalDataCleared } from './context/localData';
 import { gameDevPreset, readDevScene } from './components/devScenes';
+import { rankingDevSetup } from './components/devRanking';
 import { RankingModals } from './components/RankingModals';
 import { CHALLENGE_PARAM, readChallengeFromSearch, type Challenge } from './services/challenge';
 import { BrandMark } from './components/BrandMark';
@@ -113,7 +114,8 @@ const initialSession = (devScene: ReturnType<typeof readDevScene>): GameSession 
     const demo = demoPart();
     return duoSession([demo, demo], ['Ana', 'Beto']);
   }
-  if (devScene === 'resultado' || devScene === 'desafio' || new URLSearchParams(window.location.search).has('demo')) {
+  if (devScene === 'ranking-partida') return soloSession(demoPart(), null, 'on');
+  if (devScene === 'resultado' || devScene === 'desafio' || devScene === 'ranking-resultado' || new URLSearchParams(window.location.search).has('demo')) {
     return soloSession(demoPart());
   }
   return null;
@@ -624,14 +626,17 @@ const AppContent: React.FC = () => {
   );
 };
 
-export const App: React.FC = () => (
-  <AudioSessionProvider>
-    <ModalsProvider>
-      <RankingProvider>
-        <AppContent />
-      </RankingProvider>
-    </ModalsProvider>
-  </AudioSessionProvider>
-);
+export const App: React.FC = () => {
+  const [rankingDev] = useState(() => import.meta.env.DEV ? rankingDevSetup(readDevScene()) : null);
+  return (
+    <AudioSessionProvider>
+      <ModalsProvider>
+        <RankingProvider dev={rankingDev}>
+          <AppContent />
+        </RankingProvider>
+      </ModalsProvider>
+    </AudioSessionProvider>
+  );
+};
 
 export default App;

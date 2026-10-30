@@ -3,9 +3,16 @@
 
 import { applyJudgement, createScoreState, type Judgement, type ScoreState } from '../services/scoring';
 
-export type DevScene = 'resultado' | 'desafio' | 'dupla-assistente' | 'dupla' | 'dupla-resultado';
+export type DevScene =
+  | 'resultado' | 'desafio' | 'dupla-assistente' | 'dupla' | 'dupla-resultado'
+  | 'ranking-entrada' | 'ranking-reaceite' | 'ranking-conta' | 'ranking-lista' | 'ranking-vazio' | 'ranking-partida'
+  | 'ranking-resultado' | 'ranking-apagar';
 
-const SCENES: readonly DevScene[] = ['resultado', 'desafio', 'dupla-assistente', 'dupla', 'dupla-resultado'];
+const SCENES: readonly DevScene[] = [
+  'resultado', 'desafio', 'dupla-assistente', 'dupla', 'dupla-resultado',
+  'ranking-entrada', 'ranking-reaceite', 'ranking-conta', 'ranking-lista', 'ranking-vazio', 'ranking-partida',
+  'ranking-resultado', 'ranking-apagar'
+];
 
 export interface GameDevPreset {
   positionMs: number;
@@ -39,6 +46,8 @@ export const gameDevPreset = (scene: DevScene, durationMs: number): GameDevPrese
       return { positionMs: 9000, playing: false, scores: [sampleScore('ppppgpppppppgpp'), sampleScore('pgpppmppgpp')] };
     case 'dupla-resultado':
       return { positionMs: durationMs, playing: true, scores: [solo, second] };
+    case 'ranking-resultado':
+      return { positionMs: durationMs, playing: true, scores: [solo, createScoreState()], rankedSessionId: 'sessao-dev' };
     default:
       return null;
   }
