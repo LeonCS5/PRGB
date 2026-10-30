@@ -568,13 +568,14 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   const renderFrame = useEffectEvent((now: number) => {
     const elapsed = now - lastFrameTimeRef.current;
     lastFrameTimeRef.current = now;
-    if (online && !isPlaying && !runFinishedRef.current && Date.now() >= online.startAtMs) setIsPlaying(true);
+    const startsNow = online && !isPlaying && !runFinishedRef.current && Date.now() >= online.startAtMs;
+    if (startsNow) setIsPlaying(true);
     // Online, the song follows the clock: a late start or a hidden tab catches up instead of drifting apart
     const delta = online
       ? Math.max(0, Date.now() - online.startAtMs - positionRef.current)
       : Math.min(elapsed, MAX_FRAME_GAP_MS) * speed;
     // The guard covers frames that run before the pause at the end is committed
-    if (isPlaying && !runFinishedRef.current) {
+    if ((isPlaying || startsNow) && !runFinishedRef.current) {
       if (!runStartedRef.current) {
         runStartedRef.current = true;
         // Starting after a seek forward skips the beginning: not a full run, and the notes left behind
@@ -585,6 +586,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
         }
       }
       const next = Math.min(positionRef.current + delta, durationMs);
+      if (online && delta > MAX_FRAME_GAP_MS) skipNotesBefore(next);
       positionRef.current = next;
       setCurrentTimeMs(next);
       if (metronomeEnabled) metronome.update(next);
