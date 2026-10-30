@@ -11,6 +11,8 @@ export interface AudioSessionValue {
   audioError: string | null;
   dismissAudioError: () => void;
   getLatestPitch: (player?: PlayerSlot) => DetectedPitch | null;
+  // Duo: frames since the last start in which both guitars had a detected note (capped at 1000)
+  getDuoFramesBothPlaying: () => number;
   selectedDeviceId: string;
   channelMode: InputChannelMode;
   startAudio: (deviceId?: string, mode?: InputChannelMode) => Promise<void>;
@@ -23,13 +25,18 @@ interface PitchStore {
   getSnapshot: (player?: PlayerSlot) => DetectedPitch | null;
   subscribe: (listener: () => void) => () => void;
   publish: (pitch: DetectedPitch | null, player?: PlayerSlot) => void;
+  getBothPlayingFrames: () => number;
+  resetBothPlayingFrames: () => void;
 }
+
+const BOTH_PLAYING_FRAMES_MAX = 1000;
 
 const PitchContext = createContext<PitchStore | null>(null);
 
 const createPitchStore = (): PitchStore => {
   const latestPitch: [DetectedPitch | null, DetectedPitch | null] = [null, null];
   const listeners = new Set<() => void>();
+  let bothPlayingFrames = 0;
   return {
     getSnapshot: (player = 0) => latestPitch[player],
     subscribe: (listener) => {
@@ -39,8 +46,12 @@ const createPitchStore = (): PitchStore => {
     publish: (pitch, player = 0) => {
       if (Object.is(latestPitch[player], pitch)) return;
       latestPitch[player] = pitch;
+      // The engine reports player 1 right after player 0 in each frame
+      if (player === 1 && pitch && latestPitch[0]) bothPlayingFrames = Math.min(bothPlayingFrames + 1, BOTH_PLAYING_FRAMES_MAX);
       listeners.forEach((listener) => listener());
-    }
+    },
+    getBothPlayingFrames: () => bothPlayingFrames,
+    resetBothPlayingFrames: () => { bothPlayingFrames = 0; }
   };
 };
 
@@ -69,6 +80,7 @@ export const AudioSessionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     async (deviceId = selectedDeviceId, mode = channelMode) => {
       setAudioError(null);
       try {
+        pitchStore.resetBothPlayingFrames();
         await audioEngine.start(deviceId, mode, pitchStore.publish);
         // Player 2 only exists in duo mode; don't leave its last note behind
         if (mode !== 'duo') pitchStore.publish(null, 1);
@@ -142,6 +154,7 @@ export const AudioSessionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       audioError,
       dismissAudioError,
       getLatestPitch: pitchStore.getSnapshot,
+      getDuoFramesBothPlaying: pitchStore.getBothPlayingFrames,
       selectedDeviceId,
       channelMode,
       startAudio,

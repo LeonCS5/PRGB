@@ -14,6 +14,9 @@ export interface DuoSetupModalProps {
 }
 
 const TITLE_ID = 'duo-setup-title';
+// AudioEngine decides on mirrored channels after 60 frames with both guitars above the gate; frames with
+// both notes detected are a subset of those, so 60 of them mean the engine's check has its answer
+const MIRROR_CHECK_FRAMES = 60;
 const PLAYER_COLORS: [string, string] = ['text-signal-300', 'text-note-violet'];
 const primaryButton = 'flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-amp-400 px-5 font-bold text-ink-950 transition hover:bg-amp-300 disabled:cursor-not-allowed disabled:opacity-50';
 const secondaryButton = 'flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-600 px-4 text-sm font-semibold text-ink-100 transition hover:border-ink-400 disabled:opacity-50';
@@ -32,10 +35,8 @@ const StepHeading: React.FC<{ step: number; label: string; title: string }> = ({
   );
 };
 
-const DuoTuner: React.FC<{ player: PlayerSlot }> = ({ player }) => {
+const DuoTuner: React.FC<{ player: PlayerSlot; wasHeard: boolean }> = ({ player, wasHeard }) => {
   const pitch = useLatestPitch(player);
-  const [wasHeard, setWasHeard] = useState(false);
-  if (pitch && !wasHeard) setWasHeard(true);
   const level = pitch ? Math.min(100, Math.round(pitch.volume * 250)) : 0;
   const inTune = pitch !== null && Math.abs(pitch.cents) <= 6;
   return (
@@ -58,18 +59,24 @@ const DuoTuner: React.FC<{ player: PlayerSlot }> = ({ player }) => {
 };
 
 const ConnectStep: React.FC<{ onCancel: () => void; onNext: () => void }> = ({ onCancel, onNext }) => {
-  const { audioEngine, isAudioRunning, channelMode, selectedDeviceId, startAudio, audioError, dismissAudioError } = useAudioSession();
+  const {
+    audioEngine, isAudioRunning, channelMode, selectedDeviceId, startAudio, audioError, dismissAudioError, getDuoFramesBothPlaying
+  } = useAudioSession();
   const deviceSelectId = useId();
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [isConnecting, setIsConnecting] = useState(false);
-  // Re-rendering on every note of either guitar keeps the channel checks below current (the mirror
-  // check needs both guitars playing for about a second before it can say anything)
-  useLatestPitch(0);
-  useLatestPitch(1);
+  // Re-rendering on every note of either guitar keeps the channel checks below current
+  const firstPitch = useLatestPitch(0);
+  const secondPitch = useLatestPitch(1);
+  const [heard, setHeard] = useState<[boolean, boolean]>([false, false]);
+  if ((firstPitch && !heard[0]) || (secondPitch && !heard[1])) setHeard([heard[0] || firstPitch !== null, heard[1] || secondPitch !== null]);
   const isDuoLive = isAudioRunning && channelMode === 'duo';
   const channelCount = isDuoLive ? audioEngine.getInputChannelCount() : 0;
-  const isMirrored = isDuoLive && channelCount >= 2 && audioEngine.areDuoChannelsMirrored();
-  const canContinue = isDuoLive && channelCount >= 2 && !isMirrored;
+  const hasTwoChannels = isDuoLive && channelCount >= 2;
+  const isMirrorChecked = hasTwoChannels && getDuoFramesBothPlaying() >= MIRROR_CHECK_FRAMES;
+  const isMirrored = hasTwoChannels && audioEngine.areDuoChannelsMirrored();
+  // Both channels heard, and both guitars played together long enough to rule out a copied signal
+  const canContinue = hasTwoChannels && heard[0] && heard[1] && isMirrorChecked && !isMirrored;
 
   useEffect(() => {
     let cancelled = false;
@@ -80,6 +87,7 @@ const ConnectStep: React.FC<{ onCancel: () => void; onNext: () => void }> = ({ o
 
   const connect = async (deviceId?: string) => {
     setIsConnecting(true);
+    setHeard([false, false]);
     try {
       await startAudio(deviceId, 'duo');
     } finally {
@@ -127,13 +135,22 @@ const ConnectStep: React.FC<{ onCancel: () => void; onNext: () => void }> = ({ o
           Sua interface está copiando o mesmo sinal para os dois canais, então o jogo não consegue separar as duas guitarras. Confira se cada guitarra está na sua entrada (1 e 2) e desligue qualquer modo mono ou de espelhamento da interface.
         </p>
       )}
-      {isDuoLive && channelCount >= 2 && (
+      {hasTwoChannels && (
         <>
           <p className="mt-5 text-sm text-ink-200">Cada um toca uma corda: o afinador do seu canal deve mostrar a nota.</p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <DuoTuner player={0} />
-            <DuoTuner player={1} />
+            <DuoTuner player={0} wasHeard={heard[0]} />
+            <DuoTuner player={1} wasHeard={heard[1]} />
           </div>
+          {!isMirrored && (
+            <p role="status" className={'mt-3 flex items-center gap-1.5 text-sm ' + (canContinue ? 'text-hit' : 'text-ink-300')}>
+              {canContinue
+                ? <><Check size={15} aria-hidden="true" /> Canais separados: cada guitarra está no seu canal.</>
+                : heard[0] && heard[1]
+                  ? 'Agora toquem os dois juntos por alguns segundos, para conferirmos que os canais estão separados.'
+                  : 'Para continuar, cada canal precisa ser ouvido.'}
+            </p>
+          )}
         </>
       )}
 
