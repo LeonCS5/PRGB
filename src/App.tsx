@@ -12,6 +12,7 @@ import {
   Headphones,
   PlugZap,
   Target,
+  Trophy,
   Volume2,
   Zap,
   Loader2,
@@ -27,6 +28,8 @@ import { LegalPage } from './components/LegalPage';
 import { readHash, resolveLegalRoute, subscribeToHash } from './context/legalRoute';
 import { consumeLocalDataCleared } from './context/localData';
 import { gameDevPreset, readDevScene } from './components/devScenes';
+import { rankingDevSetup } from './components/devRanking';
+import { RankingModals } from './components/RankingModals';
 import { CHALLENGE_PARAM, readChallengeFromSearch, type Challenge } from './services/challenge';
 import { BrandMark } from './components/BrandMark';
 import { getSongMetadata, loadSongTrack } from './context/uiErrors';
@@ -37,7 +40,9 @@ import { Tone3000AmpRack } from './components/Tone3000AmpRack';
 import { AudioSessionProvider, useAudioSession, useLatestPitch } from './context/AudioSessionContext';
 import { ModalsProvider, useModals } from './context/ModalsContext';
 import { readPreferences, savePreferences } from './context/preferences';
-import { DEFAULT_PLAYER_NAMES, nextSessionKey, type GamePart, type GameSession } from './context/gameSession';
+import { DEFAULT_PLAYER_NAMES, nextSessionKey, type GamePart, type GameSession, type RankedStart, type SoloSession } from './context/gameSession';
+import { RankingProvider } from './context/RankingProvider';
+import { useRanking } from './context/ranking';
 
 const supportUrl = import.meta.env.VITE_SUPPORT_URL?.trim();
 const supportHref = supportUrl || 'https://github.com/LeonCS5/PRGB';
@@ -89,7 +94,7 @@ const PracticePreview: React.FC = () => (
   </figure>
 );
 
-const demoPart = (): GamePart => ({ tab: getDemoSong(), partId: 0 });
+const demoPart = (): GamePart => ({ tab: getDemoSong(), partId: 0, revisionId: null });
 
 // The demo has a single part (0): a demo challenge for any other part can't be played, so it's
 // ignored like any other invalid link
@@ -98,8 +103,8 @@ const readValidChallenge = (): Challenge | null => {
   return challenge && challenge.songId === DEMO_SONG_ID && challenge.partId !== 0 ? null : challenge;
 };
 
-const soloSession = (part: GamePart, challenge: Challenge | null = null): GameSession =>
-  ({ mode: 'solo', key: nextSessionKey(), part, challenge });
+const soloSession = (part: GamePart, challenge: Challenge | null = null, rankedStart: RankedStart | null = null): GameSession =>
+  ({ mode: 'solo', key: nextSessionKey(), part, challenge, rankedStart });
 
 const duoSession = (parts: [GamePart, GamePart], names: [string, string]): GameSession =>
   ({ mode: 'duo', key: nextSessionKey(), parts, names });
@@ -109,7 +114,8 @@ const initialSession = (devScene: ReturnType<typeof readDevScene>): GameSession 
     const demo = demoPart();
     return duoSession([demo, demo], ['Ana', 'Beto']);
   }
-  if (devScene === 'resultado' || devScene === 'desafio' || new URLSearchParams(window.location.search).has('demo')) {
+  if (devScene === 'ranking-partida') return soloSession(demoPart(), null, 'on');
+  if (devScene === 'resultado' || devScene === 'desafio' || devScene === 'ranking-resultado' || new URLSearchParams(window.location.search).has('demo')) {
     return soloSession(demoPart());
   }
   return null;
@@ -154,6 +160,7 @@ const AppContent: React.FC = () => {
     setSettingsOpen: setIsSettingsOpen,
     setTone3000RackOpen: setIsTone3000RackOpen
   } = useModals();
+  const { isConfigured: isRankingOn, hasAccount, openAccount } = useRanking();
 
   const [devScene] = useState(readDevScene);
   const [session, setSession] = useState<GameSession | null>(() => initialSession(devScene));
@@ -174,6 +181,7 @@ const AppContent: React.FC = () => {
   const songSelectionVersion = useRef(0);
   const hash = useSyncExternalStore(subscribeToHash, readHash);
   const legalRoute = useMemo(() => resolveLegalRoute(hash), [hash]);
+  const [openedOnLegalPage] = useState(() => legalRoute !== null);
 
   const sessionParts = useMemo<GamePart[]>(
     () => !session ? [] : session.mode === 'solo' ? [session.part] : session.parts,
@@ -185,8 +193,9 @@ const AppContent: React.FC = () => {
   }, [sessionParts, audioEngine]);
 
   useEffect(() => {
-    // A challenge link opens on the landing card instead of jumping into the last song
-    if (!savedSong || savedSong.songId === DEMO_SONG_ID || openedWithChallenge || devScene || new URLSearchParams(window.location.search).has('demo')) return;
+    // A challenge link opens on the landing card instead of jumping into the last song, and a legal page
+    // (the consent form opens them in a new tab) stays on screen while it is being read
+    if (!savedSong || savedSong.songId === DEMO_SONG_ID || openedWithChallenge || openedOnLegalPage || devScene || new URLSearchParams(window.location.search).has('demo')) return;
     let cancelled = false;
     const version = songSelectionVersion.current;
     const restoreSong = async () => {
@@ -195,7 +204,7 @@ const AppContent: React.FC = () => {
         const trackIndex = meta.tracks.findIndex((track) => track.partId === savedSong.partId);
         if (trackIndex < 0) throw new Error('A faixa salva não está mais disponível.');
         const normalized = await loadSongTrack(meta, trackIndex);
-        if (!cancelled && version === songSelectionVersion.current) setSession(soloSession({ tab: normalized, partId: savedSong.partId }));
+        if (!cancelled && version === songSelectionVersion.current) setSession(soloSession({ tab: normalized, partId: savedSong.partId, revisionId: meta.revisionId }));
       } catch (err) {
         if (!cancelled && version === songSelectionVersion.current) {
           setRestoreError(`Não foi possível restaurar a última música. ${err instanceof Error ? err.message : 'Busque uma música para continuar.'}`);
@@ -204,7 +213,7 @@ const AppContent: React.FC = () => {
     };
     void restoreSong();
     return () => { cancelled = true; };
-  }, [savedSong, restoreAttempt, openedWithChallenge, devScene]);
+  }, [savedSong, restoreAttempt, openedWithChallenge, openedOnLegalPage, devScene]);
 
   // Duo is a session mode: leaving it restores the input channel saved in the preferences
   const soloChannelMode = () => channelMode === 'duo' ? readPreferences().channelMode : channelMode;
@@ -251,7 +260,7 @@ const AppContent: React.FC = () => {
         const meta = await getSongMetadata(challenge.songId);
         const trackIndex = meta.tracks.findIndex((track) => track.partId === challenge.partId);
         if (trackIndex < 0) throw new Error('A faixa deste desafio não está mais disponível no Songsterr. Escolha outra música.');
-        part = { tab: await loadSongTrack(meta, trackIndex), partId: challenge.partId };
+        part = { tab: await loadSongTrack(meta, trackIndex), partId: challenge.partId, revisionId: meta.revisionId };
       }
       if (version !== songSelectionVersion.current) return;
       setPendingChallenge(null);
@@ -294,13 +303,32 @@ const AppContent: React.FC = () => {
       const normalized = await loadSongTrack(meta, trackIndex);
       // Another song, the demo or a duo was picked while this one loaded: keep that one
       if (version !== songSelectionVersion.current) return;
-      setSession(soloSession({ tab: normalized, partId: track.partId }));
+      setSession(soloSession({ tab: normalized, partId: track.partId, revisionId: meta.revisionId }));
       savePreferences({ lastSong: { songId: meta.songId, partId: track.partId } });
     } catch (err) {
       if (version !== songSelectionVersion.current) return;
       setDefaultError(err instanceof Error ? err.message : 'Não foi possível carregar a música padrão. Busque outra música.');
     } finally {
       setIsLoadingDefault(false);
+    }
+  };
+
+  // The server counted a newer revision of this tab: a ranked run needs that one, so the game remounts with it
+  const reloadOutdatedPart = async ({ part, challenge }: SoloSession): Promise<string | null> => {
+    songSelectionVersion.current += 1;
+    const version = songSelectionVersion.current;
+    const { tab, partId } = part;
+    try {
+      const meta = await getSongMetadata(tab.songId);
+      const trackIndex = meta.tracks.findIndex((track) => track.partId === partId);
+      if (trackIndex < 0) return 'Esta faixa não está mais disponível no Songsterr. Escolha outra música.';
+      const reloaded = await loadSongTrack(meta, trackIndex);
+      if (version === songSelectionVersion.current) {
+        setSession(soloSession({ tab: reloaded, partId, revisionId: meta.revisionId }, challenge, 'reloaded'));
+      }
+      return null;
+    } catch (err) {
+      return err instanceof Error ? err.message : 'Não foi possível recarregar a tablatura. Tente novamente.';
     }
   };
 
@@ -364,6 +392,8 @@ const AppContent: React.FC = () => {
             onOpenAudioSettings={() => setIsSettingsOpen(true)}
             tone3000={tone3000}
             onOpenTone3000Rack={() => setIsTone3000RackOpen(true)}
+            rankedStart={session.mode === 'solo' ? session.rankedStart : null}
+            onRankedTabOutdated={session.mode === 'solo' ? () => reloadOutdatedPart(session) : undefined}
           />
         </>
       ) : legalRoute ? (
@@ -379,6 +409,12 @@ const AppContent: React.FC = () => {
                   <span className="hidden sm:inline">Áudio {isAudioRunning ? 'conectado' : 'desconectado'}</span>
                   <span className="sr-only sm:hidden">Áudio {isAudioRunning ? 'conectado' : 'desconectado'}</span>
                 </span>
+                {isRankingOn && (
+                  <button type="button" onClick={openAccount} aria-label={hasAccount ? 'Minha conta do ranking' : 'Entrar no ranking'}
+                    className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-lg px-2 py-2 text-xs font-semibold text-ink-200 transition hover:bg-ink-800 hover:text-amp-300 sm:text-sm">
+                    <Trophy size={16} className="shrink-0 text-amp-400" aria-hidden="true" /><span className="hidden lg:inline">{hasAccount ? 'Minha conta do ranking' : 'Entrar no ranking'}</span>
+                  </button>
+                )}
                 <a href={supportHref} target="_blank" rel="noopener noreferrer" aria-label={supportLabel} className="flex min-h-11 max-w-48 items-center gap-2 rounded-lg px-2 py-2 text-xs font-semibold text-ink-200 transition hover:bg-ink-800 hover:text-amp-300 sm:max-w-none sm:text-sm">
                   <Heart size={16} className="shrink-0 text-amp-400" aria-hidden="true" /><span className="sm:hidden">Apoiar</span><span className="hidden sm:inline">{supportLabel}</span>
                 </a>
@@ -537,12 +573,12 @@ const AppContent: React.FC = () => {
           setIsSearchOpen(false);
           startDuo(parts, duoSearchNames ?? DEFAULT_PLAYER_NAMES);
         }}
-        onSelectSong={(tab, song) => {
+        onSelectSong={(tab, song, revisionId) => {
           songSelectionVersion.current += 1;
           setRestoreError(null);
           setDefaultError(null);
           ensureSoloAudio();
-          setSession(soloSession({ tab, partId: song.partId }));
+          setSession(soloSession({ tab, partId: song.partId, revisionId }));
           if (song.songId !== DEMO_SONG_ID) savePreferences({ lastSong: song });
         }}
       />
@@ -584,16 +620,23 @@ const AppContent: React.FC = () => {
         onClose={() => setIsTone3000RackOpen(false)}
         tone3000={tone3000}
       />
+
+      <RankingModals />
     </div>
   );
 };
 
-export const App: React.FC = () => (
-  <AudioSessionProvider>
-    <ModalsProvider>
-      <AppContent />
-    </ModalsProvider>
-  </AudioSessionProvider>
-);
+export const App: React.FC = () => {
+  const [rankingDev] = useState(() => import.meta.env.DEV ? rankingDevSetup(readDevScene()) : null);
+  return (
+    <AudioSessionProvider>
+      <ModalsProvider>
+        <RankingProvider dev={rankingDev}>
+          <AppContent />
+        </RankingProvider>
+      </ModalsProvider>
+    </AudioSessionProvider>
+  );
+};
 
 export default App;

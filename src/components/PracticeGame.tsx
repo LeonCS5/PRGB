@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useEffectEvent, useMemo } from 'react';
+import React, { useEffect, useId, useRef, useState, useEffectEvent, useMemo } from 'react';
 import {
   Play,
   Pause,
@@ -8,7 +8,10 @@ import {
   Sliders,
   Search,
   Clock,
-  Zap
+  Zap,
+  Loader2,
+  Trophy,
+  UserRound
 } from 'lucide-react';
 import { BrandMark } from './BrandMark';
 import { ModalFrame } from './ModalFrame';
@@ -32,7 +35,10 @@ import type { NoteEvent } from '../services/songsterrApi';
 import type { DetectedPitch, PlayerSlot } from '../services/audioEngine';
 import type { Challenge } from '../services/challenge';
 import { useAudioSession } from '../context/AudioSessionContext';
-import { DEFAULT_PLAYER_NAMES, type GamePart, type PersonalBestOutcome, type RunSummary } from '../context/gameSession';
+import { DEFAULT_PLAYER_NAMES, type GamePart, type PersonalBestOutcome, type RankedStart, type RunSummary } from '../context/gameSession';
+import { useRanking } from '../context/ranking';
+import type { RankedPhase } from '../context/rankedRun';
+import { useRankedRun } from '../context/useRankedRun';
 import { MetronomeScheduler, SoundFX } from '../services/synthAudio';
 import {
   accuracyPercent,
@@ -61,6 +67,8 @@ interface PracticeGameProps {
   onOpenAudioSettings: () => void;
   tone3000?: Tone3000AmpEngine | null;
   onOpenTone3000Rack?: () => void;
+  rankedStart?: RankedStart | null;
+  onRankedTabOutdated?: () => Promise<string | null>;
   devPreset?: GameDevPreset | null;
 }
 
@@ -90,6 +98,13 @@ const MAX_FRAME_GAP_MS = 100;
 
 const isSamePart = (a: GamePart, b: GamePart) => a.tab.songId === b.tab.songId && a.partId === b.partId;
 
+const RANKED_STATUS: Record<Exclude<RankedPhase, 'off'>, string> = {
+  preparing: 'Conferindo sua conta e a faixa no ranking…',
+  ready: 'Valendo para o ranking: toque a música inteira em 1×, sem saltos. Você pode pausar.',
+  starting: 'Abrindo a partida no ranking…',
+  running: 'Valendo para o ranking: velocidade travada em 1× e posição da música bloqueada.'
+};
+
 export const PracticeGame: React.FC<PracticeGameProps> = ({
   parts,
   playerNames = null,
@@ -99,9 +114,12 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   onOpenAudioSettings,
   tone3000,
   onOpenTone3000Rack,
+  rankedStart = null,
+  onRankedTabOutdated,
   devPreset = null
 }) => {
   const { getLatestPitch, isAudioRunning, startAudio, channelMode } = useAudioSession();
+  const { isConfigured: isRankingOn, openAccount } = useRanking();
   const [palette] = useState(readPalette);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasContainerRef = useRef<HTMLElement | null>(null);
@@ -115,6 +133,13 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   const clockTab = useMemo(() => lanes.reduce((longest, lane) =>
     lane.part.tab.totalDurationMs > longest.part.tab.totalDurationMs ? lane : longest).part.tab, [lanes]);
   const mainTab = lanes[0].part.tab;
+  const ranked = useRankedRun({
+    part: isDuo ? null : lanes[0].part,
+    start: rankedStart,
+    reloadTab: onRankedTabOutdated,
+    devSessionId: devPreset?.rankedSessionId
+  });
+  const rankedHelpId = useId();
 
   // TONE3000 Amp State
   const [toneSettings, setToneSettings] = useState<Tone3000Settings | null>(
@@ -338,6 +363,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
       }
     }
     setRunSummary({ scores: finalScores, speed, jumped, speedChanged, personalBest });
+    ranked.controller.submitRun(finalScores[0], { jumped, speedChanged });
   };
 
   // Metronome: clicks are scheduled on the audio clock; the render loop only reports the song position
@@ -583,7 +609,48 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     for (const noteStates of noteStatesRef.current) noteStates.clear();
     synthPlayedNotesRef.current.clear();
     effectsRef.current = { particles: [], texts: [] };
+    ranked.controller.clearRun();
     setIsPlaying(play);
+  };
+
+  // A ranked run only plays once the server has opened its session
+  const startRankedRun = async () => {
+    if (await ranked.controller.beginRun()) setIsPlaying(true);
+  };
+
+  const restartRun = () => {
+    if (!ranked.isOn) {
+      resetRun(true);
+      return;
+    }
+    resetRun(false);
+    void startRankedRun();
+  };
+
+  const togglePlay = () => {
+    if (currentTimeMs >= durationMs) restartRun();
+    else if (isPlaying) setIsPlaying(false);
+    else if (ranked.isOn && !ranked.sessionId) void startRankedRun();
+    else setIsPlaying(true);
+  };
+
+  // A ranked run goes from the start at 1×, so turning it on only touches the current run once the account and
+  // the part are confirmed: giving up leaves the song paused where it was
+  const toggleRanked = async () => {
+    if (ranked.isOn) {
+      ranked.controller.turnOff();
+      return;
+    }
+    setIsPlaying(false);
+    if (await ranked.controller.turnOn()) {
+      resetRun(false);
+      setSpeed(1);
+    }
+  };
+
+  const openRankingAccount = () => {
+    setIsPlaying(false);
+    openAccount();
   };
 
   const seekTo = (target: number) => {
@@ -619,8 +686,9 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     setSpeed(value);
   };
 
-  const finished = currentTimeMs >= durationMs;
-  const toolClass = 'flex min-h-10 min-w-10 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-700 bg-ink-800 px-3 text-xs font-semibold text-ink-200 transition hover:border-ink-500';
+  const toolClass = 'flex min-h-10 min-w-10 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-700 bg-ink-800 px-3 text-xs font-semibold text-ink-200 transition hover:border-ink-500 disabled:cursor-not-allowed disabled:opacity-50';
+  const lockedHint = ranked.isOn ? 'Partidas ranqueadas valem só em 1× e sem saltos.' : undefined;
+  const lockedHelp = ranked.isOn ? rankedHelpId : undefined;
   const duoParts = isDuo
     ? (isSamePart(lanes[0].part, lanes[1].part) ? `${mainTab.trackName} (os dois)` : `${mainTab.trackName} + ${lanes[1].part.tab.trackName}`)
     : '';
@@ -648,26 +716,41 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
       </main>
       <footer className="shrink-0 border-t border-ink-700 bg-ink-900 px-3 py-3 sm:px-6 [@media(max-height:500px)]:py-1">
         <div className="flex items-center gap-3">
-          <button onClick={() => finished ? resetRun(true) : setIsPlaying(!isPlaying)} aria-label={isPlaying ? 'Pausar' : 'Tocar'} className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-amp-400 text-ink-950 transition hover:bg-amp-300">{isPlaying ? <Pause size={22} /> : <Play size={22} />}</button>
-          <button onClick={() => resetRun(true)} aria-label="Reiniciar música" className={toolClass}><RotateCcw size={18} /></button>
+          <button onClick={togglePlay} disabled={ranked.isBusy} aria-busy={ranked.isBusy} aria-label={isPlaying ? 'Pausar' : 'Tocar'} className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-amp-400 text-ink-950 transition hover:bg-amp-300 disabled:cursor-wait disabled:opacity-70">{ranked.isBusy ? <Loader2 size={22} className="animate-spin" /> : isPlaying ? <Pause size={22} /> : <Play size={22} />}</button>
+          <button onClick={restartRun} disabled={ranked.isBusy} aria-label="Reiniciar música" className={toolClass}><RotateCcw size={18} /></button>
           <span className="font-mono text-xs text-ink-300">{formatTime(currentTimeMs)}</span>
-          <input aria-label="Posição da música" type="range" min={0} max={durationMs} value={currentTimeMs}
-            onChange={(event) => seekTo(Number(event.target.value))} className="h-10 min-w-0 flex-1 cursor-pointer accent-amp-400" />
+          <input aria-label="Posição da música" type="range" min={0} max={durationMs} value={currentTimeMs} disabled={ranked.isOn} title={lockedHint} aria-describedby={lockedHelp}
+            onChange={(event) => seekTo(Number(event.target.value))} className="h-10 min-w-0 flex-1 cursor-pointer accent-amp-400 disabled:cursor-not-allowed disabled:opacity-50" />
           <span className="font-mono text-xs text-ink-300">{formatTime(durationMs)}</span>
         </div>
         <div className="mt-2 flex items-center gap-2 overflow-x-auto pb-1">
-          <label className={toolClass}><span className="sr-only">Velocidade</span><select aria-label="Velocidade" value={speed} onChange={event => changeSpeed(Number(event.target.value))} className="min-h-10 cursor-pointer bg-ink-800 font-mono outline-none">{[0.5, 0.75, 1].map(value => <option key={value} value={value}>{value}×</option>)}</select></label>
+          {ranked.isAvailable && (
+            <button role="switch" aria-checked={ranked.isOn} aria-describedby={lockedHelp} onClick={() => void toggleRanked()} className={toolClass + (ranked.isOn ? ' border-amp-400! text-amp-300!' : '')}>
+              {ranked.phase === 'preparing' ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Trophy size={16} aria-hidden="true" />}<span>Valer para o ranking</span>
+              <span aria-hidden="true" className={'relative h-4 w-7 shrink-0 rounded-full transition ' + (ranked.isOn ? 'bg-amp-400' : 'bg-ink-600')}>
+                <span className={'absolute top-0.5 size-3 rounded-full bg-ink-100 transition-all ' + (ranked.isOn ? 'left-3.5' : 'left-0.5')} />
+              </span>
+            </button>
+          )}
+          <label title={lockedHint} className={toolClass + (ranked.isOn ? ' cursor-not-allowed! opacity-50' : '')}><span className="sr-only">Velocidade</span><select aria-label="Velocidade" value={speed} disabled={ranked.isOn} aria-describedby={lockedHelp} onChange={event => changeSpeed(Number(event.target.value))} className="min-h-10 cursor-pointer bg-ink-800 font-mono outline-none disabled:cursor-not-allowed">{[0.5, 0.75, 1].map(value => <option key={value} value={value}>{value}×</option>)}</select></label>
           <button aria-label="Metrônomo" aria-pressed={metronomeEnabled} onClick={() => setMetronomeEnabled(!metronomeEnabled)} className={toolClass + (metronomeEnabled ? ' border-amp-400 text-amp-300' : '')}><Clock size={16} /><span className="hidden sm:inline">Metrônomo</span></button>
           <button aria-label="Sintetizador da tablatura" aria-pressed={synthAudioEnabled} onClick={() => setSynthAudioEnabled(!synthAudioEnabled)} className={toolClass + (synthAudioEnabled ? ' border-signal-500 text-signal-300' : '')}>{synthAudioEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}<span className="hidden sm:inline">Sintetizador</span></button>
           <button aria-label="Configurações de áudio" onClick={onOpenAudioSettings} className={toolClass}><Sliders size={16} /><span className="hidden sm:inline">Áudio</span></button>
           <button aria-label="Abrir amplificador TONE3000" onClick={onOpenTone3000Rack} className={toolClass + ' text-amp-300'}><Zap size={16} /><span>{toneSettings ? AMP_PRESETS[toneSettings.preset]?.badge : 'Amp'}</span></button>
           <button aria-label={toneSettings?.isMonitoringEnabled ? 'Silenciar guitarra' : 'Ouvir guitarra'} aria-pressed={toneSettings?.isMonitoringEnabled ?? false} onClick={() => { if (tone3000 && toneSettings) tone3000.setMonitoringEnabled(!toneSettings.isMonitoringEnabled); }} className={toolClass}>{toneSettings?.isMonitoringEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}</button>
+          {isRankingOn && <button aria-label="Minha conta do ranking" onClick={openRankingAccount} className={toolClass}><UserRound size={16} /><span className="hidden lg:inline">Minha conta</span></button>}
         </div>
+        {ranked.isAvailable && (
+          <div id={rankedHelpId} role="status" aria-live="polite" className="text-xs leading-5">
+            {ranked.notice && <p className={ranked.notice.tone === 'error' ? 'text-miss' : 'text-near'}>{ranked.notice.text}</p>}
+            {ranked.phase !== 'off' && <p className="text-amp-200">{RANKED_STATUS[ranked.phase]}</p>}
+          </div>
+        )}
       </footer>
       {runSummary && <ModalFrame titleId="practice-result" onClose={() => resetRun(false)} className={(isDuo ? 'max-w-xl' : 'max-w-md') + ' overflow-y-auto text-center'}>
         <ResultPanel titleId="practice-result" summary={runSummary} parts={lanes.map((lane) => lane.part)} names={isDuo ? names : null}
-          challenge={challenge} initialShareOpen={devPreset?.shareOpen}
-          onPlayAgain={() => resetRun(true)} onChooseSong={() => { resetRun(false); onOpenSearch(); }} />
+          challenge={challenge} initialShareOpen={devPreset?.shareOpen} ranked={ranked.submission} onRetryRanked={ranked.controller.retrySubmission}
+          onPlayAgain={restartRun} onChooseSong={() => { resetRun(false); onOpenSearch(); }} />
       </ModalFrame>}
     </div>
   );

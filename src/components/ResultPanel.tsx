@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Swords, Trophy } from 'lucide-react';
+import { ListOrdered, Loader2, Swords, Trophy } from 'lucide-react';
 import { accuracyPercent, type ScoreState } from '../services/scoring';
 import type { Challenge } from '../services/challenge';
-import type { GamePart, RunSummary } from '../context/gameSession';
+import type { GamePart, RankedSubmission, RunSummary } from '../context/gameSession';
+import { useRanking } from '../context/ranking';
 import { ChallengeSharePanel } from './ChallengeSharePanel';
 
 const formatPoints = (value: number) => value.toLocaleString('pt-BR');
@@ -80,6 +81,32 @@ const ChallengeVerdict: React.FC<{ challenge: Challenge; score: number; counts: 
   );
 };
 
+const RankedResult: React.FC<{ submission: RankedSubmission; onRetry: () => void }> = ({ submission, onRetry }) => {
+  if (submission.status === 'sending') {
+    return <p className="flex items-center justify-center gap-2 text-sm text-ink-300"><Loader2 size={16} className="animate-spin" aria-hidden="true" /> Enviando ao ranking…</p>;
+  }
+  if (submission.status === 'skipped') {
+    return <p className="text-sm text-ink-200">{submission.reason === 'jumped' ? 'Jogada com saltos não vale para o ranking, por isso não foi enviada.' : 'Jogada com troca de velocidade não vale para o ranking, por isso não foi enviada.'}</p>;
+  }
+  if (submission.status === 'failed') {
+    return (
+      <>
+        <p className="text-sm text-ink-100">{submission.message}</p>
+        <p className="mt-1 text-xs text-ink-300">Sua pontuação não foi perdida: o resultado acima continua valendo neste navegador.</p>
+        {submission.canRetry && <button type="button" onClick={onRetry} className="mt-2 min-h-10 cursor-pointer rounded-lg px-3 text-sm font-bold text-signal-300 underline hover:text-signal-200">Tentar enviar de novo</button>}
+      </>
+    );
+  }
+  const { personalBest, rankAll, rankWeek } = submission.result;
+  return (
+    <>
+      <p className="flex items-center justify-center gap-2 font-display text-base font-bold text-hit"><Trophy size={16} aria-hidden="true" /> Enviado ao ranking</p>
+      {personalBest && <p className="mt-1 text-sm font-semibold text-amp-300">Novo recorde no ranking!</p>}
+      <p className="mt-1 font-mono text-sm text-ink-100">{personalBest ? 'Sua posição' : 'Sua melhor posição'}: {rankAll}º no geral · {rankWeek}º na semana</p>
+    </>
+  );
+};
+
 export interface ResultPanelProps {
   titleId: string;
   summary: RunSummary;
@@ -87,6 +114,8 @@ export interface ResultPanelProps {
   names: [string, string] | null; // duo only
   challenge: Challenge | null;
   initialShareOpen?: boolean;
+  ranked?: RankedSubmission | null;
+  onRetryRanked?: () => void;
   onPlayAgain: () => void;
   onChooseSong: () => void;
 }
@@ -96,7 +125,8 @@ export const ResultPanel: React.FC<ResultPanelProps> = (props) =>
     ? <DuoResult {...props} names={props.names} />
     : <SoloResult {...props} />;
 
-const SoloResult: React.FC<ResultPanelProps> = ({ titleId, summary, parts, challenge, initialShareOpen = false, onPlayAgain, onChooseSong }) => {
+const SoloResult: React.FC<ResultPanelProps> = ({ titleId, summary, parts, challenge, initialShareOpen = false, ranked = null, onRetryRanked, onPlayAgain, onChooseSong }) => {
+  const { isConfigured, openLeaderboard } = useRanking();
   const [isSharing, setIsSharing] = useState(initialShareOpen);
   const { tab, partId } = parts[0];
   const score = summary.scores[0];
@@ -125,7 +155,16 @@ const SoloResult: React.FC<ResultPanelProps> = ({ titleId, summary, parts, chall
       <div className="my-5 grid grid-cols-2 gap-3 font-mono"><div><p className="text-2xl text-hit">{accuracy}%</p><p className="text-xs text-ink-300">Precisão</p></div><div><p className="text-2xl text-signal-300">{score.maxCombo}</p><p className="text-xs text-ink-300">Max combo</p></div></div>
       <JudgementCounts score={score} />
       {challenge && <ChallengeVerdict challenge={challenge} score={score.score} counts={canChallenge} />}
+      <div role="status" aria-live="polite" className={ranked ? 'mt-5 rounded-xl border border-ink-700 bg-ink-850 px-4 py-3' : ''}>
+        {ranked && <RankedResult submission={ranked} onRetry={() => onRetryRanked?.()} />}
+      </div>
       <div className="mt-6">
+        {isConfigured && (
+          <button type="button" onClick={() => openLeaderboard({ songId: tab.songId, partId, title: tab.title, trackName: tab.trackName })}
+            className={secondaryButton + ' mt-0 mb-3 flex items-center justify-center gap-2 font-semibold'}>
+            <ListOrdered size={16} aria-hidden="true" /> Ver ranking
+          </button>
+        )}
         {canChallenge ? (
           <button type="button" onClick={() => setIsSharing(true)} className={secondaryButton + ' mt-0 mb-3 flex items-center justify-center gap-2 border-amp-500/40 font-semibold text-amp-300'}>
             <Swords size={16} aria-hidden="true" /> {challenge ? 'Responder ao desafio' : 'Desafiar um amigo'}

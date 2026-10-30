@@ -1,5 +1,6 @@
 // Everything PRGB keeps in this browser without an account: records/history (records.ts) and preferences,
 // which include the local nickname. Export and erase always cover both, so nothing is left behind.
+import { AUTH_STORAGE_KEY } from '../services/backend/supabaseClient';
 import { clearRecords, exportLocalData } from '../services/records';
 import { clearPreferences, readPreferences } from './preferences';
 
@@ -14,9 +15,20 @@ export const buildLocalDataExport = (): string => {
   }, null, 2);
 };
 
+// The ranking session is not part of this: it is the only access to the account, so erasing it is the
+// player's explicit choice (LocalDataControls)
 export const clearLocalData = (): void => {
   clearRecords();
   clearPreferences();
+};
+
+// Reads the key directly: asking supabase-js would download it for players who never opened the ranking
+export const hasRankingSession = (): boolean => {
+  try {
+    return localStorage.getItem(AUTH_STORAGE_KEY) !== null;
+  } catch {
+    return false;
+  }
 };
 
 // The page reloads right after erasing; this session-only marker lets the next load confirm it
