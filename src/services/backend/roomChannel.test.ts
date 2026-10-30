@@ -588,6 +588,47 @@ describe('messages', () => {
 });
 
 describe('starting together', () => {
+  it('does not resend before scheduling a start, and only allows the host to resend', async () => {
+    const { host, guest, hostChannel, guestChannel } = await duel();
+    await host.resendStart();
+    expect(hostChannel.sent).toEqual([]);
+    await expect(guest.resendStart()).rejects.toMatchObject({ code: 'invalid_message' });
+    expect(guestChannel.sent).toEqual([]);
+  });
+
+  it('resends exactly the latest scheduled start without reading the clock again', async () => {
+    const clock = vi.fn(async (): Promise<ServerTime> => ({ serverTimeMs: 0, offsetMs: 1000, roundTripMs: 20 }));
+    const p = player(new FakeHub(), { serverTime: clock });
+    const host = await p.createRoom();
+    await host.scheduleStart(2000);
+    await host.scheduleStart(8000);
+    const [first, latest] = p.client.channels[0].sent.map(({ message }) => message);
+    expect(latest).not.toEqual(first);
+    clock.mockResolvedValue({ serverTimeMs: 0, offsetMs: 9000, roundTripMs: 20 });
+    const callsBefore = clock.mock.calls.length;
+
+    await host.resendStart();
+
+    expect(p.client.channels[0].sent.map(({ message }) => message)).toEqual([first, latest, latest]);
+    expect(clock).toHaveBeenCalledTimes(callsBefore);
+  });
+
+  it('resends a missed start after the guest reconnects with the original server time', async () => {
+    const { hub, host, guestChannel, hostChannel, guestEvents } = await duel();
+    hub.drop(guestChannel);
+    await host.scheduleStart();
+    await settle();
+    expect(messagesIn(guestEvents)).toEqual([]);
+    const start = hostChannel.sent[0].message;
+
+    hub.restore(guestChannel);
+    await settle();
+    await host.resendStart();
+    await settle();
+
+    expect(messagesIn(guestEvents)).toEqual([start]);
+  });
+
   it('schedules the start on the server clock and converts it to each local clock', async () => {
     const hub = new FakeHub();
     const host = await player(hub, { offsetMs: 1000 }).createRoom();

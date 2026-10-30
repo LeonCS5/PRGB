@@ -133,6 +133,8 @@ export interface RoomHandle {
   getPeers(): RoomPeer[];
   /** Host only: sends start a few seconds ahead on the server clock; returns the local start time. */
   scheduleStart(leadMs?: number): Promise<number>;
+  /** Host only: repeats the last start, unchanged, for a guest who may have lost it. Nothing before the first. */
+  resendStart(): Promise<void>;
   /**
    * Server time of a start message as a local Date.now() time. For audio, schedule on the AudioContext clock:
    * ctx.currentTime + (localStart - Date.now()) / 1000.
@@ -255,6 +257,7 @@ class Room {
   #progressFlight: Promise<void> | null = null;
   #closePromise: Promise<void> | null = null;
   #settleJoin: ((error?: RoomError) => void) | null = null;
+  #lastStartAtServerMs: number | null = null;
 
   constructor(client: SupabaseClient, deps: RoomDeps, admission: RoomAdmission, userId: string,
     offsetMs: number, onClosed: () => void) {
@@ -289,6 +292,7 @@ class Room {
       send: (message) => this.send(message),
       getPeers: () => (this.#peer ? [{ ...this.#peer }] : []),
       scheduleStart: (leadMs = START_LEAD_MS) => this.scheduleStart(leadMs),
+      resendStart: () => this.resendStart(),
       localStartTimeFor: (startAtServerMs) => this.localStartTimeFor(startAtServerMs),
       leave: () => this.close(true, true)
     };
@@ -496,7 +500,13 @@ class Room {
     }
     const startAtServerMs = Math.round(Date.now() + this.#offsetMs + leadMs);
     await this.send({ type: 'start', startAtServerMs });
+    this.#lastStartAtServerMs = startAtServerMs;
     return this.localStartTimeFor(startAtServerMs);
+  }
+
+  async resendStart(): Promise<void> {
+    if (this.role !== 'host') throw new RoomError('invalid_message');
+    if (this.#lastStartAtServerMs !== null) await this.send({ type: 'start', startAtServerMs: this.#lastStartAtServerMs });
   }
 
   localStartTimeFor(startAtServerMs: number): number {

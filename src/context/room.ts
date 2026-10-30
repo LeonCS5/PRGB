@@ -251,6 +251,8 @@ export class RoomController {
   private readonly listeners = new Set<() => void>();
   private handle: RoomHandle | null = null;
   private removeListener: (() => void) | null = null;
+  private openAttempt = 0;
+  private lastStartAtServerMs: number | null = null;
 
   readonly getState = (): RoomState => this.state;
 
@@ -264,9 +266,18 @@ export class RoomController {
     for (const listener of this.listeners) listener();
   }
 
+  async open(connect: () => Promise<RoomHandle>, nickname: string): Promise<void> {
+    const attempt = ++this.openAttempt;
+    const handle = await connect();
+    // Whoever gave up while it connected must not hold a seat in a room they can't see
+    if (attempt === this.openAttempt) this.attach(handle, nickname);
+    else await handle.leave().catch(() => undefined);
+  }
+
   attach(handle: RoomHandle, nickname: string): void {
     this.removeListener?.();
     this.handle = handle;
+    this.lastStartAtServerMs = null;
     this.dispatch({ type: 'opened', handle, nickname });
     this.removeListener = handle.onEvent((event) => this.onEvent(handle, event));
   }
@@ -282,6 +293,8 @@ export class RoomController {
         break;
       case 'reconnected':
         this.dispatch({ type: 'clear_error' });
+        // The partner may have seen us leave, while Presence shows them the whole time and stays quiet here
+        this.announce();
         break;
       case 'error':
         this.dispatch({ type: 'error', code: event.code });
@@ -305,6 +318,7 @@ export class RoomController {
           trackName: message.trackName ?? null,
           ready: message.ready,
         });
+        this.answerHello();
         break;
       case 'select_song': {
         const { type: _type, ...song } = message;
@@ -318,6 +332,10 @@ export class RoomController {
         this.dispatch({ type: 'ready_changed', ready: message.ready, byPeer: true });
         break;
       case 'start':
+        // The host repeats the start for a guest who may have lost it: a match already played stays
+        // played, even from the lobby, and without a track there is nothing to play
+        if (this.state.myPartId === null || message.startAtServerMs === this.lastStartAtServerMs) break;
+        this.lastStartAtServerMs = message.startAtServerMs;
         this.dispatch({ type: 'start', localStartTimeMs: handle.localStartTimeFor(message.startAtServerMs) });
         break;
       case 'progress': {
@@ -339,9 +357,21 @@ export class RoomController {
     this.handle?.send(message).catch((cause: unknown) => this.report(cause));
   }
 
+  private resendStart(): void {
+    this.handle?.resendStart().catch((cause: unknown) => this.report(cause));
+  }
+
+  // Only the host answers, and never with a hello, so the two sides can't keep replying to each other
+  private answerHello(): void {
+    const { role, phase, song } = this.state;
+    if (role !== 'host') return;
+    if (phase === 'lobby' && song) this.post({ type: 'select_song', ...song });
+    if (phase === 'match') this.resendStart();
+  }
+
   // Whoever just arrived missed everything sent before. The song goes first so the hello's part applies to it.
   private announce(): void {
-    const { role, song, myNickname, myPartId, myTrackName, myReady } = this.state;
+    const { role, phase, song, myNickname, myPartId, myTrackName, myReady } = this.state;
     if (role === 'host' && song) this.post({ type: 'select_song', ...song });
     const hello: HelloMessage = {
       type: 'hello',
@@ -351,6 +381,7 @@ export class RoomController {
       ...(myTrackName !== null ? { trackName: myTrackName } : {}),
     };
     this.post(hello);
+    if (role === 'host' && phase === 'match') this.resendStart();
   }
 
   selectSong(song: RoomSong): void {
@@ -398,9 +429,12 @@ export class RoomController {
 
   backToLobby(): void {
     this.dispatch({ type: 'back_to_lobby' });
+    // The host may have changed the song while we were on the result screen
+    this.announce();
   }
 
   async leave(): Promise<void> {
+    this.openAttempt += 1;
     this.removeListener?.();
     this.removeListener = null;
     const { handle } = this;

@@ -23,6 +23,7 @@ function makeHandle(overrides: Partial<RoomHandle> = {}): RoomHandle {
     send: vi.fn(async () => undefined),
     getPeers: () => [],
     scheduleStart: vi.fn(async () => Date.now() + 4000),
+    resendStart: vi.fn(async () => undefined),
     localStartTimeFor: (ms) => ms,
     leave: vi.fn(async () => undefined),
     ...overrides,
@@ -654,6 +655,172 @@ describe('late messages', () => {
     s = roomReducer(s, { type: 'peer_left' });
 
     expect(matchOutcome(s)).toEqual({ kind: 'same_part', result: 'win' });
+  });
+});
+
+describe('staying in sync after a loss', () => {
+  const guestWithTrack = () => {
+    const room = fakeRoom('guest');
+    const ctrl = new RoomController();
+    ctrl.attach(room.handle, 'Beto');
+    room.emit({ type: 'peer_joined', peer: room.peer });
+    room.emit({ type: 'message', from: room.peer, message: { type: 'select_song', ...SONG } });
+    ctrl.selectPart(1, 'Bass');
+    ctrl.setReady(true);
+    room.sent.length = 0;
+    return { room, ctrl };
+  };
+
+  const hostInMatch = async () => {
+    const room = fakeRoom();
+    const ctrl = new RoomController();
+    ctrl.attach(room.handle, 'Ana');
+    ctrl.selectSong(SONG);
+    ctrl.setReady(true);
+    room.emit({ type: 'peer_joined', peer: room.peer });
+    room.emit({ type: 'message', from: room.peer, message: { type: 'hello', nickname: 'Beto', partId: 1, trackName: 'Bass', ready: true } });
+    await ctrl.scheduleStart();
+    vi.mocked(room.handle.resendStart).mockClear();
+    room.sent.length = 0;
+    return { room, ctrl };
+  };
+
+  it('tells the partner our state again after reconnecting', () => {
+    const { room } = guestWithTrack();
+
+    room.emit({ type: 'reconnected' });
+
+    expect(room.sent).toEqual([{ type: 'hello', nickname: 'Beto', ready: true, partId: 1, trackName: 'Bass' }]);
+  });
+
+  it('repeats the start for a guest who says hello in the middle of a match', async () => {
+    const { room } = await hostInMatch();
+
+    room.emit({ type: 'message', from: room.peer, message: { type: 'hello', nickname: 'Beto', partId: 1, trackName: 'Bass', ready: true } });
+
+    expect(room.handle.resendStart).toHaveBeenCalledOnce();
+    expect(room.sent).toEqual([]);
+  });
+
+  it('repeats the start when the guest comes back in the middle of a match', async () => {
+    const { room } = await hostInMatch();
+
+    room.emit({ type: 'peer_left', peer: room.peer });
+    room.emit({ type: 'peer_joined', peer: room.peer });
+
+    expect(room.handle.resendStart).toHaveBeenCalledOnce();
+  });
+
+  it('lets a guest who lost the start join the match late', () => {
+    const { room, ctrl } = guestWithTrack();
+
+    room.emit({ type: 'message', from: room.peer, message: { type: 'start', startAtServerMs: 1000 } });
+
+    expect(ctrl.getState()).toMatchObject({ phase: 'match', localStartTimeMs: 1000 });
+  });
+
+  it('never replays a match the guest already played', () => {
+    const { room, ctrl } = guestWithTrack();
+    const start = { type: 'message', from: room.peer, message: { type: 'start', startAtServerMs: 1000 } } as const;
+    room.emit(start);
+    ctrl.notifyMyScore(300);
+
+    room.emit(start);
+    expect(ctrl.getState().myScore).toBe(300);
+
+    ctrl.backToLobby();
+    room.emit(start);
+    expect(ctrl.getState().phase).toBe('lobby');
+  });
+
+  it('accepts the start of the next match', () => {
+    const { room, ctrl } = guestWithTrack();
+    room.emit({ type: 'message', from: room.peer, message: { type: 'start', startAtServerMs: 1000 } });
+    ctrl.backToLobby();
+
+    room.emit({ type: 'message', from: room.peer, message: { type: 'start', startAtServerMs: 2000 } });
+
+    expect(ctrl.getState()).toMatchObject({ phase: 'match', localStartTimeMs: 2000 });
+  });
+
+  it('keeps a guest with no track out of a match', () => {
+    const room = fakeRoom('guest');
+    const ctrl = new RoomController();
+    ctrl.attach(room.handle, 'Beto');
+    room.emit({ type: 'message', from: room.peer, message: { type: 'select_song', ...SONG } });
+
+    room.emit({ type: 'message', from: room.peer, message: { type: 'start', startAtServerMs: 1000 } });
+
+    expect(ctrl.getState().phase).toBe('lobby');
+  });
+
+  it('learns the rematch song when back from the result screen', () => {
+    const { room, ctrl } = guestWithTrack();
+    room.emit({ type: 'message', from: room.peer, message: { type: 'start', startAtServerMs: 1000 } });
+    const songB = { ...SONG, songId: 2, title: 'Outra' };
+    // The host changes the song while we are still on the result screen: too early to apply it
+    room.emit({ type: 'message', from: room.peer, message: { type: 'select_song', ...songB } });
+    expect(ctrl.getState().song?.songId).toBe(SONG.songId);
+    room.sent.length = 0;
+
+    ctrl.backToLobby();
+    expect(room.sent[0]).toMatchObject({ type: 'hello', nickname: 'Beto' });
+    room.emit({ type: 'message', from: room.peer, message: { type: 'select_song', ...songB } });
+
+    expect(ctrl.getState()).toMatchObject({ song: songB, myPartId: null, myReady: false });
+  });
+
+  it('answers a hello in the lobby with the song, and never with a hello', () => {
+    const room = fakeRoom();
+    const ctrl = new RoomController();
+    ctrl.attach(room.handle, 'Ana');
+    ctrl.selectSong(SONG);
+    room.sent.length = 0;
+
+    room.emit({ type: 'message', from: room.peer, message: { type: 'hello', nickname: 'Beto', ready: false } });
+
+    expect(types(room.sent)).toEqual(['select_song']);
+  });
+
+  it('does not answer a hello as a guest', () => {
+    const { room } = guestWithTrack();
+
+    room.emit({ type: 'message', from: room.peer, message: { type: 'hello', nickname: 'Ana', partId: 0, trackName: 'Lead', ready: false } });
+
+    expect(room.sent).toEqual([]);
+  });
+});
+
+describe('giving up while connecting', () => {
+  it('leaves the room as soon as the connection arrives', async () => {
+    const room = fakeRoom();
+    const ctrl = new RoomController();
+    let connected = (_handle: RoomHandle) => undefined as void;
+    const opening = ctrl.open(() => new Promise<RoomHandle>((resolve) => { connected = resolve; }), 'Ana');
+
+    await ctrl.leave();
+    connected(room.handle);
+    await opening;
+
+    expect(ctrl.getState().phase).toBe('idle');
+    expect(room.handle.leave).toHaveBeenCalledOnce();
+  });
+
+  it('opens the room when nobody gave up', async () => {
+    const room = fakeRoom();
+    const ctrl = new RoomController();
+
+    await ctrl.open(async () => room.handle, 'Ana');
+
+    expect(ctrl.getState()).toMatchObject({ phase: 'lobby', myNickname: 'Ana' });
+    expect(room.handle.leave).not.toHaveBeenCalled();
+  });
+
+  it('lets the failure reach the caller', async () => {
+    const ctrl = new RoomController();
+
+    await expect(ctrl.open(async () => { throw new RoomError('room_full'); }, 'Ana')).rejects.toMatchObject({ code: 'room_full' });
+    expect(ctrl.getState().phase).toBe('idle');
   });
 });
 

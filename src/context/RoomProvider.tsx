@@ -15,15 +15,12 @@ export const RoomProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const state = useSyncExternalStore(subscribe, getSnapshot);
 
-  const openRoom = useCallback(async (nickname: string) => {
-    const handle = await createRoom();
-    controller.attach(handle, nickname);
-  }, [controller]);
+  const openRoom = useCallback((nickname: string) => controller.open(createRoom, nickname), [controller]);
 
-  const enterRoom = useCallback(async (code: string, nickname: string) => {
-    const handle = await joinRoom(code);
-    controller.attach(handle, nickname);
-  }, [controller]);
+  const enterRoom = useCallback(
+    (code: string, nickname: string) => controller.open(() => joinRoom(code), nickname),
+    [controller],
+  );
 
   const leaveRoom = useCallback(() => controller.leave(), [controller]);
 
