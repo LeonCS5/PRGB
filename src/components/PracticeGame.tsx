@@ -41,6 +41,7 @@ import {
   createAttackLedger,
   createScoreState,
   judgeNote,
+  HIT_WINDOW_MS,
   type AttackLedger,
   type ScoreState
 } from '../services/scoring';
@@ -83,6 +84,10 @@ const freshPlayers = (): PlayerRun[] => [
 
 const synthKey = (laneIndex: number, noteId: string) => `${laneIndex}:${noteId}`;
 
+// A longer gap between frames (tab in the background, a stall) counts as a pause, so the song never
+// jumps ahead past notes nobody could play
+const MAX_FRAME_GAP_MS = 100;
+
 const isSamePart = (a: GamePart, b: GamePart) => a.tab.songId === b.tab.songId && a.partId === b.partId;
 
 export const PracticeGame: React.FC<PracticeGameProps> = ({
@@ -96,7 +101,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   onOpenTone3000Rack,
   devPreset = null
 }) => {
-  const { getLatestPitch, isAudioRunning, startAudio } = useAudioSession();
+  const { getLatestPitch, isAudioRunning, startAudio, channelMode } = useAudioSession();
   const [palette] = useState(readPalette);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasContainerRef = useRef<HTMLElement | null>(null);
@@ -260,9 +265,31 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     return outcome;
   };
 
+  // At the end every note still pending is past its window for good: the same rule as a note that
+  // scrolled by unplayed (miss, or skip for dead/grace/ghost), so the HUD and the result agree
+  const expirePendingNotes = () => {
+    let players = playersRef.current;
+    lanes.forEach((lane, laneIndex) => {
+      const noteStates = noteStatesRef.current[laneIndex];
+      for (const note of lane.part.tab.notes) {
+        if ((noteStates.get(note.id) ?? 'pending') !== 'pending') continue;
+        const outcome = judgeNote(note, -Infinity, null);
+        noteStates.set(note.id, outcome === 'miss' ? 'miss' : 'skipped');
+        if (outcome !== 'miss') continue;
+        players = players.slice();
+        players[lane.player] = { ...players[lane.player], score: applyJudgement(players[lane.player].score, 'miss') };
+      }
+    });
+    if (players === playersRef.current) return;
+    playersRef.current = players;
+    setScores(players.map((run) => run.score));
+  };
+
   const finishRun = () => {
     if (runFinishedRef.current) return;
     runFinishedRef.current = true;
+    // DEV scenes start at the end with made-up scores: their notes were never played
+    if (!devPreset) expirePendingNotes();
     const { jumped, speedChanged } = integrityRef.current;
     const finalScores = playersRef.current.slice(0, lanes.length).map((run) => run.score);
     let personalBest: PersonalBestOutcome | null = null;
@@ -270,7 +297,11 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     if (!isDuo) {
       const { tab, partId } = lanes[0].part;
       const score = finalScores[0];
-      if (jumped || speedChanged) {
+      if (devPreset) {
+        // Preview what recordRun would say, without saving a made-up run
+        const previous = getPersonalBest(tab.songId, partId, speed);
+        personalBest = { isNew: !jumped && !speedChanged && score.score > (previous?.score ?? 0), previous };
+      } else if (jumped || speedChanged) {
         personalBest = { isNew: false, previous: getPersonalBest(tab.songId, partId, speed) };
       } else {
         const outcome = recordRun({
@@ -339,6 +370,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     ctx.font = 'bold 13px Inter, sans-serif';
     const position = positionRef.current;
     const pixelsPerMs = PIXELS_PER_MS * speed;
+    const isJudging = isPlaying && !runFinishedRef.current;
 
     // 3. Process & Draw Notes, lane by lane, each judged by the pitch of its own player
     for (let laneIndex = 0; laneIndex < lanes.length; laneIndex++) {
@@ -356,16 +388,17 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
         const noteY = stringY(layout, note.string);
         const stringColor = palette.strings[(note.string) - 1] || palette.muted;
 
-        // Only draw if within screen view
-        if (noteX < -100 || noteX > width + 100) continue;
-
         let state = noteStates.get(note.id) || 'pending';
 
-        // Check if note is inside the active hit window and matches audio engine pitch
-        if (state === 'pending' && isPlaying) {
+        // Check if note is inside the active hit window and matches audio engine pitch. Judged before
+        // culling, so a note that left the screen still pending is missed instead of forgotten.
+        if (state === 'pending' && isJudging) {
           state = judgePendingNote(player, note, timeDiff, latestPitch, noteY);
           if (state !== 'pending') noteStates.set(note.id, state);
         }
+
+        // Only draw if within screen view
+        if (noteX < -100 || noteX > width + 100) continue;
 
         // Draw Note Pill
         if (!noteHeight) continue;
@@ -455,7 +488,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
 
       ctx.save();
       ctx.globalAlpha = ft.alpha;
-      ctx.font = `black 20px Inter, sans-serif`;
+      ctx.font = '900 20px Inter, sans-serif';
       ctx.fillStyle = ft.color;
       ctx.shadowColor = ft.color;
       ctx.shadowBlur = 10;
@@ -465,8 +498,9 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   });
 
   const renderFrame = useEffectEvent((now: number) => {
-    const delta = (now - lastFrameTimeRef.current) * speed;
+    const elapsed = now - lastFrameTimeRef.current;
     lastFrameTimeRef.current = now;
+    const delta = elapsed > MAX_FRAME_GAP_MS ? 0 : elapsed * speed;
     // The guard covers frames that run before the pause at the end is committed
     if (isPlaying && !runFinishedRef.current) {
       if (!runStartedRef.current) {
@@ -490,6 +524,15 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     const ctx = canvasRef.current?.getContext('2d');
     if (ctx) drawGame(ctx);
   });
+
+  // A hidden tab gets few or no frames: pause instead of letting the song run on unseen
+  useEffect(() => {
+    const pauseWhenHidden = () => {
+      if (document.hidden) setIsPlaying(false);
+    };
+    document.addEventListener('visibilitychange', pauseWhenHidden);
+    return () => document.removeEventListener('visibilitychange', pauseWhenHidden);
+  }, []);
 
   useEffect(() => {
     let animId: number;
@@ -532,9 +575,15 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     setCurrentTimeMs(target);
     lanes.forEach((lane, laneIndex) => {
       const noteStates = noteStatesRef.current[laneIndex];
-      for (const [id] of noteStates) {
-        const note = lane.part.tab.notes.find(item => item.id === id);
-        if (note && note.timeMs > target) { noteStates.delete(id); synthPlayedNotesRef.current.delete(synthKey(laneIndex, id)); }
+      for (const note of lane.part.tab.notes) {
+        if (note.timeMs > target) {
+          // Notes ahead sound again in the synth, but a note already judged stays judged (once per run)
+          synthPlayedNotesRef.current.delete(synthKey(laneIndex, note.id));
+        } else if ((noteStates.get(note.id) ?? 'pending') === 'pending' && note.timeMs - target < -HIT_WINDOW_MS) {
+          // Jumped over: skipped rather than missed, and the run no longer covers the whole song
+          noteStates.set(note.id, 'skipped');
+          integrityRef.current.jumped = true;
+        }
       }
     });
     if (target >= durationMs) {
@@ -573,7 +622,8 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
       </header>
       <main ref={canvasContainerRef} aria-label="Pista de prática de guitarra" className="relative min-h-0 w-full flex-1 overflow-hidden">
         <canvas ref={canvasRef} aria-label={isDuo ? 'Notas das duas partes: jogador 1 em cima, jogador 2 embaixo' : 'Notas da tablatura nas seis cordas'} className="absolute inset-0 block size-full" />
-        {!isAudioRunning && <button onClick={() => void startAudio(undefined, isDuo ? 'duo' : undefined)} className="absolute right-3 top-2 min-h-10 cursor-pointer rounded-xl border border-signal-500/30 bg-ink-900/90 px-3 text-xs font-semibold text-signal-300">Conectar guitarra{isDuo ? 's' : ''}</button>}
+        {/* A duo game also needs the input in duo mode: otherwise player 2 is never heard */}
+        {(!isAudioRunning || (isDuo && channelMode !== 'duo')) && <button onClick={() => void startAudio(undefined, isDuo ? 'duo' : undefined)} className="absolute right-3 top-2 min-h-10 cursor-pointer rounded-xl border border-signal-500/30 bg-ink-900/90 px-3 text-xs font-semibold text-signal-300">Conectar guitarra{isDuo ? 's' : ''}</button>}
       </main>
       <footer className="shrink-0 border-t border-ink-700 bg-ink-900 px-3 py-3 sm:px-6 [@media(max-height:500px)]:py-1">
         <div className="flex items-center gap-3">

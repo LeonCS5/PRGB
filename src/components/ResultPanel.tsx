@@ -132,7 +132,7 @@ const SoloResult: React.FC<ResultPanelProps> = ({ titleId, summary, parts, chall
           </button>
         ) : (
           <p className="mb-3 text-xs text-ink-300">
-            {counts ? `Desafios valem só na velocidade 1×. Toque em 1× para ${challenge ? 'responder' : 'desafiar um amigo'}.` : 'Jogada com saltos não vale para desafio.'}
+            {counts ? `Desafios valem só na velocidade 1×. Toque em 1× para ${challenge ? 'responder' : 'desafiar um amigo'}.` : summary.jumped ? 'Jogada com saltos não vale para desafio.' : 'Jogada com troca de velocidade não vale para desafio.'}
           </p>
         )}
         <button type="button" onClick={onPlayAgain} className={primaryButton}>Tocar de novo</button>

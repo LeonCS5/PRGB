@@ -60,7 +60,7 @@ export interface LiveTunerProps {
 
 export const LiveTuner: React.FC<LiveTunerProps> = ({ player = 0, label }) => {
   const latestPitch = useLatestPitch(player);
-  return <div aria-label={label ? `Afinador de ${label}` : 'Afinador'} className="flex shrink-0 items-center gap-2 rounded-xl border border-signal-500/20 bg-signal-500/5 px-2 py-2 font-mono sm:px-4">
+  return <div role="group" aria-label={label ? `Afinador de ${label}` : 'Afinador'} className="flex shrink-0 items-center gap-2 rounded-xl border border-signal-500/20 bg-signal-500/5 px-2 py-2 font-mono sm:px-4">
     {label && <span className={'text-[10px] font-bold ' + PLAYER_TEXT_COLORS[player]}>{label}</span>}
     <span className="text-lg font-bold text-signal-300">{latestPitch ? latestPitch.noteName : '--'}</span>
     <span className="hidden text-xs text-ink-300 sm:inline">{latestPitch ? latestPitch.frequency + ' Hz' : 'Toque uma corda'}</span>
