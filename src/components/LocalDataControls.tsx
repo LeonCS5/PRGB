@@ -3,13 +3,9 @@ import { Download, Trash2 } from 'lucide-react';
 import { CONSENT_COPY } from '../content/legal';
 import { buildLocalDataExport, clearLocalData, LOCAL_DATA_FILE_NAME } from '../context/localData';
 
-export interface LocalDataControlsProps {
-  onCleared?: () => void;
-}
-
 const buttonClass = 'flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border px-4 text-sm font-semibold transition';
 
-export const LocalDataControls: React.FC<LocalDataControlsProps> = ({ onCleared }) => {
+export const LocalDataControls: React.FC = () => {
   const downloadRef = useRef<HTMLAnchorElement>(null);
   const fileUrlRef = useRef<string | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
@@ -31,9 +27,8 @@ export const LocalDataControls: React.FC<LocalDataControlsProps> = ({ onCleared 
 
   const handleClear = () => {
     clearLocalData();
-    setIsConfirming(false);
-    setStatus('Dados locais apagados.');
-    onCleared?.();
+    // The open page still holds the old preferences in memory and would save them again: start fresh
+    window.location.reload();
   };
 
   return (
