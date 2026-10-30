@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { normalizeTab } from '../../supabase/functions/_shared/tabNormalizer.ts';
+import { rawDemo } from './demoSong';
 import { SongsterrApi, midiToNoteName, soundingMidi, type SongsterrMeta } from './songsterrApi';
 
 const STANDARD = [64, 59, 55, 50, 45, 40];
@@ -151,5 +153,36 @@ describe('SongsterrApi.normalizeTab', () => {
     ]);
     const times = notes.map((n) => n.timeMs);
     expect(times).toEqual([...times].sort((a, b) => a - b));
+  });
+});
+
+describe('shared tab normalizer (also used by the register-part Edge Function)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('is what SongsterrApi.normalizeTab runs', () => {
+    expect(SongsterrApi.normalizeTab(rawDemo, meta, 0)).toEqual(normalizeTab(rawDemo, meta, 0));
+  });
+
+  it('maps song meta with the same partId and revision fallbacks the server uses', async () => {
+    const raw = {
+      songId: 7,
+      latestRevisionId: 99,
+      title: 'Song',
+      artist: 'Band',
+      image: 'img',
+      tracks: [
+        { instrumentId: 30, instrument: 'Guitar', name: 'Lead', partId: 4 },
+        { instrumentId: 33, instrument: 'Bass', name: 'Bass', tuning: [43, 38, 33, 28] }
+      ]
+    };
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(raw))));
+    const songMeta = await SongsterrApi.getSongMeta(7);
+    expect(songMeta).toMatchObject({ songId: 7, revisionId: 99, image: 'img' });
+    expect(songMeta.tracks.map((t) => [t.partId, t.tuning])).toEqual([
+      [4, STANDARD],
+      [1, [43, 38, 33, 28]]
+    ]);
   });
 });
