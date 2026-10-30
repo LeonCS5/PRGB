@@ -39,7 +39,7 @@ import { Tone3000AmpRack } from './components/Tone3000AmpRack';
 import { AudioSessionProvider, useAudioSession, useLatestPitch } from './context/AudioSessionContext';
 import { ModalsProvider, useModals } from './context/ModalsContext';
 import { readPreferences, savePreferences } from './context/preferences';
-import { DEFAULT_PLAYER_NAMES, nextSessionKey, type GamePart, type GameSession, type RankedStart } from './context/gameSession';
+import { DEFAULT_PLAYER_NAMES, nextSessionKey, type GamePart, type GameSession, type RankedStart, type SoloSession } from './context/gameSession';
 import { RankingProvider } from './context/RankingProvider';
 import { useRanking } from './context/ranking';
 
@@ -309,6 +309,25 @@ const AppContent: React.FC = () => {
     }
   };
 
+  // The server counted a newer revision of this tab: a ranked run needs that one, so the game remounts with it
+  const reloadOutdatedPart = async ({ part, challenge }: SoloSession): Promise<string | null> => {
+    songSelectionVersion.current += 1;
+    const version = songSelectionVersion.current;
+    const { tab, partId } = part;
+    try {
+      const meta = await getSongMetadata(tab.songId);
+      const trackIndex = meta.tracks.findIndex((track) => track.partId === partId);
+      if (trackIndex < 0) return 'Esta faixa não está mais disponível no Songsterr. Escolha outra música.';
+      const reloaded = await loadSongTrack(meta, trackIndex);
+      if (version === songSelectionVersion.current) {
+        setSession(soloSession({ tab: reloaded, partId, revisionId: meta.revisionId }, challenge, 'reloaded'));
+      }
+      return null;
+    } catch (err) {
+      return err instanceof Error ? err.message : 'Não foi possível recarregar a tablatura. Tente novamente.';
+    }
+  };
+
   return (
     <div className="h-dvh w-full overflow-hidden bg-ink-950 font-sans text-ink-100">
       <div className="fixed inset-x-4 top-4 z-[100] mx-auto max-h-[50vh] max-w-xl space-y-3 overflow-y-auto">
@@ -369,6 +388,8 @@ const AppContent: React.FC = () => {
             onOpenAudioSettings={() => setIsSettingsOpen(true)}
             tone3000={tone3000}
             onOpenTone3000Rack={() => setIsTone3000RackOpen(true)}
+            rankedStart={session.mode === 'solo' ? session.rankedStart : null}
+            onRankedTabOutdated={session.mode === 'solo' ? () => reloadOutdatedPart(session) : undefined}
           />
         </>
       ) : legalRoute ? (

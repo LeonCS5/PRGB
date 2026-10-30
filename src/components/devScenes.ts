@@ -12,6 +12,7 @@ export interface GameDevPreset {
   playing: boolean;
   scores: ScoreState[];
   shareOpen?: boolean;
+  rankedSessionId?: string;
 }
 
 export const readDevScene = (): DevScene | null => {
