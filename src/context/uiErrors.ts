@@ -1,5 +1,6 @@
 import { LEGAL_CONTACT } from '../content/legal';
 import { toRankingError, type RankingErrorCode } from '../services/backend/rankingApi';
+import { RoomError, type RoomErrorCode } from '../services/backend/roomChannel';
 import { NICKNAME_ERROR_MESSAGES } from '../services/nickname';
 import { SongsterrApi, type NormalizedSongTab, type SongsterrMeta } from '../services/songsterrApi';
 
@@ -32,6 +33,26 @@ const RANKING_ERROR_MESSAGES: Record<RankingErrorCode, string> = {
 };
 
 export const getRankingErrorMessage = (error: unknown): string => RANKING_ERROR_MESSAGES[toRankingError(error).code];
+
+const ROOM_ERROR_MESSAGES: Record<RoomErrorCode, string> = {
+  not_configured: 'A funcionalidade online não está disponível neste site.',
+  not_authenticated: 'Sua sessão expirou. Entre no ranking de novo para continuar.',
+  profile_required: 'Para jogar online, você precisa de uma conta no ranking.',
+  rate_limited: 'Muitas tentativas em pouco tempo. Espere alguns minutos e tente de novo.',
+  network: 'Sem conexão com o servidor. Verifique sua internet e tente novamente.',
+  room_full: 'Esta sala já está ocupada por dois jogadores.',
+  room_not_found: 'Sala não encontrada. Confirme o código com seu parceiro.',
+  invalid_code: 'Código inválido. Use os 6 caracteres exatos do código da sala.',
+  invalid_message: 'Mensagem inválida. Recarregue a página e tente novamente.',
+  room_closed: 'A sala foi encerrada. Crie ou entre em uma nova sala.',
+};
+
+export const getRoomErrorMessage = (error: unknown): string => {
+  if (error instanceof RoomError) return ROOM_ERROR_MESSAGES[error.code];
+  return ROOM_ERROR_MESSAGES.network;
+};
+
+export const getRoomErrorByCode = (code: RoomErrorCode): string => ROOM_ERROR_MESSAGES[code];
 
 export const getAudioErrorMessage = (error: unknown): string => {
   const name = error instanceof Error ? error.name : '';

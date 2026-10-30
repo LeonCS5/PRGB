@@ -58,6 +58,22 @@ import {
   type Tone3000Settings
 } from '../services/tone3000Amp';
 
+export interface OnlineProgress {
+  score: number;
+  combo: number;
+  accuracy: number;
+  positionMs: number;
+  finished: boolean;
+}
+
+// An online duo run starts by itself and can't be paused or moved: both players stay on the same clock
+export interface OnlineRun {
+  startAtMs: number; // Date.now() time
+  hud: React.ReactNode;
+  onProgress: (progress: OnlineProgress) => void;
+  onFinished: (summary: RunSummary) => void;
+}
+
 interface PracticeGameProps {
   parts: GamePart[]; // one part (solo) or two (duo: player 1 first)
   playerNames?: [string, string] | null;
@@ -70,6 +86,7 @@ interface PracticeGameProps {
   rankedStart?: RankedStart | null;
   onRankedTabOutdated?: () => Promise<string | null>;
   devPreset?: GameDevPreset | null;
+  online?: OnlineRun | null;
 }
 
 type NoteState = 'pending' | 'perfect' | 'good' | 'miss' | 'skipped';
@@ -116,8 +133,10 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   onOpenTone3000Rack,
   rankedStart = null,
   onRankedTabOutdated,
-  devPreset = null
+  devPreset = null,
+  online = null,
 }) => {
+  const isOnline = online != null;
   const { getLatestPitch, isAudioRunning, startAudio, channelMode } = useAudioSession();
   const { isConfigured: isRankingOn, openAccount } = useRanking();
   const [palette] = useState(readPalette);
@@ -331,6 +350,14 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     if (!devPreset) expirePendingNotes();
     const { jumped, speedChanged } = integrityRef.current;
     const finalScores = playersRef.current.slice(0, lanes.length).map((run) => run.score);
+    const summary: RunSummary = { scores: finalScores, speed, jumped, speedChanged, personalBest: null };
+
+    // Online runs never touch the personal records or the ranking
+    if (online) {
+      online.onFinished(summary);
+      return;
+    }
+
     let personalBest: PersonalBestOutcome | null = null;
     // Duo runs are two people in one browser: they never touch the personal records
     if (!isDuo) {
@@ -362,7 +389,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
         personalBest = { isNew: outcome.isPersonalBest, previous: outcome.previousBest };
       }
     }
-    setRunSummary({ scores: finalScores, speed, jumped, speedChanged, personalBest });
+    setRunSummary({ ...summary, personalBest });
     // The server can only see a run that was too fast, so a slower one must never be sent
     if (!isDuo) ranked.controller.submitRun(finalScores[0], { jumped, speedChanged: speedChanged || speed !== 1 });
   };
@@ -541,7 +568,11 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   const renderFrame = useEffectEvent((now: number) => {
     const elapsed = now - lastFrameTimeRef.current;
     lastFrameTimeRef.current = now;
-    const delta = Math.min(elapsed, MAX_FRAME_GAP_MS) * speed;
+    if (online && !isPlaying && !runFinishedRef.current && Date.now() >= online.startAtMs) setIsPlaying(true);
+    // Online, the song follows the clock: a late start or a hidden tab catches up instead of drifting apart
+    const delta = online
+      ? Math.max(0, Date.now() - online.startAtMs - positionRef.current)
+      : Math.min(elapsed, MAX_FRAME_GAP_MS) * speed;
     // The guard covers frames that run before the pause at the end is committed
     if (isPlaying && !runFinishedRef.current) {
       if (!runStartedRef.current) {
@@ -561,6 +592,10 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
         setIsPlaying(false);
         finishRun();
       }
+      if (online) {
+        const { score } = playersRef.current[0];
+        online.onProgress({ score: score.score, combo: score.combo, accuracy: accuracyPercent(score), positionMs: next, finished: next >= durationMs });
+      }
     }
     // Some DPR changes do not dispatch resize or media-query events.
     if (sceneRef.current && sceneRef.current.dpr !== (window.devicePixelRatio || 1)) {
@@ -572,12 +607,13 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
 
   // A hidden tab gets few or no frames: pause instead of letting the song run on unseen
   useEffect(() => {
+    if (isOnline) return;
     const pauseWhenHidden = () => {
       if (document.hidden) setIsPlaying(false);
     };
     document.addEventListener('visibilitychange', pauseWhenHidden);
     return () => document.removeEventListener('visibilitychange', pauseWhenHidden);
-  }, []);
+  }, [isOnline]);
 
   useEffect(() => {
     let animId: number;
@@ -690,7 +726,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   };
 
   const toolClass = 'flex min-h-10 min-w-10 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-700 bg-ink-800 px-3 text-xs font-semibold text-ink-200 transition hover:border-ink-500 disabled:cursor-not-allowed disabled:opacity-50';
-  const lockedHint = ranked.isOn ? 'Partidas ranqueadas valem só em 1× e sem saltos.' : undefined;
+  const lockedHint = isOnline ? 'Na dupla online a música segue sem pausa, em 1×.' : ranked.isOn ? 'Partidas ranqueadas valem só em 1× e sem saltos.' : undefined;
   const lockedHelp = ranked.isOn ? rankedHelpId : undefined;
   const duoParts = isDuo
     ? (isSamePart(lanes[0].part, lanes[1].part) ? `${mainTab.trackName} (os dois)` : `${mainTab.trackName} + ${lanes[1].part.tab.trackName}`)
@@ -708,7 +744,9 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
           {isDuo
             ? <div className="hidden shrink-0 gap-2 sm:flex"><LiveTuner player={0} label="J1" /><LiveTuner player={1} label="J2" /></div>
             : <LiveTuner />}
-          <button onClick={onOpenSearch} aria-label="Escolher outra música" className={toolClass}><Search size={17} /><span className="hidden lg:inline">Mudar música</span></button>
+          {!isOnline && (
+            <button onClick={onOpenSearch} aria-label="Escolher outra música" className={toolClass}><Search size={17} /><span className="hidden lg:inline">Mudar música</span></button>
+          )}
         </div>
         {isDuo ? <DuoHud scores={scores} names={names} /> : <SoloHud score={scores[0]} goal={challenge?.score} />}
       </header>
@@ -717,17 +755,18 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
         {/* A duo game also needs the input in duo mode: otherwise player 2 is never heard */}
         {(!isAudioRunning || (isDuo && channelMode !== 'duo')) && <button onClick={() => void startAudio(undefined, isDuo ? 'duo' : undefined)} className="absolute right-3 top-2 min-h-10 cursor-pointer rounded-xl border border-signal-500/30 bg-ink-900/90 px-3 text-xs font-semibold text-signal-300">Conectar guitarra{isDuo ? 's' : ''}</button>}
       </main>
+      {online && <div className="shrink-0 px-3 sm:px-6">{online.hud}</div>}
       <footer className="shrink-0 border-t border-ink-700 bg-ink-900 px-3 py-3 sm:px-6 [@media(max-height:500px)]:py-1">
         <div className="flex items-center gap-3">
-          <button onClick={togglePlay} disabled={ranked.isBusy} aria-busy={ranked.isBusy} aria-label={isPlaying ? 'Pausar' : 'Tocar'} className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-amp-400 text-ink-950 transition hover:bg-amp-300 disabled:cursor-wait disabled:opacity-70">{ranked.isBusy ? <Loader2 size={22} className="animate-spin" /> : isPlaying ? <Pause size={22} /> : <Play size={22} />}</button>
-          <button onClick={restartRun} disabled={ranked.isBusy} aria-label="Reiniciar música" className={toolClass}><RotateCcw size={18} /></button>
+          <button onClick={togglePlay} disabled={isOnline || ranked.isBusy} aria-busy={ranked.isBusy} aria-label={isPlaying ? 'Pausar' : 'Tocar'} title={lockedHint} className={'flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-amp-400 text-ink-950 transition hover:bg-amp-300 ' + (isOnline ? 'disabled:cursor-not-allowed disabled:opacity-50' : 'disabled:cursor-wait disabled:opacity-70')}>{ranked.isBusy ? <Loader2 size={22} className="animate-spin" /> : isPlaying ? <Pause size={22} /> : <Play size={22} />}</button>
+          <button onClick={restartRun} disabled={isOnline || ranked.isBusy} aria-label="Reiniciar música" title={lockedHint} className={toolClass}><RotateCcw size={18} /></button>
           <span className="font-mono text-xs text-ink-300">{formatTime(currentTimeMs)}</span>
-          <input aria-label="Posição da música" type="range" min={0} max={durationMs} value={currentTimeMs} disabled={ranked.isOn} title={lockedHint} aria-describedby={lockedHelp}
+          <input aria-label="Posição da música" type="range" min={0} max={durationMs} value={currentTimeMs} disabled={isOnline || ranked.isOn} title={lockedHint} aria-describedby={lockedHelp}
             onChange={(event) => seekTo(Number(event.target.value))} className="h-10 min-w-0 flex-1 cursor-pointer accent-amp-400 disabled:cursor-not-allowed disabled:opacity-50" />
           <span className="font-mono text-xs text-ink-300">{formatTime(durationMs)}</span>
         </div>
         <div className="mt-2 flex items-center gap-2 overflow-x-auto pb-1">
-          {ranked.isAvailable && (
+          {!isOnline && ranked.isAvailable && (
             <button role="switch" aria-checked={ranked.isOn} aria-describedby={lockedHelp} onClick={() => void toggleRanked()} className={toolClass + (ranked.isOn ? ' border-amp-400! text-amp-300!' : '')}>
               {ranked.phase === 'preparing' ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Trophy size={16} aria-hidden="true" />}<span>Valer para o ranking</span>
               <span aria-hidden="true" className={'relative h-4 w-7 shrink-0 rounded-full transition ' + (ranked.isOn ? 'bg-amp-400' : 'bg-ink-600')}>
@@ -735,15 +774,15 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
               </span>
             </button>
           )}
-          <label title={lockedHint} className={toolClass + (ranked.isOn ? ' cursor-not-allowed! opacity-50' : '')}><span className="sr-only">Velocidade</span><select aria-label="Velocidade" value={speed} disabled={ranked.isOn} aria-describedby={lockedHelp} onChange={event => changeSpeed(Number(event.target.value))} className="min-h-10 cursor-pointer bg-ink-800 font-mono outline-none disabled:cursor-not-allowed">{[0.5, 0.75, 1].map(value => <option key={value} value={value}>{value}×</option>)}</select></label>
+          <label title={lockedHint} className={toolClass + ((isOnline || ranked.isOn) ? ' cursor-not-allowed! opacity-50' : '')}><span className="sr-only">Velocidade</span><select aria-label="Velocidade" value={speed} disabled={isOnline || ranked.isOn} aria-describedby={lockedHelp} onChange={event => changeSpeed(Number(event.target.value))} className="min-h-10 cursor-pointer bg-ink-800 font-mono outline-none disabled:cursor-not-allowed">{[0.5, 0.75, 1].map(value => <option key={value} value={value}>{value}×</option>)}</select></label>
           <button aria-label="Metrônomo" aria-pressed={metronomeEnabled} onClick={() => setMetronomeEnabled(!metronomeEnabled)} className={toolClass + (metronomeEnabled ? ' border-amp-400 text-amp-300' : '')}><Clock size={16} /><span className="hidden sm:inline">Metrônomo</span></button>
           <button aria-label="Sintetizador da tablatura" aria-pressed={synthAudioEnabled} onClick={() => setSynthAudioEnabled(!synthAudioEnabled)} className={toolClass + (synthAudioEnabled ? ' border-signal-500 text-signal-300' : '')}>{synthAudioEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}<span className="hidden sm:inline">Sintetizador</span></button>
           <button aria-label="Configurações de áudio" onClick={onOpenAudioSettings} className={toolClass}><Sliders size={16} /><span className="hidden sm:inline">Áudio</span></button>
           <button aria-label="Abrir amplificador TONE3000" onClick={onOpenTone3000Rack} className={toolClass + ' text-amp-300'}><Zap size={16} /><span>{toneSettings ? AMP_PRESETS[toneSettings.preset]?.badge : 'Amp'}</span></button>
           <button aria-label={toneSettings?.isMonitoringEnabled ? 'Silenciar guitarra' : 'Ouvir guitarra'} aria-pressed={toneSettings?.isMonitoringEnabled ?? false} onClick={() => { if (tone3000 && toneSettings) tone3000.setMonitoringEnabled(!toneSettings.isMonitoringEnabled); }} className={toolClass}>{toneSettings?.isMonitoringEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}</button>
-          {isRankingOn && <button aria-label="Minha conta do ranking" onClick={openRankingAccount} className={toolClass}><UserRound size={16} /><span className="hidden lg:inline">Minha conta</span></button>}
+          {!isOnline && isRankingOn && <button aria-label="Minha conta do ranking" onClick={openRankingAccount} className={toolClass}><UserRound size={16} /><span className="hidden lg:inline">Minha conta</span></button>}
         </div>
-        {ranked.isAvailable && (
+        {!isOnline && ranked.isAvailable && (
           <div id={rankedHelpId} role="status" aria-live="polite" className="text-xs leading-5">
             {ranked.notice && <p className={ranked.notice.tone === 'error' ? 'text-miss' : 'text-near'}>{ranked.notice.text}</p>}
             {ranked.phase !== 'off' && <p className="text-amp-200">{RANKED_STATUS[ranked.phase]}</p>}

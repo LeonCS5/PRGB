@@ -17,6 +17,7 @@ import {
   Zap,
   Loader2,
   Users,
+  Wifi,
   X
 } from 'lucide-react';
 import { getDemoSong, DEMO_SONG_ID } from './services/demoSong';
@@ -34,6 +35,8 @@ import { CHALLENGE_PARAM, readChallengeFromSearch, type Challenge } from './serv
 import { BrandMark } from './components/BrandMark';
 import { getSongMetadata, loadSongTrack } from './context/uiErrors';
 import { PracticeGame } from './components/PracticeGame';
+import { OnlinePracticeGame } from './components/OnlinePracticeGame';
+import { RoomModal } from './components/RoomModal';
 import { SongSearchModal } from './components/SongSearchModal';
 import { AudioSettingsModal } from './components/AudioSettingsModal';
 import { Tone3000AmpRack } from './components/Tone3000AmpRack';
@@ -42,6 +45,7 @@ import { ModalsProvider, useModals } from './context/ModalsContext';
 import { readPreferences, savePreferences } from './context/preferences';
 import { DEFAULT_PLAYER_NAMES, nextSessionKey, type GamePart, type GameSession, type RankedStart, type SoloSession } from './context/gameSession';
 import { RankingProvider } from './context/RankingProvider';
+import { RoomProvider } from './context/RoomProvider';
 import { useRanking } from './context/ranking';
 
 const supportUrl = import.meta.env.VITE_SUPPORT_URL?.trim();
@@ -161,6 +165,8 @@ const AppContent: React.FC = () => {
     setTone3000RackOpen: setIsTone3000RackOpen
   } = useModals();
   const { isConfigured: isRankingOn, hasAccount, openAccount } = useRanking();
+  const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
+  const [onlineSession, setOnlineSession] = useState<{ part: GamePart; partnerName: string; startAtMs: number; sessionKey: number } | null>(null);
 
   const [devScene] = useState(readDevScene);
   const [session, setSession] = useState<GameSession | null>(() => initialSession(devScene));
@@ -370,7 +376,22 @@ const AppContent: React.FC = () => {
             actionLabel="Tentar novamente" onAction={() => void handleAcceptChallenge(pendingChallenge)} actionDisabled={isLoadingChallenge} />
         )}
       </div>
-      {session ? (
+      {onlineSession ? (
+        <OnlinePracticeGame
+          key={onlineSession.sessionKey}
+          myPart={onlineSession.part}
+          partnerName={onlineSession.partnerName}
+          startAtMs={onlineSession.startAtMs}
+          onExit={() => setOnlineSession(null)}
+          onBackToRoom={() => {
+            setOnlineSession(null);
+            setIsRoomModalOpen(true);
+          }}
+          onOpenAudioSettings={() => setIsSettingsOpen(true)}
+          tone3000={tone3000}
+          onOpenTone3000Rack={() => setIsTone3000RackOpen(true)}
+        />
+      ) : session ? (
         /* Practice mode */
         <>
           <PracticeGame
@@ -458,6 +479,11 @@ const AppContent: React.FC = () => {
                     <button onClick={() => setIsDuoSetupOpen(true)} className="flex min-h-16 cursor-pointer items-center justify-center gap-3 rounded-xl border border-ink-600 bg-ink-900 px-5 py-3 text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
                       <Users size={18} className="text-amp-300" aria-hidden="true" /><span className="text-left"><span className="block text-sm font-bold">Jogar em dupla</span><span className="mt-1 block text-xs text-ink-300">Duas guitarras, um computador</span></span>
                     </button>
+                    {isRankingOn && (
+                      <button onClick={() => setIsRoomModalOpen(true)} className="flex min-h-16 cursor-pointer items-center justify-center gap-3 rounded-xl border border-signal-500/30 bg-signal-500/5 px-5 py-3 text-signal-300 transition hover:bg-signal-500/10">
+                        <Wifi size={18} aria-hidden="true" /><span className="text-left"><span className="block text-sm font-bold">Dupla online</span><span className="mt-1 block text-xs text-ink-300">Toque junto a distância</span></span>
+                      </button>
+                    )}
                   </div>
                   <p className="mt-5 flex items-center gap-2 text-xs text-ink-300"><Check size={14} className="text-hit" aria-hidden="true" /> Sem cadastro. O palco é seu.</p>
                 </div>
@@ -622,6 +648,16 @@ const AppContent: React.FC = () => {
       />
 
       <RankingModals />
+
+      <RoomModal
+        isOpen={isRoomModalOpen}
+        onClose={() => setIsRoomModalOpen(false)}
+        onStartGame={(part, partnerName, startAtMs) => {
+          songSelectionVersion.current += 1;
+          setOnlineSession({ part, partnerName, startAtMs, sessionKey: nextSessionKey() });
+          setIsRoomModalOpen(false);
+        }}
+      />
     </div>
   );
 };
@@ -632,7 +668,9 @@ export const App: React.FC = () => {
     <AudioSessionProvider>
       <ModalsProvider>
         <RankingProvider dev={rankingDev}>
-          <AppContent />
+          <RoomProvider>
+            <AppContent />
+          </RoomProvider>
         </RankingProvider>
       </ModalsProvider>
     </AudioSessionProvider>
