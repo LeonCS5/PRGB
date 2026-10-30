@@ -88,7 +88,7 @@ export const PRIVACY_POLICY: LegalDocument = {
         'Áudio da guitarra ou do microfone: usado só dentro do seu navegador, para detectar as notas, mostrar o afinador e simular o amplificador. Nunca é gravado nem enviado a nenhum servidor.',
         'Dados guardados no seu navegador: preferências, recordes, histórico e apelido local. Ficam no seu aparelho e não são enviados ao PRGB (veja “O que fica só no seu navegador”).',
         'Registros técnicos de acesso: como qualquer site, a hospedagem (Vercel) registra dados técnicos de cada visita, como endereço IP, data e hora, endereço da página e informações do navegador (user agent). Quando você abre o ranking ou usa a sala online, o Supabase registra dados técnicos parecidos das conexões. Se você tiver conta no ranking, o sistema de login do Supabase também guarda, junto da conta, dados das sessões de acesso (como endereço IP e navegador); eles são apagados quando a conta é excluída.',
-        'Busca de músicas: o termo pesquisado e a música que você abre são repassados ao Songsterr para trazer a tablatura.',
+        'Busca de músicas: o termo pesquisado e a música que você abre são repassados ao provedor externo de tablaturas.',
         'Ranking (opcional, para maiores de 18 anos): apelido, ID aleatório da conta, pontuações e datas, detalhados em “Ranking: o que guardamos”.',
         'Sala online em dupla (opcional, para maiores de 18 anos): apelido e placar ao vivo, repassados ao seu parceiro sem serem gravados, e o registro temporário da sua vaga na sala (código da sala, ID pseudônimo e horário de entrada).',
         'Contato por e-mail: se você escrever para nós, recebemos seu endereço de e-mail e o que você contar na mensagem.'
@@ -153,7 +153,7 @@ export const PRIVACY_POLICY: LegalDocument = {
       ],
       items: [
         'entregar o site e mantê-lo seguro e funcionando;',
-        'buscar as tablaturas no Songsterr;',
+        'buscar as tablaturas no provedor externo;',
         'mostrar o ranking, guardar suas pontuações e calcular sua posição;',
         'conferir automaticamente se as pontuações são possíveis e evitar trapaças e abusos;',
         'ligar você ao seu parceiro na sala online;',
@@ -181,9 +181,9 @@ export const PRIVACY_POLICY: LegalDocument = {
         'Compartilhamos dados só com quem está listado abaixo. Vercel e Supabase são operadores: tratam dados em nosso nome e seguindo nossas instruções.'
       ],
       items: [
-        'Vercel (EUA): hospeda o site, entrega os arquivos por uma rede global de servidores e repassa ao Songsterr os pedidos de busca e de tablaturas. Trata os registros técnicos de acesso.',
-        'Supabase (EUA): guarda os dados do ranking em servidores na região de São Paulo e transmite as mensagens da sala online. Para conferir pontuações, consulta no Songsterr dados públicos das faixas, como o número de notas e a duração, sem enviar dados seus.',
-        'Songsterr: recebe, repassados pela Vercel, o termo que você busca e os códigos da música e da faixa que você abre. Esses pedidos podem levar dados técnicos, como endereço IP e tipo de navegador, que o Songsterr trata conforme a política de privacidade dele. Ele nunca recebe dados da sua conta do ranking.',
+        'Vercel (EUA): hospeda o site, entrega os arquivos por uma rede global de servidores e repassa ao provedor de tablaturas os pedidos de busca e de música. Trata os registros técnicos de acesso.',
+        'Supabase (EUA): guarda os dados do ranking em servidores na região de São Paulo e transmite as mensagens da sala online. Para conferir pontuações, consulta no provedor de tablaturas dados públicos das faixas, como o número de notas e a duração, sem enviar dados seus.',
+        'Provedor externo de tablaturas: serviço de terceiro que fornece o acervo de músicas. Recebe, repassados pela Vercel, o termo que você busca e os códigos da música e da faixa que você abre. Esses pedidos podem levar dados técnicos, como endereço IP e tipo de navegador, que ele trata conforme a política de privacidade dele. Ele nunca recebe dados da sua conta do ranking. Você pode pedir o nome desse provedor pelo e-mail desta Política.',
         'Outros jogadores: veem seu apelido e suas pontuações no ranking e, na sala online, seu placar ao vivo.',
         'Autoridades: só quando a lei ou uma ordem judicial exigir.'
       ]
@@ -278,7 +278,7 @@ export const TERMS_OF_USE: LegalDocument = {
   updatedAt: LEGAL_VERSION,
   summary: [
     'O PRGB é gratuito e oferecido no estado em que se encontra, sem garantia de que estará sempre disponível.',
-    'As tablaturas vêm do Songsterr, que não tem relação com o PRGB; as músicas pertencem aos seus titulares.',
+    'As tablaturas vêm de um provedor externo, que não tem relação com o PRGB; as músicas pertencem aos seus titulares.',
     'Ranking e sala online são só para maiores de 18 anos.',
     'Não vale apelido ofensivo ou que imite outra pessoa ou a equipe, nem trapaça ou envio automatizado.',
     'Podemos remover apelidos e pontuações e encerrar contas que violem estas regras.',
@@ -315,8 +315,8 @@ export const TERMS_OF_USE: LegalDocument = {
       id: 'conteudo-de-terceiros',
       title: 'Tablaturas e conteúdo de terceiros',
       paragraphs: [
-        'As tablaturas e os dados das músicas vêm do Songsterr e são buscados quando você os pede. O PRGB não é afiliado, patrocinado nem endossado pelo Songsterr, por artistas ou por gravadoras.',
-        'Músicas, tablaturas, nomes de artistas e marcas pertencem aos seus titulares. Não garantimos que esse conteúdo esteja correto, completo ou disponível, e ele pode deixar de aparecer se o Songsterr mudar ou bloquear o acesso.',
+        'As tablaturas e os dados das músicas vêm de um provedor externo e são buscados quando você os pede. O PRGB não é afiliado, patrocinado nem endossado por esse provedor, por artistas ou por gravadoras.',
+        'Músicas, tablaturas, nomes de artistas e marcas pertencem aos seus titulares. Não garantimos que esse conteúdo esteja correto, completo ou disponível, e ele pode deixar de aparecer se o provedor mudar ou bloquear o acesso.',
         'O PRGB exibe esse conteúdo para você praticar. Copiar, baixar em massa ou redistribuir tablaturas pode violar os direitos dos titulares.'
       ]
     },
@@ -376,7 +376,7 @@ export const TERMS_OF_USE: LegalDocument = {
         'indisponibilidade, lentidão ou erros do site;',
         'erros na detecção de notas ou na pontuação;',
         'perda de recordes, histórico ou outros dados guardados no navegador;',
-        'mudanças, erros ou retirada de conteúdo de terceiros, como as tablaturas do Songsterr;',
+        'mudanças, erros ou retirada de conteúdo de terceiros, como as tablaturas do provedor externo;',
         'danos causados por uso inadequado do equipamento de áudio ou por volume excessivo;',
         'conteúdo e funcionamento de sites externos, como a plataforma de doação.'
       ]

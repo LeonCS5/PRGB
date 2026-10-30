@@ -46,7 +46,7 @@ const RETRYABLE: ReadonlySet<RankingErrorCode> = new Set<RankingErrorCode>(['net
 const ACCOUNT_GONE: ReadonlySet<RankingErrorCode> = new Set<RankingErrorCode>(['not_authenticated', 'profile_required']);
 
 export const RELOADED_NOTICE: RankedNotice = {
-  text: 'A tablatura desta música mudou no Songsterr. Carregamos a versão nova.',
+  text: 'A tablatura desta música mudou no acervo. Carregamos a versão nova.',
   tone: 'info'
 };
 

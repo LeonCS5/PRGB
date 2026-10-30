@@ -21,7 +21,7 @@ import {
   type NoteOutcome,
   type ScoreState
 } from './scoring';
-import type { NoteEvent } from './songsterrApi';
+import type { NoteEvent } from './tabsApi';
 
 // A3 on string 3, fret 2
 const note = (extra: Partial<NoteEvent> = {}): NoteEvent => ({

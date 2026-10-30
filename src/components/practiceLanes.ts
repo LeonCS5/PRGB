@@ -1,7 +1,7 @@
 // Canvas helpers of the practice game: lane geometry, the cached static layer, note pills and hit effects.
 // Solo has one lane filling the canvas; duo stacks two lanes (player 1 on top), each with its own strings.
 
-import type { NoteEvent } from '../services/songsterrApi';
+import type { NoteEvent } from '../services/tabsApi';
 import type { Judgement } from '../services/scoring';
 import { SoundFX } from '../services/synthAudio';
 

@@ -1,7 +1,7 @@
 // Scoring rules of the practice game, kept free of React/DOM so the canvas, duo mode and the
 // online ranking all judge notes the same way.
 
-import type { NoteEvent } from './songsterrApi';
+import type { NoteEvent } from './tabsApi';
 import type { DetectedPitch } from './audioEngine';
 
 export const PERFECT_WINDOW_MS = 55;

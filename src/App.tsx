@@ -275,7 +275,7 @@ const AppContent: React.FC = () => {
       } else {
         const meta = await getSongMetadata(challenge.songId);
         const trackIndex = meta.tracks.findIndex((track) => track.partId === challenge.partId);
-        if (trackIndex < 0) throw new Error('A faixa deste desafio não está mais disponível no Songsterr. Escolha outra música.');
+        if (trackIndex < 0) throw new Error('A faixa deste desafio não está mais disponível. Escolha outra música.');
         part = { tab: await loadSongTrack(meta, trackIndex), partId: challenge.partId, revisionId: meta.revisionId };
       }
       if (version !== songSelectionVersion.current) return;
@@ -337,7 +337,7 @@ const AppContent: React.FC = () => {
     try {
       const meta = await getSongMetadata(tab.songId);
       const trackIndex = meta.tracks.findIndex((track) => track.partId === partId);
-      if (trackIndex < 0) return 'Esta faixa não está mais disponível no Songsterr. Escolha outra música.';
+      if (trackIndex < 0) return 'Esta faixa não está mais disponível. Escolha outra música.';
       const reloaded = await loadSongTrack(meta, trackIndex);
       if (version === songSelectionVersion.current) {
         setSession(soloSession({ tab: reloaded, partId, revisionId: meta.revisionId }, challenge, 'reloaded'));
@@ -539,7 +539,7 @@ const AppContent: React.FC = () => {
                   {[
                     { icon: Zap, label: '01 / TIMBRE', title: 'O calor das válvulas.', description: 'Amp valvulado em tempo real com PRGB Amp. Ajuste o ganho, o gabinete e o reverb até encontrar o seu som.', detail: 'PRGB Amp · Amp + gabinete + reverb', color: 'text-amp-300', surface: 'bg-amp-500/10 border-amp-500/20' },
                     { icon: AudioLines, label: '02 / ENTRADA', title: 'Plugue. Afine. Toque.', description: 'Escolha sua interface e use o afinador integrado. Entrada de baixa latência para acompanhar cada movimento da palheta.', detail: 'Sua guitarra no centro de tudo', color: 'text-signal-300', surface: 'bg-signal-500/10 border-signal-500/20' },
-                    { icon: Target, label: '03 / PRÁTICA', title: 'Cada nota conta.', description: 'Acompanhe as tablaturas, acerte as notas e construa seu combo. Perfeito, Bom ou Errou: veja seu progresso enquanto toca.', detail: 'Tablaturas e metadados via Songsterr', color: 'text-hit', surface: 'bg-hit/10 border-hit/20' }
+                    { icon: Target, label: '03 / PRÁTICA', title: 'Cada nota conta.', description: 'Acompanhe as tablaturas, acerte as notas e construa seu combo. Perfeito, Bom ou Errou: veja seu progresso enquanto toca.', detail: 'Mais de 1 milhão de músicas no acervo', color: 'text-hit', surface: 'bg-hit/10 border-hit/20' }
                   ].map(({ icon: Icon, label, title, description, detail, color, surface }) => (
                     <article key={label} className="flex flex-col rounded-2xl border border-ink-700 bg-ink-850 p-6 sm:p-7">
                       <span className={`mb-7 flex size-12 items-center justify-center rounded-xl border ${color} ${surface}`}><Icon size={24} aria-hidden="true" /></span>
@@ -559,7 +559,7 @@ const AppContent: React.FC = () => {
               <ol className="mt-10 grid gap-8 md:grid-cols-3 md:gap-10">
                 {[
                   { icon: PlugZap, title: 'Plugue a interface', description: 'Conecte a guitarra à sua interface USB e permita o acesso ao áudio no navegador.' },
-                  { icon: Music, title: 'Escolha a música', description: 'Comece com Metallica ou busque sua próxima música nas tablaturas do Songsterr.' },
+                  { icon: Music, title: 'Escolha a música', description: 'Comece com Metallica ou busque sua próxima música no acervo.' },
                   { icon: Headphones, title: 'Dê o play. Toque.', description: 'Coloque os fones, ajuste seu timbre e siga as notas. Repita aquele trecho até sair.' }
                 ].map(({ icon: Icon, title, description }, index) => (
                   <li key={title} className="relative border-t border-ink-600 pt-6">
@@ -578,7 +578,7 @@ const AppContent: React.FC = () => {
           <footer className="border-t border-ink-700 bg-ink-900">
             <div className="mx-auto flex max-w-7xl flex-col gap-6 px-5 py-9 sm:px-8 lg:px-12">
               <div className="flex flex-wrap items-center justify-between gap-4"><BrandMark size={28} /><span className="font-mono text-[10px] tracking-widest text-ink-300">PLAY REAL GUITAR IN BROWSER</span></div>
-              <p className="max-w-3xl text-xs leading-6 text-ink-300">Tablaturas e metadados via Songsterr. PRGB não é afiliado ao Songsterr, Metallica ou outros artistas; todas as marcas pertencem aos seus donos.</p>
+              <p className="max-w-3xl text-xs leading-6 text-ink-300">Tablaturas e metadados vêm de um provedor externo. O PRGB não é afiliado a esse provedor, a artistas ou a gravadoras; todas as marcas pertencem aos seus donos.</p>
               <div className="flex flex-wrap items-center justify-between gap-4 border-t border-ink-700 pt-5 text-xs text-ink-300">
                 <span>© {currentYear} PRGB</span>
                 <nav aria-label="Documentos legais" className="flex gap-5">
@@ -592,7 +592,7 @@ const AppContent: React.FC = () => {
         </div>
       )}
 
-      {/* Songsterr Search Modal */}
+      {/* Song Search Modal */}
       <SongSearchModal
         isOpen={isSearchOpen}
         onClose={() => {

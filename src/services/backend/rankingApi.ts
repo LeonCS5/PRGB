@@ -136,8 +136,8 @@ export interface CreateProfileInput extends TermsAcceptance {
 }
 
 /**
- * A Songsterr track as counted by the server (register-part), for tab revision `revisionId`. If it differs
- * from the revision the app loaded (SongsterrMeta.revisionId), reload the tab before a ranked run.
+ * A tab track as counted by the server (register-part), for tab revision `revisionId`. If it differs
+ * from the revision the app loaded (SongMeta.revisionId), reload the tab before a ranked run.
  */
 export interface RegisteredPart {
   songId: number;
@@ -216,7 +216,7 @@ export interface RankingDataExport {
     submitted_at: string | null;
   }[];
   registered_parts: { song_id: number; part_id: number; title: string; track_name: string; registered_at: string }[];
-  register_part_quota: { window_start: string; used: number }[]; // Songsterr fetches per hour, kept 1 day
+  register_part_quota: { window_start: string; used: number }[]; // tab fetches per hour, kept 1 day
   room_seats: { code: string; seat: 1 | 2; joined_at: string }[];
   room_create_quota: string[]; // At most ten creation timestamps from the rolling hourly limit
 }
@@ -455,7 +455,7 @@ export async function deleteMyAccount(): Promise<void> {
 
 /**
  * Asks the server to count a track, or returns the stored count. Pass the revision of the tab you loaded
- * (SongsterrMeta.revisionId): when it differs from the stored one the server checks Songsterr and recounts
+ * (SongMeta.revisionId): when it differs from the stored one the server checks the source and recounts
  * if there is a newer revision. Needs a session and a profile.
  */
 export async function registerPart(songId: number, partId: number, revisionId?: number): Promise<RegisteredPart> {

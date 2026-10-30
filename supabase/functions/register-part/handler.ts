@@ -1,4 +1,4 @@
-// register-part: counts a Songsterr track on the server, with the game's own parser, so submit_score can
+// register-part: counts a tab track on the server, with the game's own parser, so submit_score can
 // bound the scores sent for it. Request handling only; index.ts wires Deno, Supabase and the network,
 // which keeps this file runnable in Vitest. Never logs personal data (user ids, tokens).
 
@@ -7,7 +7,7 @@ import {
   normalizeSongMeta,
   normalizeTab,
   type NormalizedSongTab,
-  type SongsterrMeta
+  type SongMeta
 } from '../_shared/tabNormalizer.ts';
 
 export const DEFAULT_ALLOWED_ORIGINS: readonly string[] = [
@@ -15,23 +15,23 @@ export const DEFAULT_ALLOWED_ORIGINS: readonly string[] = [
   'http://localhost:5173',
   'http://localhost:4173'
 ];
-export const SONGSTERR_META_URL = 'https://www.songsterr.com/api/meta';
-export const SONGSTERR_CDN_HOSTS: readonly string[] = [
+export const TAB_META_URL = 'https://www.songsterr.com/api/meta';
+export const TAB_CDN_HOSTS: readonly string[] = [
   'https://dqsljvtekg760.cloudfront.net',
   'https://d3d3l6a6rcgkaf.cloudfront.net'
 ];
 export const REGISTRATIONS_PER_HOUR = 30;
 export const FETCH_TIMEOUT_MS = 8000;
 
-// Same as the app's dev proxy (vite.config.ts): Songsterr answers browser-like clients
-const SONGSTERR_HEADERS = {
+// Same as the app's dev proxy (vite.config.ts): the source answers browser-like clients
+const TAB_HEADERS = {
   Accept: 'application/json',
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 };
 const INT4_MAX = 2_147_483_647;
 const TEXT_MAX = 200;
 
-/** Response body on success: the part as counted for the Songsterr tab revision `revisionId`. */
+/** Response body on success: the part as counted for the tab revision `revisionId`. */
 export interface SongPart {
   songId: number;
   partId: number;
@@ -54,7 +54,7 @@ export interface RegisterPartStore {
   getUserId(jwt: string): Promise<string | null>;
   hasProfile(userId: string): Promise<boolean>;
   findPart(songId: number, partId: number): Promise<SongPart | null>;
-  /** Counts one Songsterr fetch for the player; false once over `limit` this hour (atomic in the database). */
+  /** Counts one tab fetch for the player; false once over `limit` this hour (atomic in the database). */
   consumeQuota(userId: string, limit: number): Promise<boolean>;
   /** Inserts unless the part already exists (a concurrent request won), then returns the stored row. */
   insertPart(part: NewSongPart): Promise<SongPart>;
@@ -137,11 +137,11 @@ export function createRegisterPartHandler(deps: RegisterPartDeps): (request: Req
   const timeoutMs = deps.timeoutMs ?? FETCH_TIMEOUT_MS;
   const log = deps.log ?? (() => undefined);
 
-  const fetchSongsterr = async (url: string): Promise<Response> => {
+  const fetchFromSource = async (url: string): Promise<Response> => {
     try {
-      // No redirects: only the fixed Songsterr hosts are ever contacted
+      // No redirects: only the fixed source hosts are ever contacted
       return await deps.fetch(url, {
-        headers: SONGSTERR_HEADERS,
+        headers: TAB_HEADERS,
         redirect: 'error',
         signal: AbortSignal.timeout(timeoutMs)
       });
@@ -158,12 +158,12 @@ export function createRegisterPartHandler(deps: RegisterPartDeps): (request: Req
     }
   };
 
-  async function fetchMeta(songId: number): Promise<SongsterrMeta> {
-    const response = await fetchSongsterr(`${SONGSTERR_META_URL}/${songId}`);
+  async function fetchMeta(songId: number): Promise<SongMeta> {
+    const response = await fetchFromSource(`${TAB_META_URL}/${songId}`);
     if (response.status === 404) throw new HttpError(404, 'song_not_found');
     if (!response.ok) throw new HttpError(502, 'songsterr_unavailable');
     const data = await readJson(response, new HttpError(502, 'songsterr_unavailable'));
-    let meta: SongsterrMeta;
+    let meta: SongMeta;
     try {
       meta = normalizeSongMeta(data);
     } catch {
@@ -174,13 +174,13 @@ export function createRegisterPartHandler(deps: RegisterPartDeps): (request: Req
     return meta;
   }
 
-  // Same CDN path and fallback order as SongsterrApi.getTrackTabJson
-  async function fetchTab(meta: SongsterrMeta, partId: number): Promise<unknown> {
+  // Same CDN path and fallback order as TabsApi.getTrackTabJson
+  async function fetchTab(meta: SongMeta, partId: number): Promise<unknown> {
     const path = `/${meta.songId}/${meta.revisionId}/${encodeURIComponent(String(meta.image))}/${partId}.json`;
-    for (const host of SONGSTERR_CDN_HOSTS) {
+    for (const host of TAB_CDN_HOSTS) {
       let response: Response;
       try {
-        response = await fetchSongsterr(`${host}${path}`);
+        response = await fetchFromSource(`${host}${path}`);
       } catch {
         continue;
       }
@@ -189,7 +189,7 @@ export function createRegisterPartHandler(deps: RegisterPartDeps): (request: Req
     throw new HttpError(502, 'songsterr_unavailable');
   }
 
-  async function countPart(meta: SongsterrMeta, partId: number, registeredBy: string): Promise<NewSongPart> {
+  async function countPart(meta: SongMeta, partId: number, registeredBy: string): Promise<NewSongPart> {
     const trackIndex = meta.tracks.findIndex((track) => track.partId === partId);
     if (trackIndex < 0) throw new HttpError(404, 'part_not_found');
 
@@ -239,7 +239,7 @@ export function createRegisterPartHandler(deps: RegisterPartDeps): (request: Req
 
       const { songId, partId, revisionId } = await readRequest(request);
       const existing = await deps.store.findPart(songId, partId);
-      // Songsterr ids are positive; negative ones are reserved for parts seeded by migrations (the demo)
+      // Source ids are positive; negative ones are reserved for parts seeded by migrations (the demo)
       const seeded = songId <= 0 || partId < 0;
       // Counted already, and the app saw no other revision: nothing to fetch
       if (existing && (seeded || revisionId === undefined || revisionId === existing.revisionId)) {
@@ -249,7 +249,7 @@ export function createRegisterPartHandler(deps: RegisterPartDeps): (request: Req
 
       if (!(await deps.store.consumeQuota(userId, REGISTRATIONS_PER_HOUR))) throw new HttpError(429, 'rate_limited');
 
-      // Songsterr decides the current revision; the one the app sent only triggers the check
+      // The source decides the current revision; the one the app sent only triggers the check
       const meta = await fetchMeta(songId);
       if (existing && meta.revisionId === existing.revisionId) return json(200, existing, cors);
       const counted = await countPart(meta, partId, userId);

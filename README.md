@@ -28,7 +28,7 @@ O **PRGB** (*Play Real Guitar in Browser*) é uma aplicação web completa e ope
 
 1. **Conexão Direta:** Conecte sua guitarra elétrica através de qualquer interface de áudio USB (Focusrite Scarlett, Behringer U-Phoria, etc.).
 2. **Amplificador Virtual PRGB Amp:** Ouça seu instrumento com emulação de amplificador valvulado, saturação dinâmica não-linear, tone stack de 4 bandas, simulação de gabinete (Cab Sim), noise gate e reverb espacial.
-3. **1 Milhão+ de Músicas:** Carregue tablaturas do Songsterr com suporte a faixas individuais (Guitarra Solo, Base, Baixo) e técnicas avançadas (bends, ligaduras, grace notes, tapping, harmônicos).
+3. **1 Milhão+ de Músicas:** Carregue tablaturas do acervo com suporte a faixas individuais (Guitarra Solo, Base, Baixo) e técnicas avançadas (bends, ligaduras, grace notes, tapping, harmônicos).
 4. **Game Engine em Canvas 2D:** Trilhos (*rails*) coloridos por corda, notas temporizadas, detecção de pitch em tempo real (NSDF/MPM), julgamento de precisão (*Perfect / Good / Miss*), contadores de combo e efeitos visuais a 60 FPS com suporte a High-DPI.
 5. **Metrônomo de Alta Precisão:** Cliques agendados diretamente no relógio de hardware da Web Audio API (`AudioContext.currentTime`), com suporte a compassos compostos, anacruse e mudanças de andamento via `beatGrid`.
 6. **100% Client-Side & PWA:** Sem servidores, sem banco de dados, sem login. Inclui suporte a PWA (Progressive Web App) com instalação local e cache offline do app shell.
@@ -156,7 +156,7 @@ npm run dev
 
 | Comando | Descrição |
 |---|---|
-| `npm run dev` | Inicia o servidor Vite local com proxies da API Songsterr |
+| `npm run dev` | Inicia o servidor Vite local com proxies da API de tablaturas |
 | `npm run build` | Valida a tipagem TypeScript (`tsc -b`) e gera o bundle de produção em `dist/` |
 | `npm run lint` | Executa o linter ultrarrápido [oxlint](https://oxc.rs) |
 | `npm run test` | Executa a suíte de 30 testes unitários automatizados com [Vitest](https://vitest.dev) |
@@ -169,7 +169,7 @@ npm run dev
 ```
 PRGB/
 ├── index.html                       # Shell HTML da aplicação com PWA links
-├── vite.config.ts                   # Configuração do Vite e proxy reverso da API Songsterr
+├── vite.config.ts                   # Configuração do Vite e proxy reverso da API de tablaturas
 ├── package.json                     # Scripts e dependências
 ├── tsconfig.app.json                # Configuração TypeScript (Strict mode)
 ├── .oxlintrc.json                   # Configuração do linter oxlint
@@ -187,7 +187,7 @@ PRGB/
 │   │
 │   ├── components/
 │   │   ├── PracticeGame.tsx         # Canvas 2D: rails em cache, notas, animação 60FPS e scoring
-│   │   ├── SongSearchModal.tsx      # Modal de pesquisa de músicas e seleção de faixas Songsterr
+│   │   ├── SongSearchModal.tsx      # Modal de pesquisa de músicas e seleção de faixas
 │   │   ├── AudioSettingsModal.tsx   # Modal de escolha de interface, canal, VU meter e afinador
 │   │   ├── AmpRack.tsx      # Interface gráfica do PRGB Amp e presets
 │   │   └── ErrorNotice.tsx          # Alerta de erro acessível (role="alert") com ações
@@ -196,8 +196,8 @@ PRGB/
 │       ├── audioEngine.ts           # Captura USB raw, roteamento de canal e pitch NSDF/MPM
 │       ├── audioEngine.test.ts      # Testes unitários do AudioEngine
 │       ├── ampEngine.ts           # Cadeia DSP completa do amplificador valvulado e cab sim
-│       ├── songsterrApi.ts          # Cliente da API Songsterr e normalizador de tablaturas
-│       ├── songsterrApi.test.ts     # Testes unitários do parser de tablaturas
+│       ├── tabsApi.ts               # Cliente da API de tablaturas e normalizador de tablaturas
+│       ├── tabsApi.test.ts          # Testes unitários do parser de tablaturas
 │       ├── synthAudio.ts            # MetronomeScheduler no relógio Web Audio, SFX e synth
 │       └── synthAudio.test.ts       # Testes unitários do agendamento de metrônomo
 │
@@ -229,4 +229,4 @@ PRGB/
 
 ## 📄 Licença
 
-Este projeto é desenvolvido para fins educacionais e de código aberto. Tablaturas e metadados musicais são providos via API do Songsterr.
+Este projeto é desenvolvido para fins educacionais e de código aberto. Tablaturas e metadados musicais vêm de um provedor externo, sem afiliação com o PRGB.

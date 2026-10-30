@@ -33,7 +33,7 @@ export type PlayerSlot = 0 | 1;
 // Single-player modes always report player 0
 export type PitchCallback = (pitch: DetectedPitch | null, player: PlayerSlot) => void;
 
-// MIDI notes per string, index 0 = string 1 (high E), same convention as Songsterr tabs
+// MIDI notes per string, index 0 = string 1 (high E), same convention as the raw tabs
 export const STANDARD_TUNING = [64, 59, 55, 50, 45, 40];
 
 export interface StringFretPosition {

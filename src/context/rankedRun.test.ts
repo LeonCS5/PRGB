@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { RankingError, type RankingErrorCode, type RankingProfile, type RegisteredPart, type SubmitScoreResult } from '../services/backend/rankingApi';
 import { applyJudgement, createScoreState, type Judgement, type ScoreState } from '../services/scoring';
-import type { NormalizedSongTab } from '../services/songsterrApi';
+import type { NormalizedSongTab } from '../services/tabsApi';
 import type { GamePart } from './gameSession';
 import { RankedRunController, RELOADED_NOTICE, type RankedRunDeps } from './rankedRun';
 
@@ -118,7 +118,7 @@ describe('preparing a ranked run', () => {
     api.registerPart.mockImplementation(failWith('songsterr_unavailable'));
     expect(await controller.turnOn()).toBe(false);
     expect(controller.getState()).toMatchObject({
-      phase: 'off', notice: { text: 'O Songsterr não respondeu agora. Tente novamente em instantes.', tone: 'error' }
+      phase: 'off', notice: { text: 'O acervo de músicas não respondeu agora. Tente novamente em instantes.', tone: 'error' }
     });
     expect(forgetAccount).not.toHaveBeenCalled();
   });

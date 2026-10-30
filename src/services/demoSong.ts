@@ -1,7 +1,7 @@
 // Original practice exercise bundled with the app: playable offline and free of third-party rights.
-// Written in Songsterr's raw format (strings 0-indexed, 0 = high E) so it goes through the same parser.
+// Written in the raw tab format (strings 0-indexed, 0 = high E) so it goes through the same parser.
 
-import { SongsterrApi, type NormalizedSongTab, type SongsterrMeta } from './songsterrApi';
+import { TabsApi, type NormalizedSongTab, type SongMeta } from './tabsApi';
 
 export const DEMO_SONG_ID = -1;
 
@@ -48,7 +48,7 @@ export const rawDemo = {
   ]
 };
 
-const demoMeta: SongsterrMeta = {
+const demoMeta: SongMeta = {
   songId: DEMO_SONG_ID,
   revisionId: 0,
   title: 'Pentatônica em Lá menor',
@@ -61,5 +61,5 @@ const demoMeta: SongsterrMeta = {
  * Build the demo tab. It is regenerated on each call so callers can't share mutable note objects.
  */
 export function getDemoSong(): NormalizedSongTab {
-  return SongsterrApi.normalizeTab(rawDemo, demoMeta, 0);
+  return TabsApi.normalizeTab(rawDemo, demoMeta, 0);
 }

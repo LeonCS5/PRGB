@@ -31,7 +31,7 @@ import {
   type HitEffects,
   type LaneLayout
 } from './practiceLanes';
-import type { NoteEvent } from '../services/songsterrApi';
+import type { NoteEvent } from '../services/tabsApi';
 import type { DetectedPitch, PlayerSlot } from '../services/audioEngine';
 import type { Challenge } from '../services/challenge';
 import { useAudioSession } from '../context/AudioSessionContext';

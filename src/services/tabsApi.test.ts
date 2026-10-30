@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { normalizeTab } from '../../supabase/functions/_shared/tabNormalizer.ts';
 import { rawDemo } from './demoSong';
-import { SongsterrApi, midiToNoteName, soundingMidi, type SongsterrMeta } from './songsterrApi';
+import { TabsApi, midiToNoteName, soundingMidi, type SongMeta } from './tabsApi';
 
 const STANDARD = [64, 59, 55, 50, 45, 40];
 
-const meta: SongsterrMeta = {
+const meta: SongMeta = {
   songId: 1,
   revisionId: 1,
   title: 'Test',
@@ -22,10 +22,10 @@ const tab = (beats: unknown[], extra: Record<string, unknown> = {}) => ({
 });
 
 const parse = (beats: unknown[], extra?: Record<string, unknown>) =>
-  SongsterrApi.normalizeTab(tab(beats, extra), meta, 0).notes;
+  TabsApi.normalizeTab(tab(beats, extra), meta, 0).notes;
 
 const SoundsterrTabWithMeasures = (measures: unknown[], tempo: unknown[]) =>
-  SongsterrApi.normalizeTab({ automations: { tempo }, measures }, meta, 0);
+  TabsApi.normalizeTab({ automations: { tempo }, measures }, meta, 0);
 
 describe('midiToNoteName', () => {
   it('names notes with scientific octave numbers', () => {
@@ -52,7 +52,7 @@ describe('soundingMidi', () => {
   });
 });
 
-describe('SongsterrApi.normalizeTab', () => {
+describe('TabsApi.normalizeTab', () => {
   it('reads raw strings as 0-indexed (string 5 fret 0 is the low E)', () => {
     const [low, high] = parse([
       { duration: [1, 4], notes: [{ string: 5, fret: 0 }] },
@@ -161,8 +161,8 @@ describe('shared tab normalizer (also used by the register-part Edge Function)',
     vi.unstubAllGlobals();
   });
 
-  it('is what SongsterrApi.normalizeTab runs', () => {
-    expect(SongsterrApi.normalizeTab(rawDemo, meta, 0)).toEqual(normalizeTab(rawDemo, meta, 0));
+  it('is what TabsApi.normalizeTab runs', () => {
+    expect(TabsApi.normalizeTab(rawDemo, meta, 0)).toEqual(normalizeTab(rawDemo, meta, 0));
   });
 
   it('maps song meta with the same partId and revision fallbacks the server uses', async () => {
@@ -178,7 +178,7 @@ describe('shared tab normalizer (also used by the register-part Edge Function)',
       ]
     };
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(raw))));
-    const songMeta = await SongsterrApi.getSongMeta(7);
+    const songMeta = await TabsApi.getSongMeta(7);
     expect(songMeta).toMatchObject({ songId: 7, revisionId: 99, image: 'img' });
     expect(songMeta.tracks.map((t) => [t.partId, t.tuning])).toEqual([
       [4, STANDARD],
@@ -189,14 +189,14 @@ describe('shared tab normalizer (also used by the register-part Edge Function)',
   it('only ever calls same-origin proxies, even when they fail', async () => {
     const fetchMock = vi.fn(async (_url: string) => new Response('nope', { status: 502 }));
     vi.stubGlobal('fetch', fetchMock);
-    await expect(SongsterrApi.searchSongs('metallica')).rejects.toThrow('Search failed: 502');
-    await expect(SongsterrApi.getSongMeta(7)).rejects.toThrow('Meta fetch failed: 502');
-    await expect(SongsterrApi.getTrackTabJson(7, 99, 'img', 0)).rejects.toThrow('Failed to load track tab');
+    await expect(TabsApi.searchSongs('metallica')).rejects.toThrow('Search failed: 502');
+    await expect(TabsApi.getSongMeta(7)).rejects.toThrow('Meta fetch failed: 502');
+    await expect(TabsApi.getTrackTabJson(7, 99, 'img', 0)).rejects.toThrow('Failed to load track tab');
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
-      '/api/songsterr/songs?pattern=metallica',
-      '/api/songsterr/meta/7',
-      '/cdn/songsterr/7/99/img/0.json',
-      '/cdn2/songsterr/7/99/img/0.json'
+      '/api/tabs/songs?pattern=metallica',
+      '/api/tabs/meta/7',
+      '/cdn/tabs/7/99/img/0.json',
+      '/cdn2/tabs/7/99/img/0.json'
     ]);
   });
 
@@ -204,6 +204,6 @@ describe('shared tab normalizer (also used by the register-part Edge Function)',
     vi.stubGlobal('fetch', vi.fn(async (url: string) =>
       url.startsWith('/cdn2/') ? new Response('{"measures":[]}') : new Response('nope', { status: 404 })
     ));
-    await expect(SongsterrApi.getTrackTabJson(7, 99, 'img', 0)).resolves.toEqual({ measures: [] });
+    await expect(TabsApi.getTrackTabJson(7, 99, 'img', 0)).resolves.toEqual({ measures: [] });
   });
 });

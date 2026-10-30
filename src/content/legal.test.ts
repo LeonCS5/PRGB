@@ -61,7 +61,7 @@ describe('legal documents', () => {
     const retention = sectionText(PRIVACY_POLICY, 'retencao');
     for (const period of ['12 meses', '8 semanas', '7 dias']) expect(retention).toContain(period);
     const sharing = sectionText(PRIVACY_POLICY, 'compartilhamento');
-    for (const party of ['Vercel', 'Supabase', 'Songsterr']) expect(sharing).toContain(party);
+    for (const party of ['Vercel', 'Supabase', 'Provedor externo de tablaturas']) expect(sharing).toContain(party);
     expect(sectionText(PRIVACY_POLICY, 'transferencia-internacional')).toContain('Estados Unidos');
     const legalBases = sectionText(PRIVACY_POLICY, 'bases-legais');
     expect(legalBases).toContain('art. 7º, I)');

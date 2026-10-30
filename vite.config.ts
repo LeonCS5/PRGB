@@ -42,26 +42,26 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api/songsterr': {
+      '/api/tabs': {
         target: 'https://www.songsterr.com',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/songsterr/, '/api'),
+        rewrite: (path) => path.replace(/^\/api\/tabs/, '/api'),
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
       },
-      '/cdn/songsterr': {
+      '/cdn/tabs': {
         target: 'https://dqsljvtekg760.cloudfront.net',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/cdn\/songsterr/, ''),
+        rewrite: (path) => path.replace(/^\/cdn\/tabs/, ''),
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
       },
-      '/cdn2/songsterr': {
+      '/cdn2/tabs': {
         target: 'https://d3d3l6a6rcgkaf.cloudfront.net',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/cdn2\/songsterr/, ''),
+        rewrite: (path) => path.replace(/^\/cdn2\/tabs/, ''),
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }

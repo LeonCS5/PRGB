@@ -1,7 +1,7 @@
 // Web Audio Synthesizer for Song Playback, Metronome, and Hit Sounds
 
 import { routeAudioContext } from './audioDevices';
-import type { BeatMark } from './songsterrApi';
+import type { BeatMark } from './tabsApi';
 
 export class SoundFX {
   private static ctx: AudioContext | null = null;

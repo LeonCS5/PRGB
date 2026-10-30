@@ -13,7 +13,7 @@ import { useAudioSession } from '../context/AudioSessionContext';
 import { getRoomErrorByCode, getRoomErrorMessage, getSongMetadata, loadSongTrack } from '../context/uiErrors';
 import { canStart } from '../context/room';
 import type { GamePart } from '../context/gameSession';
-import type { SongsterrMeta } from '../services/songsterrApi';
+import type { SongMeta } from '../services/tabsApi';
 
 export interface RoomModalProps {
   isOpen: boolean;
@@ -79,7 +79,7 @@ const PartSelector: React.FC<{
   currentPartId: number | null;
   onSelect: (partId: number, trackName: string) => void;
 }> = ({ songId, currentPartId, onSelect }) => {
-  const [meta, setMeta] = useState<SongsterrMeta | null>(null);
+  const [meta, setMeta] = useState<SongMeta | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const selectId = useId();

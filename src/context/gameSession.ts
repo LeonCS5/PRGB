@@ -2,9 +2,9 @@ import type { SubmitScoreResult } from '../services/backend/rankingApi';
 import type { Challenge } from '../services/challenge';
 import type { RunResult } from '../services/records';
 import type { ScoreState } from '../services/scoring';
-import type { NormalizedSongTab } from '../services/songsterrApi';
+import type { NormalizedSongTab } from '../services/tabsApi';
 
-// A loaded part of a song. The tab doesn't carry its Songsterr partId, which records and challenges need,
+// A loaded part of a song. The tab doesn't carry its source partId, which records and challenges need,
 // nor the revision the ranking checks it against (null: the offline demo, which has none).
 export interface GamePart {
   tab: NormalizedSongTab;

@@ -1,8 +1,8 @@
-// Songsterr tab normalizer, shared by the app (src/services/songsterrApi.ts) and the Edge Functions so
+// Tab normalizer, shared by the app (src/services/tabsApi.ts) and the Edge Functions so
 // the server counts notes and song length exactly like the game. Pure TypeScript: no Deno or DOM APIs,
 // relative imports only and with the .ts extension (the Edge Function bundler only ships supabase/functions).
 
-export interface SongsterrMeta {
+export interface SongMeta {
   songId: number;
   revisionId: number;
   title: string;
@@ -76,7 +76,7 @@ const HARMONIC_SEMITONES: Record<number, number> = {
 };
 
 /**
- * Sounding MIDI pitch of a note, accounting for harmonics. Songsterr stores natural harmonics as
+ * Sounding MIDI pitch of a note, accounting for harmonics. Raw tabs store natural harmonics as
  * the touched fret over the open string, and artificial/pinch ones as an offset (harmonicFret, e.g.
  * 12 = octave) above the fretted note. Unknown offsets fall back to the fretted pitch.
  */
@@ -89,11 +89,11 @@ export function soundingMidi(openMidi: number, fret: number, harmonic?: string, 
 }
 
 /**
- * Map the body of Songsterr's /api/meta/{songId} response. A track's partId (the CDN file name) is its
+ * Map the body of the source's /api/meta/{songId} response. A track's partId (the CDN file name) is its
  * numeric partId or, when missing, its index in the list.
  * `any` on purpose: the JSON is reverse-engineered and untyped; fields are checked where they are read.
  */
-export function normalizeSongMeta(data: any): SongsterrMeta {
+export function normalizeSongMeta(data: any): SongMeta {
   return {
     songId: data.songId,
     revisionId: data.revisionId || data.latestRevisionId,
@@ -112,10 +112,10 @@ export function normalizeSongMeta(data: any): SongsterrMeta {
 }
 
 /**
- * Convert Songsterr raw measure/beat hierarchy into a clean linear note timeline for the game.
+ * Convert the raw measure/beat hierarchy into a clean linear note timeline for the game.
  * `any` on purpose: the JSON is reverse-engineered and untyped; fields are checked where they are read.
  */
-export function normalizeTab(rawTab: any, songMeta: SongsterrMeta, trackIndex: number): NormalizedSongTab {
+export function normalizeTab(rawTab: any, songMeta: SongMeta, trackIndex: number): NormalizedSongTab {
   const track = songMeta.tracks[trackIndex] || songMeta.tracks[0];
   const tuning = rawTab.tuning || track?.tuning || [64, 59, 55, 50, 45, 40];
   const stringCount = tuning.length;
@@ -137,7 +137,7 @@ export function normalizeTab(rawTab: any, songMeta: SongsterrMeta, trackIndex: n
   // Last emitted note per string, so tied notes extend it instead of becoming a new hit
   const lastNoteByString = new Map<number, NoteEvent>();
   const beatGrid: BeatMark[] = [];
-  // Songsterr only repeats the signature on measures where it changes
+  // Raw tabs only repeat the signature on measures where it changes
   let signature: [number, number] = [4, 4];
 
   const measures = rawTab.measures || [];
@@ -166,7 +166,7 @@ export function normalizeTab(rawTab: any, songMeta: SongsterrMeta, trackIndex: n
       const [num, den] = beat.duration || [1, 4];
       // At currentBpm: 1 whole note (4/4) = 4 beats = (60000 / BPM) * 4 ms
       const wholeNoteMs = (60000 / currentBpm) * 4;
-      // Songsterr durations already include dots and tuplets (checked against time signatures)
+      // Raw durations already include dots and tuplets (checked against time signatures)
       const beatDurationMs = (wholeNoteMs * num) / den;
       // Grace notes sit just before the next real beat and don't shift the rest of the measure.
       // A run of graces is laid out back from that beat so they keep their written order.
@@ -185,7 +185,7 @@ export function normalizeTab(rawTab: any, songMeta: SongsterrMeta, trackIndex: n
           if (rawNote.rest) continue;
 
           const fret = typeof rawNote.fret === 'number' ? rawNote.fret : 0;
-          // Raw Songsterr strings are 0-indexed (0 = highest, matching tuning[0]); NoteEvent uses 1-indexed
+          // Raw tab strings are 0-indexed (0 = highest, matching tuning[0]); NoteEvent uses 1-indexed
           const rawString = typeof rawNote.string === 'number' ? rawNote.string : 0;
           const stringNum = rawString + 1;
 

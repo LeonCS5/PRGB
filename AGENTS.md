@@ -12,7 +12,7 @@
 Um app web (React + TypeScript + Vite) de prática de guitarra open-source e gratuito:
 - Captura áudio da guitarra real via interface USB (Web Audio API, 48kHz, sem processamento do OS)
 - Processa o som em tempo real com o motor **PRGB Amp** (amplificador + gabinete + reverb + noise gate)
-- Carrega tablaturas de 1M+ músicas da API do Songsterr
+- Carrega tablaturas de 1M+ músicas de um provedor externo
 - Renderiza um jogo de prática estilo "rails" em Canvas 2D com detecção de pitch e scoring
 
 **Sem servidor próprio.** O jogo roda 100% no navegador, sem conta e até offline. Ranking e salas online (opcionais, 18+, com consentimento) usam **Supabase** gerenciado na região São Paulo (Auth anônimo, RPC security definer, Edge Function, Realtime).
@@ -40,8 +40,8 @@ npm test           # Testes (Vitest) dos services
 ```
 PRGB/
 ├── index.html                       # HTML shell: título, meta/Open Graph, fontes locais (public/fonts)
-├── vite.config.ts                   # Vite config + proxies Songsterr (dev) + plugin que gera o sw.js
-├── vercel.json                      # Deploy: rewrites do Songsterr (proxy sem backend), SPA, cache
+├── vite.config.ts                   # Vite config + proxies de tablaturas (dev) + plugin que gera o sw.js
+├── vercel.json                      # Deploy: rewrites de tablaturas (proxy sem backend), SPA, cache
 ├── package.json                     # Dependencies & scripts
 ├── tsconfig.app.json                # TypeScript config (strict, ES2023, bundler mode)
 ├── .oxlintrc.json                   # oxlint config (react + typescript plugins)
@@ -96,7 +96,7 @@ PRGB/
 │   │   ├── RankingEntryModal.tsx    # Modal de entrada no ranking (consentimento 18+, criar/atualizar perfil)
 │   │   ├── RankingModals.tsx        # Orquestrador dos modais de ranking (entry, account, leaderboard)
 │   │   ├── ResultPanel.tsx          # Painel de resultado após o fim de uma música
-│   │   ├── SongSearchModal.tsx      # Modal: busca Songsterr + seleção de faixa
+│   │   ├── SongSearchModal.tsx      # Modal: busca no acervo + seleção de faixa
 │   │   └── AmpRack.tsx      # Modal: rack completo do amp modeler
 │   │
 │   ├── services/                    # Cada service tem um *.test.ts (Vitest) ao lado
@@ -108,7 +108,7 @@ PRGB/
 │   │   ├── noteTrail.ts             # Histórico das notas tocadas no Play Free (lógica pura)
 │   │   ├── records.ts               # Recordes pessoais locais: armazenamento, consulta e exportação (localStorage)
 │   │   ├── scoring.ts               # Motor de scoring: judgeNote, acumulação de estado, multiplier, accuracy
-│   │   ├── songsterrApi.ts          # API client + normalizer (cordas 0-indexed no JSON bruto, ties, grace, técnicas, beatGrid)
+│   │   ├── tabsApi.ts               # API client + normalizer (cordas 0-indexed no JSON bruto, ties, grace, técnicas, beatGrid)
 │   │   ├── synthAudio.ts            # SFX + MetronomeScheduler (cliques agendados no relógio do AudioContext)
 │   │   ├── ampEngine.ts           # DSP chain: preamp→waveshaper→EQ→cab→reverb→output
 │   │   └── backend/
@@ -127,7 +127,7 @@ PRGB/
 │   ├── functions/
 │   │   ├── _shared/
 │   │   │   ├── scoreLimits.ts       # countScorableNotes / maxPossibleScore (shared entre Edge Function e app)
-│   │   │   └── tabNormalizer.ts     # Parser de tab do Songsterr (reutilizado no register-part)
+│   │   │   └── tabNormalizer.ts     # Parser de tab (reutilizado no register-part)
 │   │   └── register-part/
 │   │       ├── handler.ts           # Lógica pura da Edge Function register-part (testável em Vitest)
 │   │       └── index.ts             # Entry point Deno: wires Supabase, rede e ALLOWED_ORIGINS
@@ -155,7 +155,7 @@ PRGB/
 - **lucide-react** (ícones)
 - **oxlint** (linter — NÃO usa ESLint)
 - **Web Audio API** (captura, DSP, e output — tudo nativo)
-- **Songsterr API** (reverse-engineered, proxied via Vite dev server e rewrites da Vercel)
+- **API de tablaturas** (não oficial, proxied via Vite dev server e rewrites da Vercel)
 - **Supabase** (`@supabase/supabase-js`, carregado sob demanda — só ao abrir o ranking ou a sala online)
 
 ---
@@ -168,7 +168,7 @@ PRGB/
    - `VITE_SUPABASE_ANON_KEY` — chave pública `anon` do Supabase (prefixo `VITE_` é seguro; nunca a `service_role key`)
 3. Opcional: `VITE_SUPPORT_URL` com o link de apoio (Ko-fi, Pix, GitHub Sponsors...).
 4. Na Edge Function `register-part`, configurar `ALLOWED_ORIGINS` para incluir a URL de produção (`https://prgb.vercel.app`) e os ambientes de preview/local.
-5. `/api/songsterr/*`, `/cdn/songsterr/*` e `/cdn2/songsterr/*` são reescritos para o Songsterr pela própria plataforma Vercel (sem backend nosso). Funciona em produção.
+5. `/api/tabs/*`, `/cdn/tabs/*` e `/cdn2/tabs/*` são reescritos para o provedor de tablaturas pela própria plataforma Vercel (sem backend nosso). Funciona em produção.
 
 ---
 
@@ -201,7 +201,7 @@ Guitarra → USB Interface → getUserMedia(48kHz, raw, sem noise suppress)
 ## Convenções
 
 ### Código
-- Classes para services (`AudioEngine`, `AmpEngine`, `SongsterrApi`)
+- Classes para services (`AudioEngine`, `AmpEngine`, `TabsApi`)
 - `React.FC<Props>` para componentes
 - `export interface` para tipos (não `type` para objetos complexos)
 - Variáveis/funções em **inglês**, UI em **Português Brasileiro (pt-BR)**
@@ -215,7 +215,8 @@ Guitarra → USB Interface → getUserMedia(48kHz, raw, sem noise suppress)
 
 ### Marca
 - Nome: **PRGB**. Não usar nomes de produtos de terceiros em UI, código ou comentários.
-- O conteúdo vem do Songsterr: o rodapé precisa manter o aviso de não afiliação.
+- O conteúdo vem de um provedor externo de tablaturas: o rodapé precisa manter o aviso de não afiliação, e a Política precisa continuar dizendo que ele existe e o que recebe.
+- O nome desse provedor só aparece onde é funcional: hosts em `vercel.json`, `vite.config.ts` e `handler.ts`, o código de erro devolvido pela função já publicada e as migrations congeladas.
 - Projeto gratuito; o único "monetizar" é o link "Apoie o projeto" (`VITE_SUPPORT_URL`, com fallback para estrela no GitHub).
 
 ### Linting
@@ -231,7 +232,7 @@ Guitarra → USB Interface → getUserMedia(48kHz, raw, sem noise suppress)
 3. **Não trocar Tailwind CSS** por outra solução de styling.
 4. **Não usar `any`** sem justificativa em comentário adjacente.
 5. **Toda UI em Português Brasileiro.** Variáveis em inglês.
-6. **Não alterar os proxies Vite** (`/api/songsterr`, `/cdn/songsterr`, `/cdn2/songsterr`) sem entender o CORS routing.
+6. **Não alterar os proxies Vite** (`/api/tabs`, `/cdn/tabs`, `/cdn2/tabs`) sem entender o CORS routing.
 7. **Não usar `setTimeout`/`setInterval`** para timing de áudio — usar `AudioContext.currentTime`.
 8. **Não manipular DOM diretamente** — usar React refs.
 9. **Não usar CSS inline** (`style={{}}`) exceto para valores dinâmicos calculados.
@@ -303,7 +304,7 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 
 ### Rodada 2 — fundação de áudio e parser (concluída, merge em `main` 1a77f10)
 - [x] **Pitch detection incompleta** — `stringEstimate`/`fretEstimate` (posição de casa mais baixa, `setTuning`), fade de ganho na reconexão, fila start/stop, fallback de device (@claude, aprovado por @codex)
-- [x] **Parser de tabs** — **bug grave corrigido**: cordas do JSON bruto do Songsterr são 0-indexed (todas as notas saíam uma corda acima); ties, grace notes, dead/ghost/tapping/harmonic/bend (@claude, aprovado por @codex)
+- [x] **Parser de tabs** — **bug grave corrigido**: cordas do JSON bruto são 0-indexed (todas as notas saíam uma corda acima); ties, grace notes, dead/ghost/tapping/harmonic/bend (@claude, aprovado por @codex)
 - [x] **Sem persistência** — `preferences.ts` (@codex, aprovado por @claude)
 - [x] **Performance do Canvas** — camada estática em OffscreenCanvas, Path2D, DPR, pitch fora do render do React (@codex, aprovado por @claude)
 
@@ -312,7 +313,7 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 - [x] **Sem tratamento de erros na UI** — `ErrorNotice` + `uiErrors.ts` (@codex, aprovado por @claude)
 - [x] **Metrônomo impreciso** — `beatGrid` (compasso + mudanças de tempo) e `MetronomeScheduler` no relógio do AudioContext; `initialBpm` corrigido (@claude; a revisão de @codex achou 4 bugs — primeiro clique, contexto suspenso, anacruse, retomada — corrigidos com testes e aprovados)
 - [x] **Sem testes** — Vitest nos services; cada correção tem teste que falha no código anterior (@claude)
-- [x] **Sem PWA/offline** — manifest + service worker do app shell gerado no build; Songsterr nunca vai para o cache (@codex, aprovado por @claude; não testado offline num navegador real)
+- [x] **Sem PWA/offline** — manifest + service worker do app shell gerado no build; tablaturas nunca vão para o cache (@codex, aprovado por @claude; não testado offline num navegador real)
 
 ### Rodada 4 — ranking Supabase (concluída em `claude/fase2-base`, sem merge em `main`)
 - [x] **Ranking online** — `supabase/migrations/` (ranking, retention, reaccept_terms), `src/services/backend/rankingApi.ts`, `src/services/backend/supabaseClient.ts`, `src/services/scoring.ts`, `src/services/records.ts`, `src/services/nickname.ts`, `src/context/rankedRun.ts`, `src/context/ranking.ts`, `src/context/RankingProvider.tsx`, componentes de ranking (@claude/@codex)
@@ -341,7 +342,7 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 ### Concluídos
 - [x] **App.css é lixo** — removido
 - [x] **Assets legados** — `src/assets/` removido
-- [x] **Songsterr em produção** — proxy funciona via rewrites da Vercel (`/api/songsterr/*`, `/cdn/songsterr/*`, `/cdn2/songsterr/*`); validado em produção.
+- [x] **Tablaturas em produção** — proxy funciona via rewrites da Vercel (`/api/tabs/*`, `/cdn/tabs/*`, `/cdn2/tabs/*`); validado em produção.
 
 ---
 
@@ -351,7 +352,7 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 Landing Page → Clica "Tocar" ou "Buscar" → getUserMedia() → PRGB Amp Ativo
     │                                                            │
     ▼                                                            ▼
-  Songsterr Search → Seleciona Música → Download Tab JSON → Parse para NoteEvent[]
+  Busca no acervo → Seleciona Música → Download Tab JSON → Parse para NoteEvent[]
                                                                  │
                                                                  ▼
                                                     Canvas Game (PRGB Rails)
@@ -375,7 +376,7 @@ Landing Page → Clica "Tocar" ou "Buscar" → getUserMedia() → PRGB Amp Ativo
 | Cab Sim | Cabinet Simulation — filtros que emulam alto-falantes de guitarra |
 | Tone Stack | EQ de 4 bandas (Bass 110Hz, Mid 750Hz, Treble 2.8kHz, Presence 4.5kHz) |
 | WaveShaper | Web Audio node para distorção não-linear (emulação de clipping de válvula) |
-| Songsterr | Plataforma de tablaturas online (API usada via reverse engineering) |
+| Acervo | Provedor externo de tablaturas (API não oficial) |
 | Rails | Linhas horizontais coloridas onde notas scrollam (cada corda = 1 cor) |
 | Hit Window | Janela de tolerância para acertar nota: ±130ms Good, ±55ms Perfect |
 | NoteEvent | Estrutura normalizada de uma nota: `{timeMs, string, fret, midiNote, freqHz, ...}` |

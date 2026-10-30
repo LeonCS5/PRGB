@@ -15,7 +15,7 @@
 
 1. **Conectar sua guitarra real** via interface de áudio USB (Focusrite, Behringer, Realtek, etc.)
 2. **Ouvir o som processado** em tempo real pelo motor DSP **PRGB Amp** (emulação de amplificador valvulado, gabinete, noise gate, reverb)
-3. **Tocar junto com tablaturas** baixadas da API do Songsterr (1M+ músicas), com detecção de pitch e gamificação (score, combo, acertos Perfect/Good/Miss)
+3. **Tocar junto com tablaturas** baixadas de um provedor externo (1M+ músicas), com detecção de pitch e gamificação (score, combo, acertos Perfect/Good/Miss)
 
 **Sem servidor próprio.** O jogo roda 100% no navegador (todo o áudio via Web Audio API, nunca enviado); ranking e salas online, opcionais e só com consentimento 18+, usam Supabase gerenciado (Auth anônimo, RPC security definer, Edge Function, Realtime — região São Paulo). Regras em AGENTS.md › Regras INVIOLÁVEIS 1 e 11.
 
@@ -32,7 +32,7 @@
 | Ícones | lucide-react | 1.x |
 | Linter | oxlint | 1.x |
 | Áudio | Web Audio API (nativo do browser) | — |
-| Dados | Songsterr API (reverse-engineered, via proxy Vite) | — |
+| Dados | API de tablaturas (não oficial, via proxy Vite) | — |
 
 ### Comandos do projeto
 
@@ -94,7 +94,7 @@ src/
 │   ├── RoomModal.tsx                # Modal da dupla online: criar/entrar, lobby e início
 │   ├── RankingAccountModal.tsx / RankingEntryModal.tsx / RankingModals.tsx  # Modais de ranking
 │   ├── ResultPanel.tsx              # Painel de resultado após a música
-│   ├── SongSearchModal.tsx          # Modal de busca de músicas no Songsterr
+│   ├── SongSearchModal.tsx          # Modal de busca de músicas no acervo
 │   └── AmpRack.tsx          # Modal do rack completo do amp modeler PRGB Amp
 │
 ├── services/
@@ -105,7 +105,7 @@ src/
 │   ├── noteTrail.ts                 # Histórico das notas tocadas no Play Free (lógica pura)
 │   ├── records.ts                   # Recordes pessoais locais (localStorage)
 │   ├── scoring.ts                   # Motor de scoring: judgeNote, multiplier, accuracy
-│   ├── songsterrApi.ts              # Client da API Songsterr: busca, meta, download de tabs, normalização
+│   ├── tabsApi.ts                   # Client da API de tablaturas: busca, meta, download de tabs, normalização
 │   ├── synthAudio.ts                # Sintetizador de notas, MetronomeScheduler e efeitos sonoros do jogo
 │   ├── ampEngine.ts               # ⭐ DSP engine: preamp, waveshaper, tone stack, cab sim, reverb
 │   ├── *.test.ts                    # Testes Vitest de cada service
@@ -125,16 +125,16 @@ public/
 ├── fonts/                           # Fontes locais (Inter, Space Grotesk, JetBrains Mono — woff2)
 ├── icons/, og-image.png             # Ícones do app e imagem de compartilhamento
 ├── manifest.webmanifest, sw.js      # PWA
-vercel.json                          # Deploy com rewrites do Songsterr (ver AGENTS.md › Deploy)
+vercel.json                          # Deploy com rewrites de tablaturas (ver AGENTS.md › Deploy)
 ```
 
 ### Proxies Vite (vite.config.ts)
 
-O Vite faz proxy reverso para acessar a API do Songsterr sem CORS:
+O Vite faz proxy reverso para acessar a API de tablaturas sem CORS:
 
-- `/api/songsterr/*` → `https://www.songsterr.com/api/*`
-- `/cdn/songsterr/*` → `https://dqsljvtekg760.cloudfront.net/*` (CDN de tablaturas JSON)
-- `/cdn2/songsterr/*` → `https://d3d3l6a6rcgkaf.cloudfront.net/*` (CDN alternativo)
+- `/api/tabs/*` → API do provedor
+- `/cdn/tabs/*` → CDN de tablaturas JSON
+- `/cdn2/tabs/*` → CDN alternativo
 
 Em produção esses mesmos caminhos são reescritos pelo `vercel.json`.
 
@@ -181,7 +181,7 @@ AnalyserNode ← Merger ← (Channel selecionado)      PRGB Amp Input
 ### TypeScript
 - **Strict mode** habilitado (noUnusedLocals, noUnusedParameters, erasableSyntaxOnly)
 - Interfaces sempre com `export interface` (não `type` para objetos com métodos)
-- Classes para services (AudioEngine, AmpEngine, SongsterrApi)
+- Classes para services (AudioEngine, AmpEngine, TabsApi)
 - Componentes React: `React.FC<Props>` com arrow functions exportadas como `export const`
 
 ### Styling
@@ -217,7 +217,7 @@ O backlog fica **só** no `AGENTS.md` (seção "Problemas Conhecidos"), com dono
 - **Nunca migrar de Tailwind CSS** para outra solução de styling
 - **Nunca adicionar servidor próprio** — só Supabase gerenciado, para ranking/salas, e o jogo funciona sem ele
 - **Manter toda a UI em Português Brasileiro**
-- **Preservar a API de proxy do Vite** (`/api/songsterr`, `/cdn/songsterr`, `/cdn2/songsterr`)
+- **Preservar a API de proxy do Vite** (`/api/tabs`, `/cdn/tabs`, `/cdn2/tabs`)
 
 ### RECOMENDADO
 - Ao criar novos componentes, seguir o padrão `React.FC<Props>` existente
@@ -263,7 +263,7 @@ npm run lint
 1. **Landing Page** → Usuário vê tela inicial com opções "Tocar Metallica" ou "Buscar Música"
 2. **Conectar Áudio** → Ao clicar em qualquer botão, `getUserMedia` é chamado (permissão de mic)
 3. **PRGB Amp Ativo** → Som da guitarra começa a sair pelos fones/caixas em tempo real
-4. **Carregar Música** → Tab é baixada do Songsterr CDN e parseada em `NoteEvent[]`
+4. **Carregar Música** → Tab é baixada do CDN do acervo e parseada em `NoteEvent[]`
 5. **Jogo (PracticeGame)** → Canvas mostra rails coloridos com notas scrollando. Pitch detection compara nota tocada com nota da tab
 6. **Scoring** → Perfect (±55ms + MIDI match), Good (±130ms + MIDI match), Miss (passou da hit line)
 7. **Modais** → Usuário pode ajustar interface de áudio, trocar preset do PRGB Amp, buscar outra música
@@ -279,6 +279,6 @@ npm run lint
 | Cab Sim | Cabinet Simulation — emulação de gabinete de alto-falante de guitarra |
 | Tone Stack | Equalizador de 4 bandas (Bass, Mid, Treble, Presence) |
 | WaveShaper | Nó Web Audio que aplica distorção não-linear (emulação de válvula) |
-| Songsterr | Serviço de tablaturas online (API reverse-engineered) |
+| Acervo | Provedor externo de tablaturas (API não oficial) |
 | Rails | As linhas horizontais coloridas do jogo onde as notas descem (estilo Guitar Hero) |
 | Hit Window | Janela de tolerância temporal para acertar uma nota (±130ms) |

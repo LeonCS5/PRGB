@@ -1,11 +1,11 @@
-// Songsterr API client with reverse-engineered endpoints & parser.
+// Tab catalog client & parser.
 // The parser lives in supabase/functions/_shared so the ranking Edge Function counts notes like the game.
 
 import {
   normalizeSongMeta,
-  normalizeTab as normalizeSongsterrTab,
+  normalizeTab as normalizeRawTab,
   type NormalizedSongTab,
-  type SongsterrMeta
+  type SongMeta
 } from '../../supabase/functions/_shared/tabNormalizer.ts';
 
 export {
@@ -15,10 +15,10 @@ export {
   type BeatMark,
   type NormalizedSongTab,
   type NoteEvent,
-  type SongsterrMeta
+  type SongMeta
 } from '../../supabase/functions/_shared/tabNormalizer.ts';
 
-export interface SongsterrTrack {
+export interface TabTrack {
   instrumentId: number;
   instrument: string;
   name: string;
@@ -28,27 +28,27 @@ export interface SongsterrTrack {
   partId?: number;
 }
 
-export interface SongsterrSearchResult {
+export interface TabSearchResult {
   songId: number;
   artistId: number;
   artist: string;
   title: string;
   hasPlayer: boolean;
-  tracks: SongsterrTrack[];
+  tracks: TabTrack[];
   defaultTrack: number;
   popularTrack?: number;
 }
 
-export class SongsterrApi {
-  // Same-origin proxies only (Vite dev server, Vercel rewrites): calling Songsterr from the browser
+export class TabsApi {
+  // Same-origin proxies only (Vite dev server, Vercel rewrites): calling the source from the browser
   // would hand visitors' IPs straight to third parties, which the privacy policy says doesn't happen
-  private static readonly API_BASE = '/api/songsterr';
-  private static readonly CDN_BASES = ['/cdn/songsterr', '/cdn2/songsterr'];
+  private static readonly API_BASE = '/api/tabs';
+  private static readonly CDN_BASES = ['/cdn/tabs', '/cdn2/tabs'];
 
   /**
-   * Search Songsterr's vast catalog of songs
+   * Search the catalog of songs
    */
-  static async searchSongs(query: string): Promise<SongsterrSearchResult[]> {
+  static async searchSongs(query: string): Promise<TabSearchResult[]> {
     const url = `${this.API_BASE}/songs?pattern=${encodeURIComponent(query)}`;
     const response = await fetch(url);
     if (!response.ok) throw new Error(`Search failed: ${response.status}`);
@@ -58,7 +58,7 @@ export class SongsterrApi {
   /**
    * Get metadata and track parts for a specific song
    */
-  static async getSongMeta(songId: number): Promise<SongsterrMeta> {
+  static async getSongMeta(songId: number): Promise<SongMeta> {
     const url = `${this.API_BASE}/meta/${songId}`;
     const response = await fetch(url);
     if (!response.ok) throw new Error(`Meta fetch failed: ${response.status}`);
@@ -90,9 +90,9 @@ export class SongsterrApi {
   }
 
   /**
-   * Convert Songsterr raw measure/beat hierarchy into a clean linear note timeline for the game
+   * Convert the raw measure/beat hierarchy into a clean linear note timeline for the game
    */
-  static normalizeTab(rawTab: any, songMeta: SongsterrMeta, trackIndex: number): NormalizedSongTab {
-    return normalizeSongsterrTab(rawTab, songMeta, trackIndex);
+  static normalizeTab(rawTab: any, songMeta: SongMeta, trackIndex: number): NormalizedSongTab {
+    return normalizeRawTab(rawTab, songMeta, trackIndex);
   }
 }

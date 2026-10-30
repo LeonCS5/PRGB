@@ -1,7 +1,7 @@
 import { ModalFrame } from './ModalFrame';
 import React, { useMemo, useRef, useState } from 'react';
 import { Search, Music, Disc, ListOrdered, Loader2, Sparkles, X, ChevronRight, Trophy, User, Users } from 'lucide-react';
-import { SongsterrApi, type SongsterrSearchResult, type SongsterrMeta, type NormalizedSongTab } from '../services/songsterrApi';
+import { TabsApi, type TabSearchResult, type SongMeta, type NormalizedSongTab } from '../services/tabsApi';
 import type { SavedSong } from '../context/preferences';
 import { ErrorNotice } from './ErrorNotice';
 import { getSongMetadata, loadSongTrack } from '../context/uiErrors';
@@ -41,9 +41,9 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
 }) => {
   const { isConfigured: isRankingOn, openLeaderboard } = useRanking();
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<SongsterrSearchResult[]>([]);
+  const [results, setResults] = useState<TabSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [selectedSongMeta, setSelectedSongMeta] = useState<SongsterrMeta | null>(null);
+  const [selectedSongMeta, setSelectedSongMeta] = useState<SongMeta | null>(null);
   const [isLoadingTab, setIsLoadingTab] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState<(() => void) | null>(null);
@@ -74,14 +74,14 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
     setSelectedSongMeta(null);
 
     try {
-      const data = await SongsterrApi.searchSongs(searchQuery);
+      const data = await TabsApi.searchSongs(searchQuery);
       setResults(data);
       if (data.length === 0) {
-        setError('Nenhuma música encontrada com esse nome no Songsterr.');
+        setError('Nenhuma música encontrada com esse nome no acervo.');
       }
     } catch {
       setResults([]);
-      setError('Não foi possível buscar músicas no Songsterr. Verifique sua conexão e tente novamente.');
+      setError('Não foi possível buscar músicas. Verifique sua conexão e tente novamente.');
       setRetry(() => () => void handleSearch(undefined, searchQuery));
     } finally {
       setIsSearching(false);
@@ -97,7 +97,7 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
       setSelectedSongMeta(meta);
       setDuoTracks([0, 0]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Não foi possível obter os dados da música no Songsterr.');
+      setError(err instanceof Error ? err.message : 'Não foi possível obter os dados da música.');
       setRetry(() => () => void handleSelectSong(songId));
     } finally {
       setIsLoadingTab(false);
@@ -170,7 +170,7 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
             <Music className="text-ink-100" size={24} />
           </div>
           <div>
-            <h2 id="SongSearchModal-title" className="font-display text-xl font-bold">Acervo de Músicas do Songsterr</h2>
+            <h2 id="SongSearchModal-title" className="font-display text-xl font-bold">Acervo de Músicas</h2>
             <p className="text-xs text-ink-300">
               Mais de 1.000.000 de tablaturas interativas prontas para tocar
             </p>

@@ -3,8 +3,8 @@ import { getDemoSong, rawDemo } from '../../../src/services/demoSong';
 import { countScorableNotes, maxPossibleScore } from '../_shared/scoreLimits.ts';
 import {
   REGISTRATIONS_PER_HOUR,
-  SONGSTERR_CDN_HOSTS,
-  SONGSTERR_META_URL,
+  TAB_CDN_HOSTS,
+  TAB_META_URL,
   createRegisterPartHandler,
   type NewSongPart,
   type RegisterPartDeps,
@@ -25,7 +25,7 @@ const META = {
     { instrumentId: 33, instrument: 'Bass', name: 'Bass', partId: 1 }
   ]
 };
-const META_URL = `${SONGSTERR_META_URL}/77`;
+const META_URL = `${TAB_META_URL}/77`;
 const tabUrl = (host: string) => `${host}/77/5/img/0.json`;
 
 type Route = Response | Error | 'hang';
@@ -129,7 +129,7 @@ describe('register-part handler', () => {
     expect(await call(setup().handler, post(body))).toMatchObject({ status: 400, body: { error: 'invalid_input' } });
   });
 
-  it('returns an already registered part without calling Songsterr', async () => {
+  it('returns an already registered part without calling the source', async () => {
     const part: SongPart = {
       songId: -1, partId: 0, revisionId: 0, title: 'Demo', artist: 'PRGB', trackName: 'Exercício', ...DEMO_COUNT
     };
@@ -149,12 +149,12 @@ describe('register-part handler', () => {
   });
 
   it('counts a new part with the same parser and scoring as the game', async () => {
-    const { handler, fetchMock, inserted } = setup({ [META_URL]: ok(META), [tabUrl(SONGSTERR_CDN_HOSTS[0])]: ok(rawDemo) });
+    const { handler, fetchMock, inserted } = setup({ [META_URL]: ok(META), [tabUrl(TAB_CDN_HOSTS[0])]: ok(rawDemo) });
     const { status, body } = await call(handler, post({ songId: 77, partId: 0 }));
     const expected = { songId: 77, partId: 0, revisionId: 5, title: 'Song', artist: 'Band', trackName: 'Lead', ...DEMO_COUNT };
     expect([status, body]).toEqual([200, expected]);
     expect(inserted).toEqual([{ ...expected, registeredBy: USER }]);
-    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([META_URL, tabUrl(SONGSTERR_CDN_HOSTS[0])]);
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([META_URL, tabUrl(TAB_CDN_HOSTS[0])]);
     const init = fetchMock.mock.calls[0][1];
     expect(new Headers(init?.headers).get('User-Agent')).toContain('Mozilla');
     expect(init?.signal).toBeInstanceOf(AbortSignal);
@@ -163,8 +163,8 @@ describe('register-part handler', () => {
   it('falls back to the second CDN', async () => {
     const { handler } = setup({
       [META_URL]: ok(META),
-      [tabUrl(SONGSTERR_CDN_HOSTS[0])]: new Error('connection reset'),
-      [tabUrl(SONGSTERR_CDN_HOSTS[1])]: ok(rawDemo)
+      [tabUrl(TAB_CDN_HOSTS[0])]: new Error('connection reset'),
+      [tabUrl(TAB_CDN_HOSTS[1])]: ok(rawDemo)
     });
     expect(await call(handler, post({ songId: 77, partId: 0 }))).toMatchObject({ status: 200, body: DEMO_COUNT });
   });
@@ -182,16 +182,16 @@ describe('register-part handler', () => {
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    it('recounts and updates when Songsterr has a newer revision', async () => {
+    it('recounts and updates when the source has a newer revision', async () => {
       const { handler, updated, inserted } = setup(
-        { [META_URL]: ok(META), [tabUrl(SONGSTERR_CDN_HOSTS[0])]: ok(rawDemo) }, { parts: [stored] });
+        { [META_URL]: ok(META), [tabUrl(TAB_CDN_HOSTS[0])]: ok(rawDemo) }, { parts: [stored] });
       const { status, body } = await call(handler, post({ songId: 77, partId: 0, revisionId: 5 }));
       expect([status, body]).toEqual([200, { ...stored, revisionId: 5, ...DEMO_COUNT }]);
       expect(updated).toEqual([{ ...stored, revisionId: 5, ...DEMO_COUNT, registeredBy: USER }]);
       expect(inserted).toEqual([]);
     });
 
-    it('keeps the stored count when Songsterr still serves that revision', async () => {
+    it('keeps the stored count when the source still serves that revision', async () => {
       const { handler, fetchMock, updated } = setup({ [META_URL]: ok({ ...META, revisionId: 4 }) }, { parts: [stored] });
       expect(await call(handler, post({ songId: 77, partId: 0, revisionId: 6 }))).toMatchObject({ status: 200, body: stored });
       expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([META_URL]);
@@ -199,7 +199,7 @@ describe('register-part handler', () => {
     });
   });
 
-  it('limits Songsterr fetches per user and hour through the database quota', async () => {
+  it('limits tab fetches per user and hour through the database quota', async () => {
     const { handler, fetchMock, quotaLimits } = setup({ [META_URL]: ok(META) }, { quotaLeft: false });
     expect(await call(handler, post({ songId: 77, partId: 0 }))).toMatchObject({ status: 429, body: { error: 'rate_limited' } });
     expect(quotaLimits).toEqual([REGISTRATIONS_PER_HOUR]);
@@ -207,7 +207,7 @@ describe('register-part handler', () => {
   });
 
   it('never follows redirects', async () => {
-    const { handler, fetchMock } = setup({ [META_URL]: ok(META), [tabUrl(SONGSTERR_CDN_HOSTS[0])]: ok(rawDemo) });
+    const { handler, fetchMock } = setup({ [META_URL]: ok(META), [tabUrl(TAB_CDN_HOSTS[0])]: ok(rawDemo) });
     await call(handler, post({ songId: 77, partId: 0 }));
     expect(fetchMock.mock.calls.map(([, init]) => init?.redirect)).toEqual(['error', 'error']);
   });
@@ -218,12 +218,12 @@ describe('register-part handler', () => {
     ['a part the song does not have', { [META_URL]: ok({ ...META, tracks: [META.tracks[1]] }) }, 404, 'part_not_found'],
     ['meta of another song', { [META_URL]: ok({ ...META, songId: 78 }) }, 502, 'songsterr_unavailable'],
     ['meta without a revision', { [META_URL]: ok({ ...META, revisionId: 'x' }) }, 502, 'songsterr_unavailable'],
-    ['Songsterr failing', { [META_URL]: new Response('', { status: 503 }) }, 502, 'songsterr_unavailable'],
+    ['the source failing', { [META_URL]: new Response('', { status: 503 }) }, 502, 'songsterr_unavailable'],
     ['no network', { [META_URL]: new TypeError('fetch failed') }, 502, 'songsterr_unavailable'],
     ['a timeout', { [META_URL]: 'hang' }, 502, 'songsterr_unavailable'],
     ['both CDNs failing', { [META_URL]: ok(META) }, 502, 'songsterr_unavailable'],
-    ['a tab without measures', { [META_URL]: ok(META), [tabUrl(SONGSTERR_CDN_HOSTS[0])]: ok({}) }, 422, 'tab_invalid'],
-    ['a tab with no notes', { [META_URL]: ok(META), [tabUrl(SONGSTERR_CDN_HOSTS[0])]: ok({ measures: [] }) }, 422, 'tab_empty']
+    ['a tab without measures', { [META_URL]: ok(META), [tabUrl(TAB_CDN_HOSTS[0])]: ok({}) }, 422, 'tab_invalid'],
+    ['a tab with no notes', { [META_URL]: ok(META), [tabUrl(TAB_CDN_HOSTS[0])]: ok({ measures: [] }) }, 422, 'tab_empty']
   ])('reports %s', async (_label, routes, status, error) => {
     const { handler, inserted } = setup(routes);
     expect(await call(handler, post({ songId: 77, partId: 0 }))).toMatchObject({ status, body: { error } });

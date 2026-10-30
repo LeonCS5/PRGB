@@ -2,7 +2,7 @@ import { LEGAL_CONTACT } from '../content/legal';
 import { toRankingError, type RankingErrorCode } from '../services/backend/rankingApi';
 import { RoomError, type RoomErrorCode } from '../services/backend/roomChannel';
 import { NICKNAME_ERROR_MESSAGES } from '../services/nickname';
-import { SongsterrApi, type NormalizedSongTab, type SongsterrMeta } from '../services/songsterrApi';
+import { TabsApi, type NormalizedSongTab, type SongMeta } from '../services/tabsApi';
 
 const RANKING_ERROR_MESSAGES: Record<RankingErrorCode, string> = {
   not_configured: 'O ranking não está disponível neste site.',
@@ -18,16 +18,16 @@ const RANKING_ERROR_MESSAGES: Record<RankingErrorCode, string> = {
   profile_exists: 'Este navegador já tem uma conta no ranking.',
   profile_required: 'Entre no ranking para continuar.',
   part_unregistered: 'Esta faixa ainda não entrou no ranking. Tente novamente.',
-  revision_mismatch: 'A tablatura desta música mudou no Songsterr. Recarregue a música e tente de novo.',
+  revision_mismatch: 'A tablatura desta música mudou no acervo. Recarregue a música e tente de novo.',
   session_invalid: 'O ranking não encontrou esta partida. Toque de novo para valer.',
   session_too_short: 'A partida durou menos que a música, por isso não entrou no ranking.',
   session_expired: 'A partida ficou aberta por mais de 2 horas e expirou. Toque de novo para valer.',
   already_submitted: 'Esta jogada já foi enviada ao ranking.',
   score_implausible: `O servidor recusou esta pontuação porque ela não combina com a música. Se foi engano, peça a revisão pelo e-mail ${LEGAL_CONTACT.email}.`,
   empty_run: 'Nenhuma nota foi acertada nesta jogada, por isso ela não entrou no ranking.',
-  song_not_found: 'O Songsterr não encontrou esta música.',
-  part_not_found: 'O Songsterr não encontrou esta faixa.',
-  songsterr_unavailable: 'O Songsterr não respondeu agora. Tente novamente em instantes.',
+  song_not_found: 'Esta música não foi encontrada no acervo.',
+  part_not_found: 'Esta faixa não foi encontrada no acervo.',
+  songsterr_unavailable: 'O acervo de músicas não respondeu agora. Tente novamente em instantes.',
   tab_invalid: 'Esta tablatura não pode entrar no ranking.',
   tab_empty: 'Esta faixa não tem notas para pontuar, por isso não pode entrar no ranking.'
 };
@@ -70,34 +70,34 @@ export const getAudioErrorMessage = (error: unknown): string => {
   }
 };
 
-export const getSongMetadata = async (songId: number): Promise<SongsterrMeta> => {
-  let meta: SongsterrMeta;
+export const getSongMetadata = async (songId: number): Promise<SongMeta> => {
+  let meta: SongMeta;
   try {
-    meta = await SongsterrApi.getSongMeta(songId);
+    meta = await TabsApi.getSongMeta(songId);
   } catch {
-    throw new Error('Não foi possível obter os dados da música no Songsterr. Verifique sua conexão e tente novamente.');
+    throw new Error('Não foi possível obter os dados da música. Verifique sua conexão e tente novamente.');
   }
   if (!Array.isArray(meta.tracks) || meta.tracks.length === 0) {
-    throw new Error('Esta música não tem faixas disponíveis no Songsterr. Escolha outra música.');
+    throw new Error('Esta música não tem faixas disponíveis no acervo. Escolha outra música.');
   }
   return meta;
 };
 
-export const loadSongTrack = async (meta: SongsterrMeta, trackIndex: number): Promise<NormalizedSongTab> => {
+export const loadSongTrack = async (meta: SongMeta, trackIndex: number): Promise<NormalizedSongTab> => {
   const track = meta.tracks[trackIndex];
   if (!track) throw new Error('A faixa selecionada não está mais disponível. Escolha outra faixa ou música.');
   let rawTab: unknown;
   try {
-    rawTab = await SongsterrApi.getTrackTabJson(meta.songId, meta.revisionId, meta.image, track.partId);
+    rawTab = await TabsApi.getTrackTabJson(meta.songId, meta.revisionId, meta.image, track.partId);
   } catch {
-    throw new Error('Não foi possível baixar a tablatura do Songsterr. Verifique sua conexão e tente novamente.');
+    throw new Error('Não foi possível baixar a tablatura. Verifique sua conexão e tente novamente.');
   }
   if (!rawTab || typeof rawTab !== 'object' || !('measures' in rawTab) || !Array.isArray(rawTab.measures)) {
     throw new Error('A tablatura recebida é inválida. Escolha outra faixa ou música.');
   }
   let tab: NormalizedSongTab;
   try {
-    tab = SongsterrApi.normalizeTab(rawTab, meta, trackIndex);
+    tab = TabsApi.normalizeTab(rawTab, meta, trackIndex);
   } catch {
     throw new Error('A tablatura recebida é inválida. Escolha outra faixa ou música.');
   }
