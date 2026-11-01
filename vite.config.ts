@@ -16,10 +16,11 @@ export default defineConfig({
         'fonts/inter-latin-wght-normal.woff2', 'fonts/space-grotesk-latin-wght-normal.woff2',
         'fonts/jetbrains-mono-latin-wght-normal.woff2'
       ]
-      // Lazy chunks (the Supabase client) stay out of the precache: visitors who never open the ranking
-      // shouldn't download them, and the game doesn't need them offline
+      // Lazy chunks (the Supabase client) and the neural engine stay out of the precache: visitors who never
+      // open them shouldn't download them, and the game doesn't need them offline
       const assets = Object.values(bundle).filter((file) => (
-        file.fileName.startsWith('assets/') && !(file.type === 'chunk' && file.isDynamicEntry)
+        file.fileName.startsWith('assets/') && !file.fileName.startsWith('assets/nam-')
+        && !(file.type === 'chunk' && file.isDynamicEntry)
       ))
       const shellFiles = ['index.html', ...assets.map((file) => file.fileName), ...publicFiles]
       const template = readFileSync(new URL('./public/sw.js', import.meta.url), 'utf8')
@@ -41,6 +42,12 @@ export default defineConfig({
   }],
   build: {
     license: { fileName: 'licencas-terceiros.md' },
+    rolldownOptions: {
+      output: {
+        // React changes far less often than the app, so a new release doesn't download it again
+        codeSplitting: { groups: [{ name: 'react', test: /node_modules[/\\](react|react-dom|scheduler)[/\\]/ }] },
+      },
+    },
   },
   server: {
     port: 5173,

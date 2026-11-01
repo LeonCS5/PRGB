@@ -1,6 +1,6 @@
 Motor neural de amplificador usado pelo PRGB
 
-Os arquivos desta pasta (nam-engine.wasm e nam-worklet.js) e o módulo em src/vendor/nam-engine vêm do pacote
+Os arquivos nam-engine.wasm e nam-worklet.js e o módulo em src/vendor/nam-engine vêm do pacote
 neural-amp-modeler-wasm 3.0.7, sem alterações, e incluem as bibliotecas abaixo. O PRGB não é afiliado a nenhum destes
 projetos nem é endossado por eles. Nenhum modelo de amplificador acompanha o PRGB.
 

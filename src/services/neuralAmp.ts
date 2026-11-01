@@ -4,7 +4,6 @@
 
 import type { NamModelInfo } from '../vendor/nam-engine/index.js';
 
-export const NAM_ASSET_BASE = '/nam/';
 export const NEURAL_FILE_MAX_BYTES = 50 * 1024 * 1024;
 const TARGET_LOUDNESS_DB = -18; // the level models are normalized to, so changing model doesn't change the volume
 
