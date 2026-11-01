@@ -48,7 +48,7 @@ export interface LeaderboardModalProps {
 }
 
 export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ target }) => {
-  const { api, closeLeaderboard } = useRanking();
+  const { api, closeLeaderboard, hasAccount, openAccount } = useRanking();
   const tabRefs = useRef<Partial<Record<LeaderboardPeriod, HTMLButtonElement | null>>>({});
   const [period, setPeriod] = useState<LeaderboardPeriod>('all');
   const [attempt, setAttempt] = useState(0);
@@ -143,6 +143,11 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ target }) =>
             )}
           </table>
         )}
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-ink-700 pt-3">
+        <p className="text-xs text-ink-300">Cada música tem o próprio ranking.</p>
+        {!hasAccount && <button type="button" onClick={openAccount} className={secondaryButton}>Entrar no ranking</button>}
       </div>
     </ModalFrame>
   );
