@@ -64,7 +64,9 @@ export const createAudioOutputRoute = (context: AudioContext): AudioOutputRoute 
     node: stream,
     setDevice: (deviceId) => routeElement(element, isSystemAlias(deviceId) ? '' : deviceId),
     // Refused until the page has a click or a microphone: the next start tries again
-    start: () => void element.play().catch(() => undefined),
+    start: () => {
+      if (element.paused) void element.play().catch(() => undefined);
+    },
     close: () => {
       element.pause();
       element.srcObject = null;

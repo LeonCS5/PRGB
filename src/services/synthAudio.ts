@@ -23,12 +23,12 @@ export class SoundFX {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       this.ctx = new AudioCtx();
       this.route = createAudioOutputRoute(this.ctx);
-      this.route.start();
       if (this.outputDeviceId) void this.route.setDevice(this.outputDeviceId).catch(() => undefined);
     }
     if (this.ctx.state === 'suspended') {
       this.ctx.resume();
     }
+    this.route?.start();
     return this.ctx;
   }
 

@@ -29,6 +29,7 @@ const STAGE_TEXT: Record<SignalStage, { title: string; help: string; tone: strin
   off: { title: 'Áudio desligado', help: 'Conecte o áudio para o PRGB ouvir a guitarra.', tone: 'text-ink-300' },
   suspended: { title: 'O navegador pausou o áudio', help: 'Reative o áudio para voltar a ouvir a guitarra.', tone: 'text-near' },
   'monitor-off': { title: 'O som da guitarra está desligado', help: 'Ligue “Ouvir som da guitarra” aqui embaixo.', tone: 'text-near' },
+  checking: { title: 'Testando a saída', help: 'Rajadas bem fracas conferem se o som volta para a entrada. Leva alguns segundos.', tone: 'text-ink-300' },
   'monitor-closed': { title: 'Som fechado para evitar microfonia', help: 'A saída escolhida devolve o som para a entrada. Escolha outra saída na lista.', tone: 'text-miss' },
   'no-signal': { title: 'Nenhum sinal da guitarra', help: 'Toque uma corda. Se o nível não subir, confira o cabo, o volume da guitarra, o botão de ganho da interface e se a entrada certa está marcada.', tone: 'text-near' },
   gate: { title: 'O noise gate está cortando o som', help: 'O sinal chega, mas fica abaixo do gate. Aumente o ganho de entrada ou baixe o gate.', tone: 'text-near' },

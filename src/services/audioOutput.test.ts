@@ -11,6 +11,7 @@ const firefoxContext = () => ({
 class FakeAudioElement {
   static last: FakeAudioElement;
   srcObject: unknown = null;
+  paused = true;
   setSinkId = vi.fn(async (_deviceId: string) => undefined);
   play = vi.fn(async () => undefined);
   pause = vi.fn();
@@ -111,11 +112,21 @@ describe('Firefox', () => {
     await expect(route.setDevice('b2')).rejects.toThrow('no click');
   });
 
-  it('does not stop at a play the browser refuses', () => {
+  it('does not stop at a play the browser refuses, and tries again on the next start', () => {
     useFirefox();
     const route = createAudioOutputRoute(firefoxContext());
     FakeAudioElement.last.play.mockRejectedValueOnce(new DOMException('blocked', 'NotAllowedError'));
     expect(() => route.start()).not.toThrow();
+    route.start();
+    expect(FakeAudioElement.last.play).toHaveBeenCalledTimes(2);
+  });
+
+  it('leaves an element that is already playing alone', () => {
+    useFirefox();
+    const route = createAudioOutputRoute(firefoxContext());
+    FakeAudioElement.last.paused = false;
+    route.start();
+    expect(FakeAudioElement.last.play).not.toHaveBeenCalled();
   });
 
   it('lets go of the stream when closed', () => {

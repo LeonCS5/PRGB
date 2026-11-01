@@ -406,11 +406,25 @@ describe('AudioEngine lifecycle', () => {
       spy.mockRestore();
     });
 
-    it('does not repeat a clean test on every reconnection', async () => {
+    it('does not repeat a clean test on a chosen output at every reconnection', async () => {
       const engine = new AudioEngine();
+      vi.stubGlobal('navigator', {
+        mediaDevices: {
+          getUserMedia,
+          enumerateDevices: async () => [{ kind: 'audiooutput', deviceId: 'usb-out', groupId: 'usb', label: 'Alto-falantes (USB-Audio)' }]
+        }
+      });
+      await engine.setOutputDevice('usb-out');
       await engine.start('usb-interface');
       await engine.start('usb-interface');
       expect(contexts[0].oscillators).toHaveLength(1);
+    });
+
+    it('tests the system default each time, as it can change behind the app', async () => {
+      const engine = new AudioEngine();
+      await engine.start('usb-interface');
+      await engine.start('usb-interface');
+      expect(contexts[0].oscillators).toHaveLength(2);
     });
 
     it('stops playing as soon as the return is certain', async () => {
@@ -478,6 +492,32 @@ describe('AudioEngine lifecycle', () => {
       expect(listener).not.toHaveBeenCalled();
     });
 
+    it('still fires with a negative input gain, which holds a full-scale loop under the usual limit', async () => {
+      const engine = new AudioEngine({ ...DEFAULT_AUDIO_OPTIONS, inputGainDb: -12 });
+      await engine.start('usb-interface');
+      contexts[0].holdClock = true;
+      feed(sine(1100, dbToGain(-12)));
+      await vi.advanceTimersByTimeAsync(240);
+      expect(contexts[0].gains[1].gain.linearRampToValueAtTime).toHaveBeenLastCalledWith(0, expect.any(Number));
+    });
+
+    it('treats a second trip right after opening as a loop, however loud the input stays', async () => {
+      const { listener } = await start();
+      feed(fullScale);
+      await vi.advanceTimersByTimeAsync(240);
+      expect(listener).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(240);
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not lock the queue when the context is already stopped', async () => {
+      const { engine } = await start();
+      contexts[0].state = 'suspended';
+      feed(fullScale);
+      await vi.advanceTimersByTimeAsync(240);
+      await expect(engine.stop()).resolves.toBeUndefined();
+    });
+
     it('stops with the engine', async () => {
       const { engine, listener } = await start();
       await engine.stop();
@@ -521,6 +561,22 @@ describe('AudioEngine lifecycle', () => {
       expect(contexts[0].state).toBe('closed');
       await engine.start('a');
       expect(contexts[1].options?.latencyHint).toBe(1024 / 48000);
+    });
+
+    it('asks for no restart when nothing was running', async () => {
+      const engine = new AudioEngine();
+      await engine.start('a');
+      await engine.stop();
+      await expect(engine.setAudioOptions({ ...DEFAULT_AUDIO_OPTIONS, bufferSamples: 1024 })).resolves.toBe(false);
+      expect(contexts[0].state).toBe('closed');
+    });
+
+    it('still restarts when the change was made during the first connection', async () => {
+      const engine = new AudioEngine();
+      const started = engine.start('a');
+      const changed = engine.setAudioOptions({ ...DEFAULT_AUDIO_OPTIONS, bufferSamples: 1024 });
+      await started;
+      await expect(changed).resolves.toBe(true);
     });
 
     it('has nothing to close before the first start', async () => {

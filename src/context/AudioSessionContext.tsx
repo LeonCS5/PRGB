@@ -212,9 +212,9 @@ export const AudioSessionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setAudioOptions(next);
       savePreferences({ audioOptions: next });
       const restart = await audioEngine.setAudioOptions(next);
-      if (restart && isAudioRunning) await startAudio(selectedDeviceId, channelMode);
+      if (restart) await startAudio(selectedDeviceId, channelMode);
     },
-    [audioEngine, isAudioRunning, selectedDeviceId, channelMode, startAudio]
+    [audioEngine, selectedDeviceId, channelMode, startAudio]
   );
 
   useEffect(() => () => void audioEngine.dispose(), [audioEngine]);

@@ -196,13 +196,14 @@ describe('audio options', () => {
 });
 
 describe('diagnoseSignal', () => {
-  const playing: SignalReading = { running: true, contextRunning: true, inputRms: 0.05, gateOpen: true, monitoring: true, monitorOpen: true };
+  const playing: SignalReading = { running: true, contextRunning: true, inputRms: 0.05, gateOpen: true, monitoring: true, monitorOpen: true, monitorChecking: false };
 
   it.each<[string, Partial<SignalReading>, string]>([
     ['audio off', { running: false }, 'off'],
     ['a paused context', { contextRunning: false }, 'suspended'],
     ['the player mute', { monitoring: false }, 'monitor-off'],
     ['a monitor shut for feedback', { monitorOpen: false }, 'monitor-closed'],
+    ['the loopback test, which is no alarm', { monitorOpen: false, monitorChecking: true }, 'checking'],
     ['a line at rest, which read -76 dB', { inputRms: 0.00016 }, 'no-signal'],
     ['a note under the gate', { inputRms: 0.004, gateOpen: false }, 'gate'],
     ['a note going through', {}, 'playing'],

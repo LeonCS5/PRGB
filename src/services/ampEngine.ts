@@ -364,21 +364,20 @@ export class AmpEngine {
 
   /** Null brings the built-in cabinet back. */
   public setImpulseResponse(impulse: AudioBuffer | null): void {
+    const next = impulse ? this.ctx.createConvolver() : null;
+    // Before touching the chain: the convolver refuses some files, and that must not cut the sound
+    if (next) next.buffer = impulse;
     this.tonePresenceNode.disconnect();
     this.impulseNode?.disconnect();
-    if (!impulse) {
+    this.impulseNode = next;
+    if (next) {
+      this.tonePresenceNode.connect(next);
+      next.connect(this.cabWetGainNode);
+    } else {
       this.tonePresenceNode.connect(this.cabSubCutNode);
       this.tonePresenceNode.connect(this.cabDryGainNode);
-      this.applyCabSimSettings(this.settings.cabSim);
-      return;
     }
-    this.impulseNode ??= this.ctx.createConvolver();
-    this.impulseNode.buffer = impulse;
-    this.tonePresenceNode.connect(this.impulseNode);
-    this.impulseNode.connect(this.cabWetGainNode);
-    const now = this.ctx.currentTime;
-    this.cabDryGainNode.gain.setTargetAtTime(0.0, now, 0.02);
-    this.cabWetGainNode.gain.setTargetAtTime(1.0, now, 0.02);
+    this.applyCabSimSettings(this.settings.cabSim);
   }
 
   public getIsGateOpen(): boolean {
@@ -515,6 +514,11 @@ export class AmpEngine {
 
   private applyCabSimSettings(cab: CabSimType): void {
     const now = this.ctx.currentTime;
+    if (this.impulseNode) {
+      this.cabDryGainNode.gain.setTargetAtTime(0.0, now, 0.02);
+      this.cabWetGainNode.gain.setTargetAtTime(1.0, now, 0.02);
+      return;
+    }
     if (cab === 'bypass') {
       this.cabWetGainNode.gain.setTargetAtTime(0.0, now, 0.02);
       this.cabDryGainNode.gain.setTargetAtTime(1.0, now, 0.02);

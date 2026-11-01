@@ -182,9 +182,10 @@ export interface SignalReading {
   gateOpen: boolean;
   monitoring: boolean; // the player's own switch
   monitorOpen: boolean; // closed by the app while the output feeds the input
+  monitorChecking: boolean; // the loopback test is running: closed, but nothing is wrong yet
 }
 
-export type SignalStage = 'off' | 'suspended' | 'monitor-off' | 'monitor-closed' | 'no-signal' | 'gate' | 'playing';
+export type SignalStage = 'off' | 'suspended' | 'monitor-off' | 'checking' | 'monitor-closed' | 'no-signal' | 'gate' | 'playing';
 
 const NO_SIGNAL_RMS = 0.001; // -60 dBFS: a real line input at rest read -76, a soft note -44
 
@@ -192,6 +193,7 @@ export const diagnoseSignal = (reading: SignalReading): SignalStage => {
   if (!reading.running) return 'off';
   if (!reading.contextRunning) return 'suspended';
   if (!reading.monitoring) return 'monitor-off';
+  if (reading.monitorChecking) return 'checking';
   if (!reading.monitorOpen) return 'monitor-closed';
   if (reading.inputRms < NO_SIGNAL_RMS) return 'no-signal';
   return reading.gateOpen ? 'playing' : 'gate';

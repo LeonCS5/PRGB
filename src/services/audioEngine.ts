@@ -145,6 +145,7 @@ export class AudioEngine {
   private options: AudioOptions;
   private inputTrim: GainNode | null = null;
   private monitorOpen = false;
+  private monitorChecking = false;
   private cleanRoute = ''; // the last input and output tested without a loop
   // Kept to come back when the AudioContext is rebuilt, which takes the nodes with it
   private neuralModel: { name: string; text: string } | null = null;
@@ -152,6 +153,7 @@ export class AudioEngine {
   private namNode: NamNode | null = null;
   private feedbackWatch: ReturnType<typeof setInterval> | null = null;
   private hotReads = 0;
+  private monitorReopenedAt = -Infinity;
   private framesSinceDetection = 0;
 
   // Guitar frequency bounds (E1 ~ 41 Hz for 4-string bass up to E6 ~ 1319 Hz, fret 24 of the high E)
@@ -183,6 +185,7 @@ export class AudioEngine {
   private static readonly FEEDBACK_READS = 3;
   private static readonly FEEDBACK_WATCH_MS = 80;
   private static readonly FEEDBACK_SETTLE_SEC = 0.4;
+  private static readonly FEEDBACK_RETRIP_SEC = 3;
   // Low power mode analyses one frame in this many
   private static readonly LOW_POWER_FRAMES = 3;
 
@@ -259,9 +262,10 @@ export class AudioEngine {
     // Firefox lists no default output: what plays there is unknown, so it gets tested like the rest
     if (playing && !onSameHardware(playing, active)) return false;
     // Each test takes seconds, too long to repeat at every reconnection; the feedback watch stays on regardless
-    const route = `${active.label}|${this.outputDeviceId}`;
-    if (route === this.cleanRoute) return false;
+    const route = this.outputDeviceId ? `${active.label}|${this.outputDeviceId}` : '';
+    if (route && route === this.cleanRoute) return false;
 
+    this.monitorChecking = true;
     const listen = () => {
       input.analyser.getFloatTimeDomainData(input.buffer);
       return toneLevel(input.buffer, LOOPBACK_TONE_HZ, ctx.sampleRate);
@@ -286,6 +290,7 @@ export class AudioEngine {
     }
     tone.stop();
     level.disconnect();
+    this.monitorChecking = false;
     const loops = returned >= LOOPBACK_BURSTS_NEEDED;
     this.cleanRoute = loops ? '' : route;
     return loops;
@@ -297,7 +302,7 @@ export class AudioEngine {
       this.hotReads = 0;
       return;
     }
-    this.hotReads = this.readInputRms() >= AudioEngine.FEEDBACK_RMS ? this.hotReads + 1 : 0;
+    this.hotReads = this.readInputRms() >= this.feedbackLevel() ? this.hotReads + 1 : 0;
     if (this.hotReads < AudioEngine.FEEDBACK_READS) return;
     this.hotReads = 0;
     this.monitorOpen = false;
@@ -309,15 +314,22 @@ export class AudioEngine {
   private async confirmFeedback(): Promise<void> {
     const ctx = this.audioContext;
     if (!ctx || !this.isRunning) return;
+    const trippedAgain = ctx.currentTime - this.monitorReopenedAt < AudioEngine.FEEDBACK_RETRIP_SEC;
     await AudioEngine.waitForAudioTime(ctx, ctx.currentTime + AudioEngine.FEEDBACK_SETTLE_SEC);
     if (!this.isRunning) return;
-    if (this.readInputRms() >= AudioEngine.FEEDBACK_RMS / 2) {
+    if (!trippedAgain && this.readInputRms() >= this.feedbackLevel() / 2) {
       this.rampMonitorGain(1);
       this.monitorOpen = true;
+      this.monitorReopenedAt = ctx.currentTime;
     } else {
       this.cleanRoute = '';
       this.onFeedback?.();
     }
+  }
+
+  // Read after the input gain, which a negative setting would otherwise use to hide a loop at full scale
+  private feedbackLevel(): number {
+    return AudioEngine.FEEDBACK_RMS * Math.min(1, dbToGain(this.options.inputGainDb));
   }
 
   private readInputRms(): number {
@@ -365,7 +377,8 @@ export class AudioEngine {
       inputRms: this.inputRms,
       gateOpen: this.ampEngine?.getIsGateOpen() ?? false,
       monitoring: this.ampEngine?.getSettings().isMonitoringEnabled ?? false,
-      monitorOpen: this.monitorOpen
+      monitorOpen: this.monitorOpen,
+      monitorChecking: this.monitorChecking
     };
   }
 
@@ -398,7 +411,7 @@ export class AudioEngine {
 
   /**
    * Input gain and compensation apply at once; buffer, rate and power mode need a new AudioContext. Returns
-   * true when the context was closed for that: the caller starts the audio again, with its saved amp settings.
+   * true when that stopped running audio: the caller starts it again, with its saved amp settings.
    */
   async setAudioOptions(options: AudioOptions): Promise<boolean> {
     let closed = false;
@@ -409,8 +422,8 @@ export class AudioEngine {
       const sameContext = previous.bufferSamples === options.bufferSamples
         && previous.resampleTo48k === options.resampleTo48k && previous.lowPower === options.lowPower;
       if (sameContext || !this.audioContext) return;
+      closed = this.isRunning;
       await this.releaseContext();
-      closed = true;
     });
     return closed;
   }
@@ -763,6 +776,7 @@ export class AudioEngine {
    * stops running, since its clock freezes and `ended` might never fire (nothing is audible then).
    */
   private static waitForAudioTime(ctx: AudioContext, time: number): Promise<void> {
+    if (ctx.state !== 'running') return Promise.resolve();
     return new Promise((resolve) => {
       const clock = ctx.createConstantSource();
       const finish = () => {
