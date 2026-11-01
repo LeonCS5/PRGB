@@ -359,7 +359,7 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 - [x] **Som neural** — modelos .nam e IR do jogador, sem incluir modelos; WaveNet padrão usa ~30% de um núcleo deste PC (@claude; testado com modelos sintéticos, não com um .nam real)
 - [x] **Build sem avisos do projeto** — o worklet e o wasm do motor ficam ao lado do módulo, fora do precache, e o React vai num chunk próprio. O aviso `cache-dir` vem do ambiente da Vercel, não do repositório (@claude)
 
-### Rodada 9 — navegação (em `claude/navegacao`)
+### Rodada 9 — navegação (concluída, em `main`)
 - [x] **Menu e abas** — Tocar, Músicas, Modos, Áudio e Ranking sempre à mão; o estado do áudio é um botão que abre o painel. Abaixo de 1024 px vira barra de abas (@claude; testado em 320, 390, 768, 1024 e 1440 px)
 - [x] **Landing** — duas ações no topo, modos e preparo da guitarra logo abaixo, aviso de armazenamento no fluxo da página, sem cobrir botões (@claude)
 - [x] **Botão Voltar do navegador** — jogo, dupla, sala e Play Free têm entrada própria no histórico; Voltar fecha a tela em vez de sair do site. Título da aba por tela (@claude; testado no Edge e no Firefox, sala online só por leitura do código)
