@@ -139,7 +139,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   online = null,
 }) => {
   const isOnline = online != null;
-  const { getLatestPitch, isAudioRunning, startAudio, channelMode } = useAudioSession();
+  const { audioEngine, getLatestPitch, isAudioRunning, startAudio, channelMode } = useAudioSession();
   const { isConfigured: isRankingOn, openAccount } = useRanking();
   const [palette] = useState(readPalette);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -463,7 +463,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
         // Check if note is inside the active hit window and matches audio engine pitch. Judged before
         // culling, so a note that left the screen still pending is missed instead of forgotten.
         if (state === 'pending' && isJudging) {
-          state = judgePendingNote(player, note, timeDiff, latestPitch, noteY);
+          state = judgePendingNote(player, note, timeDiff + audioEngine.getLatencyCompensationMs(), latestPitch, noteY);
           if (state !== 'pending') noteStates.set(note.id, state);
         }
 

@@ -167,7 +167,7 @@ export class AmpEngine {
   private isGateOpen = true;
   private listeners: Array<(settings: AmpSettings) => void> = [];
 
-  constructor(audioContext: AudioContext) {
+  constructor(audioContext: AudioContext, output: AudioNode = audioContext.destination) {
     this.ctx = audioContext;
 
     // 1. Input Gain & Gate
@@ -304,7 +304,7 @@ export class AmpEngine {
 
     // Connect to Analyser and Audio Destination (Speakers / Headphones)
     this.masterGainNode.connect(this.outputAnalyserNode);
-    this.masterGainNode.connect(this.ctx.destination);
+    this.masterGainNode.connect(output);
 
     // Apply Cab Sim preset
     this.applyCabSimSettings(this.settings.cabSim);
@@ -336,6 +336,10 @@ export class AmpEngine {
         this.gateGainNode.gain.setTargetAtTime(1.0, now, 0.004);
       }
     }
+  }
+
+  public getIsGateOpen(): boolean {
+    return this.isGateOpen;
   }
 
   /**

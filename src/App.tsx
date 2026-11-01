@@ -518,7 +518,7 @@ const AppContent: React.FC = () => {
                 </button>
                 <button onClick={() => setIsSettingsOpen(true)} className="flex min-h-24 cursor-pointer items-center gap-3 px-5 py-4 text-left transition hover:bg-ink-800">
                   <Sliders size={23} className="text-signal-400" aria-hidden="true" />
-                  <span className="flex-1"><span className="block text-sm font-semibold">Entrada & afinador</span><span className="mt-1 block text-xs text-ink-300">Tudo pronto para afinar</span></span><ArrowUpRight size={16} className="text-ink-300" aria-hidden="true" />
+                  <span className="flex-1"><span className="block text-sm font-semibold">Áudio e afinador</span><span className="mt-1 block text-xs text-ink-300">Entrada, saída, buffer e latência</span></span><ArrowUpRight size={16} className="text-ink-300" aria-hidden="true" />
                 </button>
                 <button onClick={() => {
                   if (!isAudioRunning) void handleStartAudio();

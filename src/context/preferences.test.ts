@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AMP_DEFAULT_SETTINGS } from '../services/ampEngine';
+import { DEFAULT_AUDIO_OPTIONS } from '../services/audioDevices';
 import { clearPreferences, readPreferences, savePreferences } from './preferences';
 
 // ---------------------------------------------------------------------------
@@ -54,6 +55,7 @@ describe('readPreferences defaults', () => {
       deviceId: '',
       inputChosen: false,
       outputDeviceId: '',
+      audioOptions: DEFAULT_AUDIO_OPTIONS,
       channelMode: 'ch1',
       ampEngine: null,
       lastSong: null,
@@ -67,6 +69,7 @@ describe('readPreferences defaults', () => {
       deviceId: '',
       inputChosen: false,
       outputDeviceId: '',
+      audioOptions: DEFAULT_AUDIO_OPTIONS,
       channelMode: 'ch1',
       ampEngine: null,
       lastSong: null,
@@ -85,6 +88,7 @@ describe('readPreferences with corrupted data', () => {
       deviceId: '',
       inputChosen: false,
       outputDeviceId: '',
+      audioOptions: DEFAULT_AUDIO_OPTIONS,
       channelMode: 'ch1',
       ampEngine: null,
       lastSong: null,
@@ -291,6 +295,7 @@ describe('clearPreferences', () => {
       deviceId: '',
       inputChosen: false,
       outputDeviceId: '',
+      audioOptions: DEFAULT_AUDIO_OPTIONS,
       channelMode: 'ch1',
       ampEngine: null,
       lastSong: null,

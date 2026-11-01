@@ -1,4 +1,5 @@
 import type { InputChannelMode } from '../services/audioEngine';
+import { DEFAULT_AUDIO_OPTIONS, readAudioOptions, type AudioOptions } from '../services/audioDevices';
 import { validateNickname } from '../services/nickname';
 import { AMP_PRESETS, type AmpSettings } from '../services/ampEngine';
 
@@ -11,6 +12,7 @@ export interface Preferences {
   deviceId: string;
   inputChosen: boolean; // the player picked the input: the app must not move to the interface by itself
   outputDeviceId: string;
+  audioOptions: AudioOptions;
   channelMode: InputChannelMode;
   ampEngine: AmpSettings | null;
   lastSong: SavedSong | null;
@@ -50,7 +52,7 @@ const isSavedSong = (value: unknown): value is SavedSong =>
   && Number.isInteger(value.partId);
 
 export const readPreferences = (): Preferences => {
-  const defaults: Preferences = { deviceId: '', inputChosen: false, outputDeviceId: '', channelMode: 'ch1', ampEngine: null, lastSong: null, nickname: null };
+  const defaults: Preferences = { deviceId: '', inputChosen: false, outputDeviceId: '', audioOptions: DEFAULT_AUDIO_OPTIONS, channelMode: 'ch1', ampEngine: null, lastSong: null, nickname: null };
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     const value: unknown = raw ? JSON.parse(raw) : null;
@@ -59,6 +61,7 @@ export const readPreferences = (): Preferences => {
       deviceId: typeof value.deviceId === 'string' ? value.deviceId : defaults.deviceId,
       inputChosen: value.inputChosen === true,
       outputDeviceId: typeof value.outputDeviceId === 'string' ? value.outputDeviceId : defaults.outputDeviceId,
+      audioOptions: readAudioOptions(value.audioOptions),
       channelMode: value.channelMode === 'ch1' || value.channelMode === 'ch2' || value.channelMode === 'both'
         ? value.channelMode : defaults.channelMode,
       ampEngine: isToneSettings(value.ampEngine) ? value.ampEngine : null,
