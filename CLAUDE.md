@@ -260,7 +260,7 @@ npm run lint
 
 ## 9. Fluxo do Usuário
 
-1. **Landing Page** → Usuário vê tela inicial com opções "Tocar Metallica" ou "Buscar Música"
+1. **Landing Page** → Usuário vê tela inicial com opções "Tocar agora" ou "Buscar música"
 2. **Conectar Áudio** → Ao clicar em qualquer botão, `getUserMedia` é chamado (permissão de mic)
 3. **PRGB Amp Ativo** → Som da guitarra começa a sair pelos fones/caixas em tempo real
 4. **Carregar Música** → Tab é baixada do CDN do acervo e parseada em `NoteEvent[]`
@@ -280,5 +280,5 @@ npm run lint
 | Tone Stack | Equalizador de 4 bandas (Bass, Mid, Treble, Presence) |
 | WaveShaper | Nó Web Audio que aplica distorção não-linear (emulação de válvula) |
 | Acervo | Provedor externo de tablaturas (API não oficial) |
-| Rails | As linhas horizontais coloridas do jogo onde as notas descem (estilo Guitar Hero) |
+| Rails | As linhas horizontais coloridas do jogo onde as notas passam |
 | Hit Window | Janela de tolerância temporal para acertar uma nota (±130ms) |

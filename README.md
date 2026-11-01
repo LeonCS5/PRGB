@@ -24,7 +24,7 @@
 
 ## 📖 Visão Geral
 
-O **PRGB** (*Play Real Guitar in Browser*) é uma aplicação web completa e open-source que transforma o navegador em uma plataforma de treino e jogo interativo para guitarra:
+O **PRGB** (*Play Real Guitar in Browser*) é uma aplicação web completa e gratuita que transforma o navegador em uma plataforma de treino e jogo interativo para guitarra:
 
 1. **Conexão Direta:** Conecte sua guitarra elétrica através de qualquer interface de áudio USB (Focusrite Scarlett, Behringer U-Phoria, etc.).
 2. **Amplificador Virtual PRGB Amp:** Ouça seu instrumento com emulação de amplificador valvulado, saturação dinâmica não-linear, tone stack de 4 bandas, simulação de gabinete (Cab Sim), noise gate e reverb espacial.
@@ -223,10 +223,10 @@ PRGB/
 
 - **100% Local:** Seu áudio é processado inteiramente na memória do seu navegador.
 - **Sem Gravação:** Nenhum áudio é gravado ou transmitido para a rede.
-- **Sem Rastreamento:** Sem anúncios, cookies de terceiros ou necessidade de cadastro.
+- **Sem Rastreamento:** Sem anúncios, sem cookies e sem cadastro para tocar.
 
 ---
 
 ## 📄 Licença
 
-Este projeto é desenvolvido para fins educacionais e de código aberto. Tablaturas e metadados musicais vêm de um provedor externo, sem afiliação com o PRGB.
+O código-fonte está público para consulta, mas ainda não tem licença de uso: todos os direitos reservados a Leonam Candido, exceto as bibliotecas e fontes de terceiros, que seguem as próprias licenças (veja `/licencas-terceiros.md` no site). Tablaturas e metadados musicais vêm de um provedor externo, sem afiliação com o PRGB.

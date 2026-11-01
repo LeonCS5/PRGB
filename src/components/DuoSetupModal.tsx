@@ -100,7 +100,7 @@ const ConnectStep: React.FC<{ onCancel: () => void; onNext: () => void }> = ({ o
       <StepHeading step={1} label="CONEXÃO" title="Dupla no mesmo computador" />
       <p className="mt-3 text-sm leading-6 text-ink-300">
         Ligue a <strong className="text-ink-100">guitarra 1 no canal 1</strong> e a <strong className="text-ink-100">guitarra 2 no canal 2</strong> da
-        mesma interface de áudio (por exemplo, Focusrite Scarlett 2i2 ou Behringer UMC202HD). Cada jogador é julgado só pelo próprio canal.
+        mesma interface de áudio (com duas entradas). Cada jogador é julgado só pelo próprio canal.
       </p>
 
       <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end">

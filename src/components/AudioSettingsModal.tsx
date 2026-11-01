@@ -89,7 +89,7 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
               } finally {
                 setIsConnecting(false);
               }
-            }} className="rounded-xl bg-amp-600 px-4 py-2 text-sm font-bold text-ink-100 hover:bg-amp-500 disabled:opacity-50 cursor-pointer">
+            }} className="rounded-xl bg-amp-500 px-4 py-2 text-sm font-bold text-ink-950 hover:bg-amp-400 disabled:opacity-50 cursor-pointer">
               {isConnecting ? 'Conectando...' : 'Conectar / tentar novamente'}
             </button>
           )}
@@ -257,7 +257,7 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
 
           <button
             onClick={onClose}
-            className="min-h-10 rounded-xl bg-gradient-to-r from-amp-500 to-amp-600 px-6 py-2.5 text-sm font-semibold text-ink-100 shadow-lg shadow-amp-500/25 hover:from-amp-400 hover:to-amp-500 transition cursor-pointer ml-auto"
+            className="min-h-10 rounded-xl bg-amp-500 px-6 py-2.5 text-sm font-bold text-ink-950 shadow-lg shadow-amp-500/25 hover:bg-amp-400 transition cursor-pointer ml-auto"
           >
             Pronto para Tocar
           </button>

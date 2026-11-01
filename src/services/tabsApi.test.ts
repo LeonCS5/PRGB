@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { normalizeTab } from '../../supabase/functions/_shared/tabNormalizer.ts';
 import { rawDemo } from './demoSong';
-import { TabsApi, midiToNoteName, soundingMidi, type SongMeta } from './tabsApi';
+import { TabsApi, isSongRemoved, midiToNoteName, soundingMidi, type SongMeta } from './tabsApi';
 
 const STANDARD = [64, 59, 55, 50, 45, 40];
 
@@ -205,5 +205,16 @@ describe('shared tab normalizer (also used by the register-part Edge Function)',
       url.startsWith('/cdn2/') ? new Response('{"measures":[]}') : new Response('nope', { status: 404 })
     ));
     await expect(TabsApi.getTrackTabJson(7, 99, 'img', 0)).resolves.toEqual({ measures: [] });
+  });
+});
+
+describe('removed songs', () => {
+  it('takes out the songs on the list and only those', () => {
+    expect(isSongRemoved(7, new Set([7]))).toBe(true);
+    expect(isSongRemoved(8, new Set([7]))).toBe(false);
+  });
+
+  it('starts with nothing removed', () => {
+    expect(isSongRemoved(5194)).toBe(false);
   });
 });

@@ -176,7 +176,7 @@ export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings,
     <div className="flex h-dvh w-full flex-col overflow-hidden bg-ink-950 text-ink-100">
       <header className="shrink-0 border-b border-ink-700 bg-ink-900 px-3 py-3 sm:px-6 [@media(max-height:500px)]:py-1">
         <div className="flex items-center gap-3">
-          <button type="button" onClick={onExit} aria-label="Voltar ao início" className="flex min-h-10 shrink-0 cursor-pointer items-center rounded-lg">
+          <button type="button" onClick={onExit} aria-label="PRGB: voltar ao início" className="flex min-h-10 shrink-0 cursor-pointer items-center rounded-lg">
             <BrandMark size={26} className="[&>span]:text-lg" />
           </button>
           <div className="min-w-0 font-display">
@@ -184,7 +184,7 @@ export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings,
             <p className="truncate text-xs text-ink-300">Toque à vontade: o PRGB só escuta e mostra as notas.</p>
           </div>
           {activeInput && (
-            <button type="button" onClick={onOpenAudioSettings} aria-label="Escolher entrada e saída de áudio"
+            <button type="button" onClick={onOpenAudioSettings} aria-label={`Entrada: ${audioDeviceName(activeInput.label)} Saída: ${outputName || 'padrão do sistema'} - Escolher entrada e saída de áudio`}
               className="ml-auto hidden min-w-0 cursor-pointer rounded-lg border border-ink-700 bg-ink-850 px-3 py-1 text-left font-mono text-[11px] leading-4 text-ink-200 transition hover:border-ink-500 sm:block">
               <span className="block truncate">Entrada: {audioDeviceName(activeInput.label)}</span>
               <span className="block truncate">Saída: {outputName || 'padrão do sistema'}</span>

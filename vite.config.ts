@@ -39,6 +39,9 @@ export default defineConfig({
       })
     },
   }],
+  build: {
+    license: { fileName: 'licencas-terceiros.md' },
+  },
   server: {
     port: 5173,
     proxy: {

@@ -65,7 +65,7 @@ const FeedbackForm: React.FC<Omit<FeedbackModalProps, 'isOpen'>> = ({ onClose, s
 
           <p className="text-xs leading-5 text-ink-300">
             O relato não leva seu nome nem sua conta e fica guardado por 180 dias. Não escreva nome, e-mail ou outros dados pessoais. Como não sabemos quem enviou, não temos como responder: para receber resposta, escreva para{' '}
-            <a href={`mailto:${LEGAL_CONTACT.email}`} className="text-signal-300 underline-offset-2 hover:underline">{LEGAL_CONTACT.email}</a>.
+            <a href={`mailto:${LEGAL_CONTACT.email}`} className="text-signal-300 underline underline-offset-2">{LEGAL_CONTACT.email}</a>.
           </p>
 
           {(result === 'failed' || result === 'rate_limited') && (

@@ -1,7 +1,7 @@
 {
   "name": "PRGB · Guitarra no navegador",
   "short_name": "PRGB",
-  "description": "Amp valvulado em tempo real, afinador e tablaturas com pontuação, direto no navegador.",
+  "description": "Simulador de amplificador em tempo real, afinador e tablaturas com pontuação, direto no navegador.",
   "lang": "pt-BR",
   "id": "./",
   "start_url": "./",

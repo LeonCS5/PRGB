@@ -741,7 +741,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     <div className="flex h-dvh w-full flex-col overflow-hidden bg-ink-950 text-ink-100 select-none">
       <header className="shrink-0 border-b border-ink-700 bg-ink-900 px-4 py-3 sm:px-6 [@media(max-height:500px)]:py-1">
         <div className="flex items-center justify-between gap-3">
-          <button onClick={onExit} aria-label="Voltar ao início" className="flex min-h-10 shrink-0 cursor-pointer items-center rounded-lg"><BrandMark size={26} className="[&>span]:text-lg" /></button>
+          <button onClick={onExit} aria-label="PRGB: voltar ao início" className="flex min-h-10 shrink-0 cursor-pointer items-center rounded-lg"><BrandMark size={26} className="[&>span]:text-lg" /></button>
           <div className="min-w-0 flex-1 font-display">
             <h1 className="truncate text-base font-bold sm:text-xl">{mainTab.title}</h1>
             <p className="truncate text-xs text-ink-300">{isDuo ? `Dupla · ${duoParts}` : `${mainTab.artist} · ${mainTab.trackName}`}</p>
@@ -750,7 +750,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
             ? <div className="hidden shrink-0 gap-2 sm:flex"><LiveTuner player={0} label="J1" /><LiveTuner player={1} label="J2" /></div>
             : <LiveTuner />}
           {!isOnline && (
-            <button onClick={onOpenSearch} aria-label="Escolher outra música" className={toolClass}><Search size={17} /><span className="hidden lg:inline">Mudar música</span></button>
+            <button onClick={onOpenSearch} aria-label="Mudar música" className={toolClass}><Search size={17} /><span className="hidden lg:inline">Mudar música</span></button>
           )}
         </div>
         {isDuo ? <DuoHud scores={scores} names={names} /> : <SoloHud score={scores[0]} goal={challenge?.score} />}
@@ -783,7 +783,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
           <button aria-label="Metrônomo" aria-pressed={metronomeEnabled} onClick={() => setMetronomeEnabled(!metronomeEnabled)} className={toolClass + (metronomeEnabled ? ' border-amp-400! text-amp-300!' : '')}><Clock size={16} /><span className="hidden sm:inline">Metrônomo</span></button>
           <button aria-label="Sintetizador da tablatura" aria-pressed={synthAudioEnabled} onClick={() => setSynthAudioEnabled(!synthAudioEnabled)} className={toolClass + (synthAudioEnabled ? ' border-signal-500 text-signal-300' : '')}>{synthAudioEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}<span className="hidden sm:inline">Sintetizador</span></button>
           <button aria-label="Configurações de áudio" onClick={onOpenAudioSettings} className={toolClass}><Sliders size={16} /><span className="hidden sm:inline">Áudio</span></button>
-          <button aria-label="Abrir PRGB Amp" onClick={onOpenAmpRack} className={toolClass + ' text-amp-300!'}><Zap size={16} /><span>{toneSettings ? AMP_PRESETS[toneSettings.preset]?.badge : 'Amp'}</span></button>
+          <button aria-label={`${toneSettings ? AMP_PRESETS[toneSettings.preset]?.badge : 'Amp'}: abrir PRGB Amp`} onClick={onOpenAmpRack} className={toolClass + ' text-amp-300!'}><Zap size={16} /><span>{toneSettings ? AMP_PRESETS[toneSettings.preset]?.badge : 'Amp'}</span></button>
           <button aria-label={toneSettings?.isMonitoringEnabled ? 'Silenciar guitarra' : 'Ouvir guitarra'} aria-pressed={toneSettings?.isMonitoringEnabled ?? false} onClick={() => { if (ampEngine && toneSettings) ampEngine.setMonitoringEnabled(!toneSettings.isMonitoringEnabled); }} className={toolClass}>{toneSettings?.isMonitoringEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}</button>
           <button aria-label="Reportar problema" title="Reportar problema" onClick={() => setFeedbackOpen(true)} className={toolClass}><MessageSquareWarning size={16} /></button>
           {!isOnline && isRankingOn && <button aria-label="Minha conta do ranking" onClick={openRankingAccount} className={toolClass}><UserRound size={16} /><span className="hidden lg:inline">Minha conta</span></button>}

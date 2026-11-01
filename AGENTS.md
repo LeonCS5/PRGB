@@ -9,7 +9,7 @@
 
 **PRGB** = Play Real Guitar in Browser
 
-Um app web (React + TypeScript + Vite) de prática de guitarra open-source e gratuito:
+Um app web (React + TypeScript + Vite) de prática de guitarra gratuito:
 - Captura áudio da guitarra real via interface USB (Web Audio API, 48kHz, sem processamento do OS)
 - Processa o som em tempo real com o motor **PRGB Amp** (amplificador + gabinete + reverb + noise gate)
 - Carrega tablaturas de 1M+ músicas de um provedor externo
@@ -218,6 +218,8 @@ Guitarra → USB Interface → getUserMedia(48kHz, raw, sem noise suppress)
 ### Marca
 - Nome: **PRGB**. Não usar nomes de produtos de terceiros em UI, código ou comentários.
 - O conteúdo vem de um provedor externo de tablaturas: o rodapé precisa manter o aviso de não afiliação, e a Política precisa continuar dizendo que ele existe e o que recebe.
+- Sem nomes de artistas, músicas ou marcas em chamadas, exemplos, presets e textos do site: nomes de terceiros só aparecem nos resultados que o jogador buscar.
+- Alegações só com prova: nada de números de acervo, "baixa latência" ou "válvulas". O PRGB Amp é um simulador.
 - O nome desse provedor só aparece onde é funcional: hosts em `vercel.json`, `vite.config.ts` e `handler.ts`, o código de erro devolvido pela função já publicada e as migrations congeladas.
 - Projeto gratuito; o único "monetizar" é o link "Apoie o projeto" (`VITE_SUPPORT_URL`, com fallback para estrela no GitHub).
 

@@ -55,8 +55,8 @@ export const AMP_PRESETS: Record<AmpPresetId, {
     }
   },
   crunch: {
-    name: 'British Plexi Crunch',
-    tagline: 'Overdrive clássico valvulado com dinâmica rica para rock clássico e blues',
+    name: 'British Crunch',
+    tagline: 'Overdrive clássico com dinâmica rica para rock clássico e blues',
     badge: '🔥 British Crunch',
     settings: {
       gain: 45,
@@ -70,9 +70,9 @@ export const AMP_PRESETS: Record<AmpPresetId, {
     }
   },
   clean: {
-    name: 'California Clean Deluxe',
+    name: 'California Clean',
     tagline: 'Som cristalino, brilhante e quente com headroom amplo',
-    badge: '🎸 Clean Deluxe',
+    badge: '🎸 Clean',
     settings: {
       gain: 20,
       bass: 1.0,
@@ -86,7 +86,7 @@ export const AMP_PRESETS: Record<AmpPresetId, {
   },
   lead: {
     name: 'Liquid Solo Lead',
-    tagline: 'Sustain infinito, compressão suave e harmônicos cantantes para solos',
+    tagline: 'Muito sustain, compressão suave e harmônicos cantantes para solos',
     badge: '🚀 Solo Lead',
     settings: {
       gain: 80,

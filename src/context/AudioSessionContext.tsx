@@ -169,10 +169,13 @@ export const AudioSessionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     async (deviceId: string) => {
       const id = isSystemAlias(deviceId) ? '' : deviceId;
       setRouteAlert(null);
+      // Shown at once: the loopback test takes seconds, and a click on the old choice would change nothing
+      setOutputDeviceId(id);
       const applied = await audioEngine.setOutputDevice(id);
       const saved = applied ? audioEngine.getOutputDeviceId() : '';
       savePreferences({ outputDeviceId: saved });
       setOutputDeviceId(saved);
+      if (audioEngine.getSignalReading().monitorOpen) setRouteAlert(null);
       await refreshOutputName(saved);
       return applied;
     },

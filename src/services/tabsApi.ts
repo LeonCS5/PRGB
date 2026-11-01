@@ -39,6 +39,11 @@ export interface TabSearchResult {
   popularTrack?: number;
 }
 
+// Songs taken out after a rights holder's request (Termos de Uso, Direitos autorais e pedidos de remoção)
+const REMOVED_SONG_IDS: ReadonlySet<number> = new Set<number>([]);
+
+export const isSongRemoved = (songId: number, removed: ReadonlySet<number> = REMOVED_SONG_IDS): boolean => removed.has(songId);
+
 export class TabsApi {
   // Same-origin proxies only (Vite dev server, Vercel rewrites): calling the source from the browser
   // would hand visitors' IPs straight to third parties, which the privacy policy says doesn't happen
@@ -52,13 +57,15 @@ export class TabsApi {
     const url = `${this.API_BASE}/songs?pattern=${encodeURIComponent(query)}`;
     const response = await fetch(url);
     if (!response.ok) throw new Error(`Search failed: ${response.status}`);
-    return response.json();
+    const songs: TabSearchResult[] = await response.json();
+    return songs.filter((song) => !isSongRemoved(song.songId));
   }
 
   /**
    * Get metadata and track parts for a specific song
    */
   static async getSongMeta(songId: number): Promise<SongMeta> {
+    if (isSongRemoved(songId)) throw new Error('Song removed');
     const url = `${this.API_BASE}/meta/${songId}`;
     const response = await fetch(url);
     if (!response.ok) throw new Error(`Meta fetch failed: ${response.status}`);
