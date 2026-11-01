@@ -116,7 +116,7 @@ src/
 │       └── supabaseClient.ts        # Cliente Supabase lazy; lê VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY
 │
 supabase/
-├── migrations/                      # Migrations SQL (ranking, retention, reaccept_terms, room_realtime, room_data_export)
+├── migrations/                      # Migrations SQL (ranking, retention, reaccept_terms, room_realtime, room_data_export, feedback)
 ├── functions/register-part/         # Edge Function: conta notas do lado do servidor
 ├── functions/_shared/               # scoreLimits.ts, tabNormalizer.ts (shared com o app)
 └── db-tests/                        # Testes de integração das migrations (Vitest)
@@ -124,6 +124,7 @@ supabase/
 public/
 ├── favicon.svg                      # Logo PRGB
 ├── fonts/                           # Fontes locais (Inter, Space Grotesk, JetBrains Mono — woff2)
+├── nam/                             # Avisos de licença do motor neural (o motor fica em src/vendor/nam-engine)
 ├── icons/, og-image.png             # Ícones do app e imagem de compartilhamento
 ├── manifest.webmanifest, sw.js      # PWA
 vercel.json                          # Deploy com rewrites de tablaturas (ver AGENTS.md › Deploy)
