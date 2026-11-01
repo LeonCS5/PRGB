@@ -60,6 +60,7 @@ PRGB/
 │   ├── context/
 │   │   ├── AudioSessionContext.tsx  # AudioEngine, PRGB Amp, device/canal, erros de áudio; pitch em store próprio (useLatestPitch)
 │   │   ├── gameSession.ts           # Tipos de sessão de jogo: GamePart, SoloSession, DuoSession, RunSummary, RankedSubmission
+│   │   ├── historyLayers.ts         # Uma entrada no histórico por camada aberta (tela e modais): o Voltar fecha a de cima
 │   │   ├── legalRoute.ts            # Roteamento por hash (#privacidade / #termos) sem biblioteca de router
 │   │   ├── localData.ts             # Exportar/apagar dados locais (records + prefs); flag de sessão de ranking
 │   │   ├── ModalsContext.tsx        # Estado aberto/fechado dos modais
@@ -93,7 +94,7 @@ PRGB/
 │   │   ├── LegalPage.tsx            # Renderizador das páginas legais (Privacidade / Termos)
 │   │   ├── LocalDataControls.tsx    # Controles de exportar/apagar dados locais e sessão de ranking
 │   │   ├── LocalRecords.tsx         # Histórico de recordes locais do jogador
-│   │   ├── ModalFrame.tsx           # Wrapper genérico de modal (foco, fechar com Esc, overlay)
+│   │   ├── ModalFrame.tsx           # Wrapper genérico de modal (foco, fechar com Esc ou Voltar, overlay)
 │   │   ├── OnlineHud.tsx            # Faixa do parceiro e da equipe durante a dupla online
 │   │   ├── OnlinePracticeGame.tsx   # PracticeGame da dupla online: contagem, progresso e resultado
 │   │   ├── OnlineResultPanel.tsx    # Resultado da dupla: pontos, equipe, vitória ou empate
@@ -256,7 +257,7 @@ Guitarra → USB Interface → getUserMedia(48kHz, raw, sem noise suppress)
 9. **Não usar CSS inline** (`style={{}}`) exceto para valores dinâmicos calculados.
 10. **Não remover ou refatorar o PRGB Amp** sem entender a cadeia DSP completa documentada acima.
 11. **LGPD por padrão.** Dados mínimos (só o apelido é dado pessoal); nenhuma conta antes do consentimento (18+ autodeclarado + aceite com `LEGAL_VERSION` versionado); tabelas sem acesso direto (só RPC `security definer` com `search_path=''`); exportar, corrigir e excluir sempre disponíveis; retenção definida nas migrations; qualquer dado novo exige atualizar `src/content/legal.ts`.
-12. **`VITE_SUPABASE_ANON_KEY` e `VITE_SUPABASE_URL` são as únicas chaves Supabase com prefixo `VITE_`.** Nunca expor a `service_role key` com prefixo `VITE_` — ela daria acesso total ao banco ao cliente.
+12. **`VITE_SUPABASE_ANON_KEY` e `VITE_SUPABASE_URL` são as únicas chaves Supabase com prefixo `VITE_`.** Nunca expor a `service_role key` com prefixo `VITE_` — ela daria acesso total ao banco ao cliente. Leia cada variável pelo nome (`import.meta.env.VITE_X`): ler o objeto inteiro publica todas as variáveis `VITE_` do build.
 
 ---
 
@@ -362,11 +363,12 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 ### Rodada 9 — navegação (concluída, em `main`)
 - [x] **Menu e abas** — Tocar, Músicas, Modos, Áudio e Ranking sempre à mão; o estado do áudio é um botão que abre o painel. Abaixo de 1024 px vira barra de abas (@claude; testado em 320, 390, 768, 1024 e 1440 px)
 - [x] **Landing** — duas ações no topo, modos e preparo da guitarra logo abaixo, aviso de armazenamento no fluxo da página, sem cobrir botões (@claude)
-- [x] **Botão Voltar do navegador** — jogo, dupla, sala e Play Free têm entrada própria no histórico; Voltar fecha a tela em vez de sair do site. Título da aba por tela (@claude; testado no Edge e no Firefox, sala online só por leitura do código)
+- [x] **Botão Voltar do navegador** — cada camada aberta (jogo, dupla, sala, Play Free e cada modal) tem entrada própria no histórico, criada ao abrir; Voltar fecha a de cima, uma por vez, em vez de sair do site. Nunca crie entrada em reação ao Voltar: o Chromium pula entradas sem gesto do usuário. Título da aba por tela (@claude; testado no Edge e no Firefox, sala online só por leitura do código)
 - [x] **Continuar** — quem volta ao site vê a landing com um cartão da última música, em vez de cair direto no jogo. Abrir o site não chama mais o provedor de tablaturas (@claude)
 - [x] **Ranking visível** — o menu abre o placar do exercício, sem conta (@claude)
 - [x] **Painel de Áudio** — diagnóstico primeiro, duas colunas, ajustes avançados recolhidos (@claude; testado com microfone sintético, não com a interface real)
 - [x] **Jogo e Play Free no celular** — sem rolagem lateral, folha "Mais", seta de voltar e pista com pelo menos 45% da tela (@codex, revisado por @claude)
+- [x] **Bundle sem metadados do deploy** — a leitura dinâmica de `import.meta.env` publicava todas as variáveis `VITE_` do build, inclusive as da Vercel; um teste barra a volta dela (@claude)
 
 ### Pendências conhecidas (sem dono)
 - [ ] **Permissão do provedor de tablaturas** — os termos dele proíbem transmitir, reutilizar e baixar o conteúdo sem autorização escrita. É o maior risco legal do projeto; depende de decisão do humano.
@@ -374,8 +376,7 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 - [ ] **Revisões diferentes da mesma faixa na dupla** — o convidado carrega a revisão atual da tab, sem conferir a anunciada pelo anfitrião. Decisão: não corrigir por ora; é raro e a partida não vale para o ranking.
 - [ ] **Teste com interface de áudio real** — o humano ouviu a guitarra no Firefox com a rota nova, antes das correções finais. Falta validar a versão publicada, a latência, clicks na troca de device, afinador e scoring tocando de verdade, e um arquivo `.nam` real.
 - [ ] **`setCurrentTimeMs` a cada frame** — o `PracticeGame` ainda re-renderiza ~60×/s enquanto toca (posição da música em state). Mover para ref exige mexer no scoring; deixado de fora para não alterar comportamento.
-- [ ] **Sem router** — SPA sem rotas: só as telas de jogo têm entrada no histórico; se crescer, avaliar react-router.
-- [ ] **Voltar com um modal aberto** — o botão Voltar fecha a tela do jogo, não o modal que está por cima dela, e o modal continua aberto na landing.
+- [ ] **Sem router** — SPA sem rotas: só telas de jogo e modais têm entrada no histórico; se crescer, avaliar react-router.
 
 ### Concluídos
 - [x] **App.css é lixo** — removido

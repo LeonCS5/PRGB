@@ -61,6 +61,7 @@ src/
 ├── context/
 │   ├── AudioSessionContext.tsx      # AudioEngine, PRGB Amp, device/canal, erros; pitch via useLatestPitch
 │   ├── gameSession.ts               # Tipos de sessão de jogo (GamePart, SoloSession, DuoSession, RunSummary)
+│   ├── historyLayers.ts             # Uma entrada no histórico por camada aberta: o Voltar fecha a de cima
 │   ├── legalRoute.ts                # Roteamento por hash (#privacidade / #termos) sem router library
 │   ├── localData.ts                 # Exportar/apagar dados locais; flag de sessão de ranking
 │   ├── ModalsContext.tsx            # Estado aberto/fechado dos modais
