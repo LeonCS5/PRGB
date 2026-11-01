@@ -13,8 +13,8 @@
 
 **PRGB** (Play Real Guitar in Browser) é um aplicativo web gratuito de prática de guitarra que permite ao usuário:
 
-1. **Conectar sua guitarra real** via interface de áudio USB (Focusrite, Behringer, Realtek, etc.)
-2. **Ouvir o som processado** em tempo real pelo motor DSP **PRGB Amp** (emulação de amplificador valvulado, gabinete, noise gate, reverb)
+1. **Conectar sua guitarra real** via interface de áudio USB
+2. **Ouvir o som processado** em tempo real pelo motor DSP **PRGB Amp** (simulador de amplificador, gabinete, noise gate, reverb)
 3. **Tocar junto com tablaturas** baixadas de um provedor externo (1M+ músicas), com detecção de pitch e gamificação (score, combo, acertos Perfect/Good/Miss)
 
 **Sem servidor próprio.** O jogo roda 100% no navegador (todo o áudio via Web Audio API, nunca enviado); ranking e salas online, opcionais e só com consentimento 18+, usam Supabase gerenciado (Auth anônimo, RPC security definer, Edge Function, Realtime — região São Paulo). Regras em AGENTS.md › Regras INVIOLÁVEIS 1 e 11.
@@ -222,7 +222,7 @@ O backlog fica **só** no `AGENTS.md` (seção "Problemas Conhecidos"), com dono
 
 ### RECOMENDADO
 - Ao criar novos componentes, seguir o padrão `React.FC<Props>` existente
-- Ao mexer no áudio, testar com uma interface de áudio real (Focusrite, Behringer)
+- Ao mexer no áudio, testar com uma interface de áudio real, no Chrome/Edge e no Firefox
 - Ao adicionar dependências, preferir bibliotecas leves e sem dependências transitivas pesadas
 - Commits devem ser atômicos e focados (1 feature ou 1 fix por commit)
 

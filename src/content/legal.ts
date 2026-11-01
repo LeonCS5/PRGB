@@ -93,7 +93,7 @@ export const PRIVACY_POLICY: LegalDocument = {
         'Busca de músicas: o termo pesquisado e a música que você abre são repassados ao provedor externo de tablaturas.',
         'Ranking (opcional, para maiores de 18 anos): apelido, ID aleatório da conta, pontuações e datas, detalhados em “Ranking: o que guardamos”.',
         'Sala online em dupla (opcional, para maiores de 18 anos): apelido e placar ao vivo, repassados ao seu parceiro sem serem gravados, e o registro temporário da sua vaga na sala (código da sala, ID pseudônimo e horário de entrada).',
-        'Relatos de problemas: se você usar a caixa “Reportar problema”, guardamos a categoria, a tela em que você estava e o texto que escreveu, sem nome, e-mail, conta ou endereço IP. O envio passa pelos registros técnicos de acesso do Supabase, como qualquer pedido. Evite escrever dados pessoais no texto.',
+        'Relatos de problemas: se você usar a caixa “Reportar problema”, guardamos a categoria, a tela em que você estava e o texto que escreveu. Esse registro não tem nome, e-mail, conta nem endereço IP. Como em qualquer pedido, o envio passa pelos registros técnicos de acesso do Supabase, que incluem o endereço IP e seguem os prazos do fornecedor. Evite escrever dados pessoais no texto.',
         'Contato por e-mail: se você escrever para nós, recebemos seu endereço de e-mail e o que você contar na mensagem.'
       ]
     },
@@ -110,6 +110,7 @@ export const PRIVACY_POLICY: LegalDocument = {
         'preferências: a entrada e a saída de áudio escolhidas (por identificadores criados pelo próprio navegador), o canal de entrada, as opções de áudio, os ajustes do amplificador e a última música aberta;',
         'seus recordes pessoais e o histórico das suas últimas partidas;',
         'o apelido local, se você escolher um;',
+        'a marca de que você já viu o aviso da primeira visita;',
         'se você entrar no ranking, a chave de sessão que mantém sua conta conectada neste navegador.'
       ]
     },
@@ -185,7 +186,7 @@ export const PRIVACY_POLICY: LegalDocument = {
       paragraphs: [
         'Não vendemos nem alugamos dados pessoais. O site não usa serviços de terceiros para estatísticas, publicidade ou fontes: até as fontes são servidas pelo próprio PRGB. Links externos, como o de doação e o do GitHub, levam a sites com regras e políticas de privacidade próprias.',
         'Compartilhamos dados só com quem está listado abaixo. O Supabase atua como operador: trata os dados do ranking e os relatos em nosso nome, sob um adendo de tratamento de dados. A Vercel hospeda o site e trata os registros de acesso pelos termos e pela política de privacidade dela.',
-        'Esses dois fornecedores usam suboperadores próprios, listados em security.vercel.com e em supabase.com/legal/customer-resources/subprocessor-list.'
+        'O Supabase lista seus suboperadores em supabase.com/legal/customer-resources/subprocessor-list, e a Vercel, em security.vercel.com.'
       ],
       items: [
         'Vercel (Vercel Inc., Estados Unidos): hospeda o site, entrega os arquivos por uma rede global de servidores e repassa ao provedor de tablaturas os pedidos de busca e de música. Trata os registros técnicos de acesso.',
@@ -272,7 +273,7 @@ export const PRIVACY_POLICY: LegalDocument = {
       id: 'menores-de-idade',
       title: 'Menores de 18 anos',
       paragraphs: [
-        'O ranking e a sala online são só para maiores de 18 anos. A idade é autodeclarada: antes de criar a conta ou entrar numa sala, você confirma que tem 18 anos ou mais.',
+        'O ranking e a sala online são só para maiores de 18 anos. A idade é autodeclarada: antes de criar a conta ou entrar numa sala, você confirma que tem 18 anos ou mais. Esse limite é uma escolha do PRGB para tratar menos dados pessoais nos recursos online, não uma classificação indicativa.',
         'O modo local, sem conta, pode ser usado por qualquer pessoa: nele, preferências, recordes e histórico ficam só no navegador.',
         'Em todo o site não há publicidade, compras, caixas de recompensa, perfis de comportamento nem conversa entre jogadores, e a sala online só mostra apelido e placar.',
         `Se soubermos que uma conta do ranking pertence a alguém com menos de 18 anos, vamos excluí-la. Se você é responsável por um menor e acredita que isso aconteceu, escreva para ${email}.`

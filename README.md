@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <strong>Toque guitarra real direto no navegador com processamento DSP em tempo real, detecção de pitch e gamificação interativa / Rocksmith.</strong>
+  <strong>Toque guitarra real direto no navegador com processamento DSP em tempo real, detecção de pitch e jogo de prática com pontuação.</strong>
 </p>
 
 <p align="center">
@@ -14,9 +14,9 @@
   <img src="https://img.shields.io/badge/Vite-8.x-646CFF?style=flat-square&logo=vite" alt="Vite" />
   <img src="https://img.shields.io/badge/TailwindCSS-4.x-38B2AC?style=flat-square&logo=tailwindcss" alt="Tailwind CSS 4" />
   <img src="https://img.shields.io/badge/Web_Audio_API-Native-orange?style=flat-square" alt="Web Audio API" />
-  <img src="https://img.shields.io/badge/Tests-30%20passed%20(Vitest)-brightgreen?style=flat-square&logo=vitest" alt="Vitest 30 tests" />
+  <img src="https://img.shields.io/badge/Tests-Vitest-brightgreen?style=flat-square&logo=vitest" alt="Testes com Vitest" />
   <img src="https://img.shields.io/badge/PWA-Ready-purple?style=flat-square" alt="PWA Ready" />
-  <img src="https://img.shields.io/badge/Backend-Zero-success?style=flat-square" alt="Zero Backend" />
+  <img src="https://img.shields.io/badge/Backend-Supabase-success?style=flat-square" alt="Backend gerenciado Supabase" />
   <img src="https://img.shields.io/badge/Linter-oxlint-cyan?style=flat-square" alt="Oxlint" />
 </p>
 
@@ -26,21 +26,21 @@
 
 O **PRGB** (*Play Real Guitar in Browser*) é uma aplicação web completa e gratuita que transforma o navegador em uma plataforma de treino e jogo interativo para guitarra:
 
-1. **Conexão Direta:** Conecte sua guitarra elétrica através de qualquer interface de áudio USB (Focusrite Scarlett, Behringer U-Phoria, etc.).
-2. **Amplificador Virtual PRGB Amp:** Ouça seu instrumento com emulação de amplificador valvulado, saturação dinâmica não-linear, tone stack de 4 bandas, simulação de gabinete (Cab Sim), noise gate e reverb espacial.
-3. **1 Milhão+ de Músicas:** Carregue tablaturas do acervo com suporte a faixas individuais (Guitarra Solo, Base, Baixo) e técnicas avançadas (bends, ligaduras, grace notes, tapping, harmônicos).
+1. **Conexão Direta:** Conecte sua guitarra elétrica por uma interface de áudio USB.
+2. **Amplificador Virtual PRGB Amp:** Ouça seu instrumento por um simulador de amplificador feito em software, com saturação não-linear, tone stack de 4 bandas, simulação de gabinete (Cab Sim), noise gate e reverb espacial.
+3. **Acervo de Músicas:** Carregue tablaturas de um provedor externo com suporte a faixas individuais (Guitarra Solo, Base, Baixo) e técnicas avançadas (bends, ligaduras, grace notes, tapping, harmônicos).
 4. **Game Engine em Canvas 2D:** Trilhos (*rails*) coloridos por corda, notas temporizadas, detecção de pitch em tempo real (NSDF/MPM), julgamento de precisão (*Perfect / Good / Miss*), contadores de combo e efeitos visuais a 60 FPS com suporte a High-DPI.
 5. **Metrônomo de Alta Precisão:** Cliques agendados diretamente no relógio de hardware da Web Audio API (`AudioContext.currentTime`), com suporte a compassos compostos, anacruse e mudanças de andamento via `beatGrid`.
-6. **100% Client-Side & PWA:** Sem servidores, sem banco de dados, sem login. Inclui suporte a PWA (Progressive Web App) com instalação local e cache offline do app shell.
+6. **Sem Conta para Tocar & PWA:** O áudio é processado no navegador. O ranking e a dupla online são opcionais e usam o Supabase. Inclui PWA (Progressive Web App) com cache do app shell.
 
 ---
 
 ## ⚡ Recursos Principais
 
 ### 🔊 Rack de Modelagem de Amplificador — PRGB Amp
-Motor DSP nativo construído exclusivamente com Web Audio API, recriando a dinâmica e a resposta de frequência de amplificadores clássicos:
+Motor DSP construído com a Web Audio API, um simulador que não reproduz com exatidão nenhum equipamento real:
 - **Noise Gate:** Threshold e release ajustáveis com atenuação suave para eliminar ruídos de captadores single-coil.
-- **Preamp & WaveShaper:** Curva de transferência não-linear que emula o ponto de saturação suave (*soft clipping*) e harmônicos quentes de válvulas 12AX7.
+- **Preamp & WaveShaper:** Curva de transferência não-linear que aplica saturação suave (*soft clipping*).
 - **Tone Stack (EQ de 4 Bandas):**
   - *Bass:* 110 Hz (Low-shelf)
   - *Mid:* 750 Hz (Peaking)
@@ -195,7 +195,7 @@ PRGB/
 │   └── services/
 │       ├── audioEngine.ts           # Captura USB raw, roteamento de canal e pitch NSDF/MPM
 │       ├── audioEngine.test.ts      # Testes unitários do AudioEngine
-│       ├── ampEngine.ts           # Cadeia DSP completa do amplificador valvulado e cab sim
+│       ├── ampEngine.ts           # Cadeia DSP do simulador de amplificador e cab sim
 │       ├── tabsApi.ts               # Cliente da API de tablaturas e normalizador de tablaturas
 │       ├── tabsApi.test.ts          # Testes unitários do parser de tablaturas
 │       ├── synthAudio.ts            # MetronomeScheduler no relógio Web Audio, SFX e synth
@@ -215,7 +215,7 @@ PRGB/
 1. **Use Fones de Ouvido:** Como o microfone/interface fica ativo para captura contínua, usar fones evita retorno e interferência no detector de pitch.
 2. **Selecione o Canal Correto:** Se a sua guitarra estiver conectada na entrada 2 da interface USB, abra o menu **Áudio**, selecione **Canal 2 (R)** e verifique se o VU meter responde ao tocar uma corda.
 3. **Afine Antes de Tocar:** Use o afinador integrado para garantir que as cordas estejam afinadas de acordo com a tablatura carregada.
-4. **Buffer & Latência:** Para obter a menor latência no Windows, configure sua interface para 48.000 Hz (48 kHz) com buffers pequenos (64 a 128 samples) nas configurações do driver da sua interface de áudio.
+4. **Buffer & Latência:** O navegador usa os drivers do Windows, não ASIO, então a latência é maior que a de programas nativos. Ajuste o buffer e a compensação em **Áudio** e feche programas que usam ASIO, que podem prender a interface.
 
 ---
 

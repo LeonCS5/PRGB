@@ -50,4 +50,4 @@ disclaimer reproduced for neural-amp-modeler-wasm, with their own copyright line
 Eigen
 https://gitlab.com/libeigen/eigen
 Mozilla Public License 2.0, https://www.mozilla.org/MPL/2.0/
-The source code of Eigen is available at the address above.
+The source code of Eigen is available at the address above, in the version pinned by NeuralAmpModelerCore v0.5.4.
