@@ -73,7 +73,7 @@ PRGB/
 │   │
 │   ├── components/
 │   │   ├── AudioSettingsModal.tsx   # Modal: device selector, afinador, VU meter
-│   │   ├── FeedbackModal.tsx        # Caixa "Reportar problema": relato anônimo, com o e-mail de contato se falhar
+│   │   ├── FeedbackModal.tsx        # Caixa "Reportar problema": relato sem identificação, com o e-mail de contato se falhar
 │   │   ├── AudioRouting.tsx         # Medidor de entrada em dB e avisos de rota (microfone do PC, retorno da saída)
 │   │   ├── BrandMark.tsx            # Logo PRGB (palheta) + wordmark
 │   │   ├── ChallengeCard.tsx        # Card de desafio (melhor score pessoal de um amigo)
@@ -113,7 +113,7 @@ PRGB/
 │   │   ├── synthAudio.ts            # SFX + MetronomeScheduler (cliques agendados no relógio do AudioContext)
 │   │   ├── ampEngine.ts           # DSP chain: preamp→waveshaper→EQ→cab→reverb→output
 │   │   └── backend/
-│   │       ├── feedbackApi.ts       # Relatos da caixa "Reportar problema" (RPC anônima)
+│   │       ├── feedbackApi.ts       # Relatos da caixa "Reportar problema" (RPC com a chave pública)
 │   │       ├── rankingApi.ts        # RPCs do ranking: createProfile, submitScore, getLeaderboard, registerPart, etc.
 │   │       ├── roomChannel.ts       # Salas online via Supabase Realtime (Broadcast + Presence, host/guest)
 │   │       └── supabaseClient.ts    # Cliente Supabase (lazy, on-demand); lê VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY
@@ -336,6 +336,7 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 - [x] **Caixa de reportar problemas** — RPC `submit_feedback` com a chave pública, sem conta nem consentimento; guarda categoria, tela e texto, limite de 60 por hora para todos, apagados em 180 dias. Os relatos são lidos na tabela `feedback`, no painel do Supabase (@claude)
 
 ### Pendências conhecidas (sem dono)
+- [ ] **Migration `feedback` no banco** — `supabase/migrations/20261030150000_feedback.sql` precisa ser rodada no SQL Editor do Supabase. Sem ela a caixa mostra a falha e o e-mail de contato.
 - [ ] **Dupla online com guitarras de verdade** — testada de ponta a ponta no Supabase real com dois navegadores, contas temporárias e microfone sintético (partida, revanche com troca de música, queda e volta, saída do anfitrião, exportação e exclusão de conta) e o ranking com uma partida real aceita pelo servidor, mas nunca por duas pessoas com guitarra. Falta também o caso de sala cheia (`room_full`), que exige uma terceira conta.
 - [ ] **Revisões diferentes da mesma faixa na dupla** — o convidado carrega a revisão atual da tab, sem conferir a anunciada pelo anfitrião. Decisão: não corrigir por ora; é raro e a partida não vale para o ranking.
 - [ ] **Teste com interface de áudio real e no navegador** — nada disso foi validado por humano: latência, clicks na troca de device, afinador, scoring tocando de verdade.

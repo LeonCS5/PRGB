@@ -1,4 +1,4 @@
--- Problem reports from the app's feedback box. A report is anonymous on purpose: no account, IP or e-mail is
+-- Problem reports from the app's feedback box. A report identifies nobody on purpose: no account, IP or e-mail is
 -- stored with it, so sending one takes neither a sign-in nor consent. Reports are read in the Supabase
 -- dashboard and deleted after 180 days (LGPD).
 

@@ -66,7 +66,7 @@ export const PRIVACY_POLICY: LegalDocument = {
     'Ranking e sala online são opcionais, só para maiores de 18 anos, e dependem do seu consentimento.',
     'No ranking, a conta é anônima: guardamos o apelido que você escolher (público), um ID aleatório e suas pontuações, sem e-mail, senha, nome real ou telefone.',
     'Você pode baixar seus dados, trocar o apelido ou excluir a conta quando quiser, direto no app.',
-    'A caixa “Reportar problema” é anônima: guardamos só a categoria, a tela e o texto, por 180 dias.',
+    'A caixa “Reportar problema” não pede nome nem e-mail: guardamos só a categoria, a tela e o texto, por 180 dias.',
     'Como em todo site, a hospedagem registra dados técnicos de acesso, como o endereço IP.',
     'Não vendemos dados, não exibimos publicidade e não usamos cookies de rastreamento nem ferramentas de análise de audiência.'
   ],
@@ -92,7 +92,7 @@ export const PRIVACY_POLICY: LegalDocument = {
         'Busca de músicas: o termo pesquisado e a música que você abre são repassados ao provedor externo de tablaturas.',
         'Ranking (opcional, para maiores de 18 anos): apelido, ID aleatório da conta, pontuações e datas, detalhados em “Ranking: o que guardamos”.',
         'Sala online em dupla (opcional, para maiores de 18 anos): apelido e placar ao vivo, repassados ao seu parceiro sem serem gravados, e o registro temporário da sua vaga na sala (código da sala, ID pseudônimo e horário de entrada).',
-        'Relatos de problemas: se você usar a caixa “Reportar problema”, guardamos a categoria, a tela em que você estava e o texto que escreveu. Não pedimos nome nem e-mail, e o relato não fica ligado à sua conta nem ao seu endereço IP. Evite escrever dados pessoais no texto.',
+        'Relatos de problemas: se você usar a caixa “Reportar problema”, guardamos a categoria, a tela em que você estava e o texto que escreveu, sem nome, e-mail, conta ou endereço IP. O envio passa pelos registros técnicos de acesso do Supabase, como qualquer pedido. Evite escrever dados pessoais no texto.',
         'Contato por e-mail: se você escrever para nós, recebemos seu endereço de e-mail e o que você contar na mensagem.'
       ]
     },
@@ -230,7 +230,7 @@ export const PRIVACY_POLICY: LegalDocument = {
         'Revisão de decisões automatizadas: se uma pontuação ou um apelido seu for recusado automaticamente, você pode pedir que a decisão seja revista.',
         'Anonimização, bloqueio ou eliminação de dados desnecessários, excessivos ou tratados em desacordo com a LGPD.',
         'Oposição a tratamentos feitos com base no legítimo interesse, se eles não cumprirem a LGPD.',
-        'Relatos de problemas: como não ficam ligados a você, só conseguimos achar um relato para apagá-lo se você nos contar o que escreveu.'
+        'Relatos de problemas: como são guardados sem identificar você, só conseguimos achar um relato para apagá-lo se você nos contar o que escreveu.'
       ]
     },
     {

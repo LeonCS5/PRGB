@@ -1,5 +1,5 @@
-// Problem reports: one RPC under the public key, so reporting takes no account and no consent. What reaches
-// the server is the category, the screen and the text, nothing that ties them to a person.
+// Problem reports: one RPC under the public key, so reporting takes no account and no consent. What is stored
+// is the category, the screen and the text, nothing that ties them to a person.
 
 import { getSupabaseClient } from './supabaseClient';
 
