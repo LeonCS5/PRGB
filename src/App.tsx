@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import React, { useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   Music,
   Play,
@@ -52,6 +52,7 @@ import { DEFAULT_PLAYER_NAMES, nextSessionKey, type GamePart, type GameSession, 
 import { RankingProvider } from './context/RankingProvider';
 import { RoomProvider } from './context/RoomProvider';
 import { useRanking } from './context/ranking';
+import { useRoom } from './context/useRoom';
 
 const supportUrl = import.meta.env.VITE_SUPPORT_URL?.trim();
 const supportHref = supportUrl || 'https://github.com/LeonCS5/PRGB';
@@ -137,6 +138,9 @@ const clearChallengeParam = () => {
   window.history.replaceState(null, '', url.pathname + url.search + url.hash);
 };
 
+// An entry in the browser's history marks each screen above the landing, so going back leaves the game and not the site
+const isScreenEntry = (): boolean => (window.history.state as { prgbScreen?: boolean } | null)?.prgbScreen === true;
+
 const LandingPitch: React.FC = () => {
   const latestPitch = useLatestPitch();
   if (!latestPitch) return null;
@@ -194,6 +198,7 @@ const AppContent: React.FC = () => {
     setFeedbackOpen: setIsFeedbackOpen
   } = useModals();
   const { isConfigured: isRankingOn, hasAccount, openAccount, openLeaderboard } = useRanking();
+  const { leaveRoom } = useRoom();
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [isFreePlayOpen, setIsFreePlayOpen] = useState(false);
   const [onlineSession, setOnlineSession] = useState<{ part: GamePart; partnerName: string; startAtMs: number; sessionKey: number } | null>(null);
@@ -249,6 +254,22 @@ const AppContent: React.FC = () => {
     return () => { cancelled = true; };
   }, [savedSong, restoreAttempt, openedWithChallenge, openedOnLegalPage, devScene]);
 
+  const screen = onlineSession ? 'sala' : isFreePlayOpen ? 'play_free' : session ? 'jogo' : 'inicio';
+  const isOnScreen = screen !== 'inicio';
+  const wasOnScreen = useRef(false);
+
+  useEffect(() => {
+    if (isOnScreen && !isScreenEntry()) {
+      // Whatever the address carried (?demo) belongs to the screen, so the landing's own entry drops it
+      const address = window.location.href;
+      window.history.replaceState(window.history.state, '', window.location.pathname + window.location.hash);
+      window.history.pushState({ prgbScreen: true }, '', address);
+    } else if (!isOnScreen && wasOnScreen.current && isScreenEntry()) {
+      window.history.back(); // closed by a button: the entry would turn into a back press that does nothing
+    }
+    wasOnScreen.current = isOnScreen;
+  }, [isOnScreen]);
+
   // Duo is a session mode: leaving it restores the input channel saved in the preferences
   const soloChannelMode = () => channelMode === 'duo' ? readPreferences().channelMode : channelMode;
 
@@ -267,6 +288,32 @@ const AppContent: React.FC = () => {
     setDuoSearchNames(null);
     setSession(duoSession(parts, names));
   };
+
+  const leaveGame = () => {
+    songSelectionVersion.current += 1;
+    if (session?.mode === 'duo') exitDuoAudio();
+    setSession(null);
+  };
+
+  const closeScreen = useEffectEvent(() => {
+    if (onlineSession) {
+      void leaveRoom();
+      setOnlineSession(null);
+    } else if (isFreePlayOpen) {
+      setIsFreePlayOpen(false);
+    } else {
+      leaveGame();
+    }
+  });
+
+  useEffect(() => {
+    if (!isOnScreen) return;
+    const onPopState = () => {
+      if (!isScreenEntry()) closeScreen();
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, [isOnScreen]);
 
   const handleOpenFreePlay = () => {
     songSelectionVersion.current += 1;
@@ -423,12 +470,7 @@ const AppContent: React.FC = () => {
             playerNames={session.mode === 'duo' ? session.names : null}
             challenge={session.mode === 'solo' ? session.challenge : null}
             devPreset={import.meta.env.DEV && devScene && session.key === devSessionKey ? gameDevPreset(devScene, Math.max(...sessionParts.map((part) => part.tab.totalDurationMs))) : null}
-            onExit={() => {
-              songSelectionVersion.current += 1;
-              if (session.mode === 'duo') exitDuoAudio();
-              setSession(null);
-              window.history.replaceState(null, '', window.location.pathname + window.location.hash);
-            }}
+            onExit={leaveGame}
             onOpenSearch={() => {
               setDuoSearchNames(session.mode === 'duo' ? session.names : null);
               setIsSearchOpen(true);
@@ -598,8 +640,7 @@ const AppContent: React.FC = () => {
         </div>
       )}
 
-      <FeedbackModal isOpen={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)}
-        screen={onlineSession ? 'sala' : isFreePlayOpen ? 'play_free' : session ? 'jogo' : 'inicio'} />
+      <FeedbackModal isOpen={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)} screen={screen} />
 
       {/* Song Search Modal */}
       <SongSearchModal
