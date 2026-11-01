@@ -193,6 +193,16 @@ describe('readPreferences lastSong validation', () => {
     expect(readPreferences().lastSong).toBeNull();
   });
 
+  it('keeps the title shown on the landing', () => {
+    ls.setItem(STORAGE_KEY, JSON.stringify({ lastSong: { songId: 1, partId: 0, title: 'Minha música' } }));
+    expect(readPreferences().lastSong).toEqual({ songId: 1, partId: 0, title: 'Minha música' });
+  });
+
+  it('discards lastSong when the title is not text, since it goes straight to the page', () => {
+    ls.setItem(STORAGE_KEY, JSON.stringify({ lastSong: { songId: 1, partId: 0, title: { html: 'x' } } }));
+    expect(readPreferences().lastSong).toBeNull();
+  });
+
   it('discards lastSong when it is not an object', () => {
     ls.setItem(STORAGE_KEY, JSON.stringify({ lastSong: 42 }));
     expect(readPreferences().lastSong).toBeNull();

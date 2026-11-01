@@ -9,6 +9,7 @@ import {
   Guitar,
   Heart,
   Headphones,
+  History,
   PlugZap,
   Target,
   UserRound,
@@ -47,7 +48,7 @@ import { FeedbackModal } from './components/FeedbackModal';
 import { StorageNotice } from './components/StorageNotice';
 import { LEGAL_CONTACT } from './content/legal';
 import { AudioChip, HeaderNav, TabBar } from './components/SiteNav';
-import { readPreferences, savePreferences } from './context/preferences';
+import { readPreferences, savePreferences, type SavedSong } from './context/preferences';
 import { DEFAULT_PLAYER_NAMES, nextSessionKey, type GamePart, type GameSession, type RankedStart, type SoloSession } from './context/gameSession';
 import { RankingProvider } from './context/RankingProvider';
 import { RoomProvider } from './context/RoomProvider';
@@ -210,18 +211,16 @@ const AppContent: React.FC = () => {
   const [isDuoSetupOpen, setIsDuoSetupOpen] = useState(() => devScene === 'dupla-assistente');
   // Player names while the duo picks a song in the search modal (it's in duo mode while set)
   const [duoSearchNames, setDuoSearchNames] = useState<[string, string] | null>(null);
-  const [savedSong] = useState(() => readPreferences().lastSong);
+  const [savedSong, setSavedSong] = useState(() => readPreferences().lastSong);
+  const [isRestoring, setIsRestoring] = useState(false);
   const [restoreError, setRestoreError] = useState<string | null>(null);
-  const [restoreAttempt, setRestoreAttempt] = useState(0);
   const [pendingChallenge, setPendingChallenge] = useState<Challenge | null>(readValidChallenge);
-  const [openedWithChallenge] = useState(() => pendingChallenge !== null);
   const [isLoadingChallenge, setIsLoadingChallenge] = useState(false);
   const [showClearedNotice, setShowClearedNotice] = useState(localDataWasCleared);
   const [challengeError, setChallengeError] = useState<string | null>(null);
   const songSelectionVersion = useRef(0);
   const hash = useSyncExternalStore(subscribeToHash, readHash);
   const legalRoute = useMemo(() => resolveLegalRoute(hash), [hash]);
-  const [openedOnLegalPage] = useState(() => legalRoute !== null);
 
   const sessionParts = useMemo<GamePart[]>(
     () => !session ? [] : session.mode === 'solo' ? [session.part] : session.parts,
@@ -231,29 +230,6 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     sessionParts.forEach((part, player) => audioEngine.setTuning(part.tab.tuning, player === 0 ? 0 : 1));
   }, [sessionParts, audioEngine]);
-
-  useEffect(() => {
-    // A challenge link opens on the landing card instead of jumping into the last song, and a legal page
-    // (the consent form opens them in a new tab) stays on screen while it is being read
-    if (!savedSong || savedSong.songId === DEMO_SONG_ID || openedWithChallenge || openedOnLegalPage || devScene || new URLSearchParams(window.location.search).has('demo')) return;
-    let cancelled = false;
-    const version = songSelectionVersion.current;
-    const restoreSong = async () => {
-      try {
-        const meta = await getSongMetadata(savedSong.songId);
-        const trackIndex = meta.tracks.findIndex((track) => track.partId === savedSong.partId);
-        if (trackIndex < 0) throw new Error('A faixa salva não está mais disponível.');
-        const normalized = await loadSongTrack(meta, trackIndex);
-        if (!cancelled && version === songSelectionVersion.current) setSession(soloSession({ tab: normalized, partId: savedSong.partId, revisionId: meta.revisionId }));
-      } catch (err) {
-        if (!cancelled && version === songSelectionVersion.current) {
-          setRestoreError(`Não foi possível restaurar a última música. ${err instanceof Error ? err.message : 'Busque uma música para continuar.'}`);
-        }
-      }
-    };
-    void restoreSong();
-    return () => { cancelled = true; };
-  }, [savedSong, restoreAttempt, openedWithChallenge, openedOnLegalPage, devScene]);
 
   const screen = onlineSession ? 'sala' : isFreePlayOpen ? 'play_free' : session ? 'jogo' : 'inicio';
   const isOnScreen = screen !== 'inicio';
@@ -288,6 +264,11 @@ const AppContent: React.FC = () => {
     setRestoreError(null);
     setDuoSearchNames(null);
     setSession(duoSession(parts, names));
+  };
+
+  const rememberSong = (song: SavedSong) => {
+    savePreferences({ lastSong: song });
+    setSavedSong(song);
   };
 
   const leaveGame = () => {
@@ -339,6 +320,28 @@ const AppContent: React.FC = () => {
     openLeaderboard({ songId: DEMO_SONG_ID, partId: 0, title, trackName });
   };
 
+  const handleContinue = async () => {
+    if (!savedSong) return;
+    songSelectionVersion.current += 1;
+    const version = songSelectionVersion.current;
+    setRestoreError(null);
+    setIsRestoring(true);
+    ensureSoloAudio();
+    try {
+      const meta = await getSongMetadata(savedSong.songId);
+      const trackIndex = meta.tracks.findIndex((track) => track.partId === savedSong.partId);
+      if (trackIndex < 0) throw new Error('A faixa salva não está mais disponível.');
+      const normalized = await loadSongTrack(meta, trackIndex);
+      if (version === songSelectionVersion.current) setSession(soloSession({ tab: normalized, partId: savedSong.partId, revisionId: meta.revisionId }));
+    } catch (err) {
+      if (version === songSelectionVersion.current) {
+        setRestoreError(`Não foi possível abrir a última música. ${err instanceof Error ? err.message : 'Busque uma música para continuar.'}`);
+      }
+    } finally {
+      setIsRestoring(false);
+    }
+  };
+
   const handleLoadDemo = () => {
     songSelectionVersion.current += 1;
     setRestoreError(null);
@@ -367,7 +370,7 @@ const AppContent: React.FC = () => {
       if (version !== songSelectionVersion.current) return;
       setPendingChallenge(null);
       setSession(soloSession(part, challenge));
-      if (part.tab.songId !== DEMO_SONG_ID) savePreferences({ lastSong: { songId: part.tab.songId, partId: part.partId } });
+      if (part.tab.songId !== DEMO_SONG_ID) rememberSong({ songId: part.tab.songId, partId: part.partId, title: part.tab.title });
     } catch (err) {
       if (version === songSelectionVersion.current) {
         setChallengeError(err instanceof Error ? err.message : 'Não foi possível carregar a música do desafio.');
@@ -427,10 +430,7 @@ const AppContent: React.FC = () => {
         )}
         {restoreError && (
           <ErrorNotice message={restoreError} onDismiss={() => setRestoreError(null)}
-            actionLabel="Tentar novamente" onAction={() => {
-              setRestoreError(null);
-              setRestoreAttempt((attempt) => attempt + 1);
-            }} />
+            actionLabel="Tentar novamente" actionDisabled={isRestoring} onAction={() => void handleContinue()} />
         )}
         {showClearedNotice && (
           <div role="status" className="flex items-center gap-3 rounded-2xl border border-hit/40 bg-ink-900 p-4 text-sm text-ink-100 shadow-panel">
@@ -543,6 +543,14 @@ const AppContent: React.FC = () => {
                       <Music size={18} aria-hidden="true" /> Buscar música
                     </button>
                   </div>
+                  {savedSong && (
+                    <button type="button" onClick={() => void handleContinue()} disabled={isRestoring}
+                      className="mt-3 flex min-h-14 w-full max-w-lg cursor-pointer items-center gap-3 rounded-xl border border-amp-500/30 bg-amp-500/5 px-4 py-2 text-left transition hover:bg-amp-500/10 disabled:cursor-wait disabled:opacity-70">
+                      <History size={18} className="shrink-0 text-amp-300" aria-hidden="true" />
+                      <span className="min-w-0 flex-1"><span className="block text-sm font-bold">{isRestoring ? 'Abrindo…' : 'Continuar'}</span><span className="block truncate text-xs text-ink-300">{savedSong.title ?? 'Sua última música'}</span></span>
+                      <ArrowRight size={16} className="shrink-0 text-amp-300" aria-hidden="true" />
+                    </button>
+                  )}
                   <p className="mt-4 flex items-center gap-2 text-xs text-ink-300"><Check size={14} className="text-hit" aria-hidden="true" /> Sem cadastro para tocar. O ranking é opcional.</p>
                 </div>
                 <div className="hidden min-w-0 lg:block"><PracticePreview /></div>
@@ -674,7 +682,7 @@ const AppContent: React.FC = () => {
           setRestoreError(null);
           ensureSoloAudio();
           setSession(soloSession({ tab, partId: song.partId, revisionId }));
-          if (song.songId !== DEMO_SONG_ID) savePreferences({ lastSong: song });
+          if (song.songId !== DEMO_SONG_ID) rememberSong({ ...song, title: tab.title });
         }}
       />
 

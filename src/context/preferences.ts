@@ -6,6 +6,7 @@ import { AMP_PRESETS, type AmpSettings } from '../services/ampEngine';
 export interface SavedSong {
   songId: number;
   partId: number;
+  title?: string; // shown on the landing; songs saved by older versions don't have it
 }
 
 export interface Preferences {
@@ -49,7 +50,8 @@ const readNickname = (value: unknown): string | null => {
 const isSavedSong = (value: unknown): value is SavedSong =>
   isRecord(value) && inRange(value.songId, 1, Number.MAX_SAFE_INTEGER)
   && Number.isInteger(value.songId) && inRange(value.partId, 0, Number.MAX_SAFE_INTEGER)
-  && Number.isInteger(value.partId);
+  && Number.isInteger(value.partId)
+  && (value.title === undefined || typeof value.title === 'string');
 
 export const readPreferences = (): Preferences => {
   const defaults: Preferences = { deviceId: '', inputChosen: false, outputDeviceId: '', audioOptions: DEFAULT_AUDIO_OPTIONS, channelMode: 'ch1', ampEngine: null, lastSong: null, nickname: null };
