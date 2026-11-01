@@ -40,8 +40,11 @@ interface Scene {
   noteHeight: number;
 }
 
-const Reading: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
-  <div className="min-w-0 rounded-xl border border-ink-700 bg-ink-900 px-3 py-2">
+// A phone on its side has no height for two rows of readings and the lane
+const SPARE_READING = '[@media(max-height:500px)]:hidden';
+
+const Reading: React.FC<{ label: string; className?: string; children: React.ReactNode }> = ({ label, className = '', children }) => (
+  <div className={`min-w-0 rounded-xl border border-ink-700 bg-ink-900 px-3 py-2 ${className}`}>
     <p className="text-[10px] tracking-wider text-ink-300">{label}</p>
     {/* Room for two lines on a phone: a header that changes height with each note would resize the canvas */}
     <div className="mt-0.5 min-h-10 break-words font-mono text-sm font-bold text-ink-100 sm:min-h-0">{children}</div>
@@ -199,7 +202,7 @@ export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings,
             <p className="text-[10px] tracking-wider text-ink-300">NOTA</p>
             <p className="font-display text-4xl font-bold text-signal-300 sm:text-6xl [@media(max-height:500px)]:text-2xl">{pitch ? pitch.noteName : '--'}</p>
           </div>
-          <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6 [@media(max-height:500px)]:grid-cols-4">
             <Reading label="FREQUÊNCIA">{pitch ? `${pitch.frequency.toFixed(1)} Hz` : '--'}</Reading>
             <Reading label="AFINAÇÃO">
               {pitch
@@ -208,8 +211,8 @@ export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings,
             </Reading>
             <Reading label="POSIÇÃO"><span className="text-xs sm:whitespace-nowrap sm:text-[11px]">{pitch ? position : '--'}</span></Reading>
             <Reading label="ENTRADA"><InputLevelMeter /></Reading>
-            <Reading label="CLAREZA">{pitch ? `${Math.round(pitch.clarity * 100)}%` : '--'}</Reading>
-            <Reading label="NOTAS"><span className="text-amp-300">{total}</span></Reading>
+            <Reading label="CLAREZA" className={SPARE_READING}>{pitch ? `${Math.round(pitch.clarity * 100)}%` : '--'}</Reading>
+            <Reading label="NOTAS" className={SPARE_READING}><span className="text-amp-300">{total}</span></Reading>
           </div>
         </div>
         {audioError && <div className="mt-2"><ErrorNotice message={audioError} onDismiss={dismissAudioError} /></div>}
