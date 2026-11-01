@@ -317,21 +317,21 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 - [x] **Sem testes** — Vitest nos services; cada correção tem teste que falha no código anterior (@claude)
 - [x] **Sem PWA/offline** — manifest + service worker do app shell gerado no build; tablaturas nunca vão para o cache (@codex, aprovado por @claude; não testado offline num navegador real)
 
-### Rodada 4 — ranking Supabase (concluída em `claude/fase2-base`, sem merge em `main`)
+### Rodada 4 — ranking Supabase (concluída, em `main`)
 - [x] **Ranking online** — `supabase/migrations/` (ranking, retention, reaccept_terms), `src/services/backend/rankingApi.ts`, `src/services/backend/supabaseClient.ts`, `src/services/scoring.ts`, `src/services/records.ts`, `src/services/nickname.ts`, `src/context/rankedRun.ts`, `src/context/ranking.ts`, `src/context/RankingProvider.tsx`, componentes de ranking (@claude/@codex)
 - [x] **Edge Function register-part** — conta notas do lado do servidor para limitar scores; `supabase/functions/register-part/` (@claude)
 - [x] **LGPD** — `src/content/legal.ts`, `src/context/localData.ts`, `src/context/legalRoute.ts`, `src/components/LegalPage.tsx`, `src/components/LocalDataControls.tsx`, `src/components/DeleteAccountConfirm.tsx` (@claude/@codex)
 - [x] **Desafios** — `src/services/challenge.ts`, `src/components/ChallengeCard.tsx`, `src/components/ChallengeSharePanel.tsx` (@claude/@codex)
 
-### Rodada 5 — dupla online (concluída em `claude/fase2-base`, sem merge em `main`)
+### Rodada 5 — dupla online (concluída, em `main`)
 - [x] **Serviço das salas** — `src/services/backend/roomChannel.ts`, migrations `room_realtime` e `room_data_export`; testado no Supabase real por script, com duas contas: vagas, canal privado, presença, mensagens e saída do anfitrião (@codex, @claude)
 - [x] **Interface da dupla online** — `RoomModal`, `RoomProvider`, `room.ts` (estado puro, com testes), `OnlinePracticeGame`, `OnlineHud`, `OnlineResultPanel`: lobby, escolha de faixa, início no mesmo relógio, placar da equipe e revanche. Partida online nunca vale para o ranking (@bob, revisada e corrigida por @claude; testada no Supabase real com dois navegadores e microfone sintético)
 - [ ] **Alinhar histórico de migrations** — a migration `room_realtime` foi aplicada manualmente pelo SQL Editor fora do histórico do CLI Supabase; precisa reconciliar antes do próximo `supabase db push` (@claude)
 
-### Rodada 6 — Play Free (concluída em `claude/fase2-base`, sem merge em `main`)
+### Rodada 6 — Play Free (concluída, em `main`)
 - [x] **Play Free** — modo livre, sem música nem pontuação: mostra nota, frequência, afinação, corda, casa, nível e clareza, e o histórico nas seis cordas; serve também para testar a entrada de áudio (@bob, revisado e corrigido por @claude; testado no navegador com microfone sintético, não com guitarra)
 
-### Rodada 7 — entrada e saída de áudio e relatos
+### Rodada 7 — entrada e saída de áudio e relatos (concluída, em `main`)
 - [x] **Rota de áudio** — sai sozinho do microfone do PC, saída escolhida com `setSinkId`, medidor em dB. Interfaces USB podem devolver a saída para a própria entrada: antes de abrir o monitor no mesmo aparelho, um tom de -40 dBFS testa o retorno. **Não reproduza esse laço em teste**: ele satura a saída da interface (@claude; validado no hardware real, sem guitarra tocando)
 - [x] **Caixa de reportar problemas** — RPC `submit_feedback` com a chave pública, sem conta nem consentimento; guarda categoria, tela e texto, limite de 60 por hora para todos, apagados em 180 dias. Os relatos são lidos na tabela `feedback`, no painel do Supabase (@claude)
 
