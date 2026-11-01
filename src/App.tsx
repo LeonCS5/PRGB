@@ -57,6 +57,7 @@ import { useRoom } from './context/useRoom';
 const supportUrl = import.meta.env.VITE_SUPPORT_URL?.trim();
 const supportHref = supportUrl || 'https://github.com/LeonCS5/PRGB';
 const supportLabel = supportUrl ? 'Apoie o projeto' : 'Apoie com uma estrela no GitHub';
+const SITE_TITLE = 'PRGB · Toque guitarra de verdade no navegador'; // same as index.html
 const currentYear = new Date().getFullYear();
 // Read once per page load (erasing local data reloads the page to confirm it here)
 const localDataWasCleared = consumeLocalDataCleared();
@@ -409,8 +410,11 @@ const AppContent: React.FC = () => {
     onRanking: isRankingOn ? handleOpenRanking : null
   };
 
+  const pageName = onlineSession ? 'Dupla online' : isFreePlayOpen ? 'Play Free' : session ? sessionParts[0].tab.title : legalRoute?.document.title;
+
   return (
     <div className="h-dvh w-full overflow-hidden bg-ink-950 font-sans text-ink-100">
+      <title>{pageName ? `${pageName} · PRGB` : SITE_TITLE}</title>
       <div className="fixed inset-x-4 top-4 z-[100] mx-auto max-h-[50vh] max-w-xl space-y-3 overflow-y-auto">
         {audioError && (
           <ErrorNotice message={audioError} onDismiss={dismissAudioError}
