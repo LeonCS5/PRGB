@@ -11,15 +11,13 @@ export interface BackendConfig {
 // Session storage key, created only once the player signs in to the ranking (after consenting)
 export const AUTH_STORAGE_KEY = 'prgb:auth';
 
-// Read by name, so the keys declared in ImportMetaEnv (src/vite-env.d.ts) don't apply: check the value here
-const readEnv = (name: string): string | undefined => {
-  const value: unknown = (import.meta.env as Record<string, unknown>)[name];
-  return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
-};
+const cleanEnv = (value: string | undefined): string | undefined => value?.trim() || undefined;
 
 export function getBackendConfig(): BackendConfig | null {
-  const url = readEnv('VITE_SUPABASE_URL');
-  const anonKey = readEnv('VITE_SUPABASE_ANON_KEY');
+  // Each one by its full name, so the build inlines just these. Reading the env object itself would put
+  // every VITE_ variable of the build machine in the public bundle, the host's deploy data included.
+  const url = cleanEnv(import.meta.env.VITE_SUPABASE_URL);
+  const anonKey = cleanEnv(import.meta.env.VITE_SUPABASE_ANON_KEY);
   return url && anonKey ? { url, anonKey } : null;
 }
 

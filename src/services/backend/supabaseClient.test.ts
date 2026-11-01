@@ -29,6 +29,15 @@ describe('isBackendConfigured', () => {
   });
 });
 
+describe('public bundle', () => {
+  it('names every variable it reads: reading the object would publish the whole build environment', () => {
+    const sources = import.meta.glob<string>(['/src/**/*.{ts,tsx}', '!/src/**/*.test.*', '!/src/vendor/**'], { query: '?raw', import: 'default', eager: true });
+    const offenders = Object.keys(sources).filter((path) => /import\.meta\.env(?!\.\w)/.test(sources[path]));
+    expect(Object.keys(sources).length).toBeGreaterThan(20);
+    expect(offenders).toEqual([]);
+  });
+});
+
 describe('getSupabaseClient', () => {
   it('is null without configuration and never loads supabase-js', async () => {
     vi.stubEnv('VITE_SUPABASE_URL', '');
