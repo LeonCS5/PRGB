@@ -18,7 +18,8 @@ export const GameMoreSheet: React.FC<GameMoreSheetProps> = ({ children }) => {
   useEffect(() => {
     if (!isOpen) return;
     // Restore focus after the dialog leaves the DOM, before another modal opens.
-    return () => triggerRef.current?.focus();
+    const trigger = triggerRef.current;
+    return () => trigger?.focus();
   }, [isOpen]);
 
   useEffect(() => {
@@ -36,7 +37,7 @@ export const GameMoreSheet: React.FC<GameMoreSheetProps> = ({ children }) => {
 
   return (
     <>
-      <button ref={triggerRef} type="button" aria-haspopup="dialog" aria-expanded={isOpen} onClick={() => setIsOpen(true)}
+      <button ref={triggerRef} type="button" aria-label="Mais opções" aria-haspopup="dialog" aria-expanded={isOpen} onClick={() => setIsOpen(true)}
         className="flex min-h-11 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-700 bg-ink-800 px-3 text-xs font-semibold text-ink-200 transition hover:border-ink-500">
         <MoreHorizontal size={16} aria-hidden="true" /> Mais
       </button>
