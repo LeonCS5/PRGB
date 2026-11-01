@@ -5,22 +5,23 @@ export interface ModalFrameProps {
   titleId: string;
   onClose: () => void;
   className?: string;
+  selfOpened?: boolean; // opens with no click behind it, so it can't own a history entry (see historyLayers.ts)
   children: React.ReactNode;
 }
 
-export const ModalFrame: React.FC<ModalFrameProps> = ({ titleId, onClose, className = '', children }) => {
+export const ModalFrame: React.FC<ModalFrameProps> = ({ titleId, onClose, className = '', selfOpened = false, children }) => {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const requestClose = useEffectEvent(onClose);
   useEffect(() => {
     const dialog = dialogRef.current;
     dialog?.showModal();
     dialog?.focus();
-    const dropLayer = openModalLayer(() => requestClose());
+    const dropLayer = selfOpened ? null : openModalLayer(() => requestClose());
     return () => {
-      dropLayer();
+      dropLayer?.();
       dialog?.close();
     };
-  }, []);
+  }, [selfOpened]);
 
   return (
     <dialog ref={dialogRef} aria-labelledby={titleId} tabIndex={-1}

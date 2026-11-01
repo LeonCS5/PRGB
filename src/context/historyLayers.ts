@@ -1,7 +1,8 @@
 // The browser's back button closes what the player sees, one layer at a time, instead of leaving the site.
 // Each open layer (the screen above the landing, then each modal over it) owns one history entry, created
-// when it opens. Never add an entry in reaction to going back: Chromium marks entries added without a user
-// gesture so its back button skips them, and the next press would leave the site.
+// when it opens. An entry needs a user gesture: when a page adds one without it, Chromium's back button skips
+// every entry of that page, and gestures from before a back press stop counting. So nothing here adds an
+// entry in reaction to going back, and modals that open by themselves stay out (selfOpened in ModalFrame).
 
 type Close = () => void;
 

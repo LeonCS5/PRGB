@@ -799,7 +799,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
           </div>
         )}
       </footer>
-      {runSummary && <ModalFrame titleId="practice-result" onClose={() => resetRun(false)} className={(isDuo ? 'max-w-xl' : 'max-w-md') + ' overflow-y-auto text-center'}>
+      {runSummary && <ModalFrame titleId="practice-result" onClose={() => resetRun(false)} selfOpened className={(isDuo ? 'max-w-xl' : 'max-w-md') + ' overflow-y-auto text-center'}>
         <ResultPanel titleId="practice-result" summary={runSummary} parts={lanes.map((lane) => lane.part)} names={isDuo ? names : null}
           challenge={challenge} initialShareOpen={devPreset?.shareOpen} ranked={ranked.submission} onRetryRanked={ranked.controller.retrySubmission}
           onPlayAgain={restartRun} onChooseSong={() => { resetRun(false); onOpenSearch(); }} />

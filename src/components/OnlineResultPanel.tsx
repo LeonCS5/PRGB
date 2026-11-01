@@ -35,7 +35,7 @@ export const OnlineResultPanel: React.FC<OnlineResultPanelProps> = ({
   const titleId = useId();
 
   return (
-    <ModalFrame titleId={titleId} onClose={isRoomActive ? onBackToRoom : onExit} className="max-w-md overflow-y-auto text-center">
+    <ModalFrame titleId={titleId} onClose={isRoomActive ? onBackToRoom : onExit} selfOpened className="max-w-md overflow-y-auto text-center">
       <h2 id={titleId} className="mb-5 font-display text-2xl font-bold">Resultado da dupla</h2>
 
       <div className="mb-5 grid grid-cols-2 gap-3">
