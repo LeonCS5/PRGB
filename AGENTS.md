@@ -88,6 +88,7 @@ PRGB/
 │   │   ├── ErrorNotice.tsx          # Aviso de erro dispensável com ação (role="alert")
 │   │   ├── FreePlay.tsx             # Play Free: só escuta a guitarra e mostra as notas, sem música nem pontos
 │   │   ├── GameHud.tsx              # HUD do jogo: score, combo, accuracy, indicadores de run ranqueado
+│   │   ├── GameMoreSheet.tsx        # Folha "Mais" do jogo no celular; em telas largas só repassa os controles
 │   │   ├── LeaderboardModal.tsx     # Modal do placar online (semanal + all-time)
 │   │   ├── LegalPage.tsx            # Renderizador das páginas legais (Privacidade / Termos)
 │   │   ├── LocalDataControls.tsx    # Controles de exportar/apagar dados locais e sessão de ranking
@@ -102,6 +103,7 @@ PRGB/
 │   │   ├── RankingEntryModal.tsx    # Modal de entrada no ranking (consentimento 18+, criar/atualizar perfil)
 │   │   ├── RankingModals.tsx        # Orquestrador dos modais de ranking (entry, account, leaderboard)
 │   │   ├── ResultPanel.tsx          # Painel de resultado após o fim de uma música
+│   │   ├── SiteNav.tsx              # Menu superior, estado do áudio e barra de abas do celular
 │   │   ├── SongSearchModal.tsx      # Modal: busca no acervo + seleção de faixa
 │   │   └── AmpRack.tsx      # Modal: rack completo do amp modeler
 │   │
@@ -357,13 +359,23 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 - [x] **Som neural** — modelos .nam e IR do jogador, sem incluir modelos; WaveNet padrão usa ~30% de um núcleo deste PC (@claude; testado com modelos sintéticos, não com um .nam real)
 - [x] **Build sem avisos do projeto** — o worklet e o wasm do motor ficam ao lado do módulo, fora do precache, e o React vai num chunk próprio. O aviso `cache-dir` vem do ambiente da Vercel, não do repositório (@claude)
 
+### Rodada 9 — navegação (concluída, em `main`)
+- [x] **Menu e abas** — Tocar, Músicas, Modos, Áudio e Ranking sempre à mão; o estado do áudio é um botão que abre o painel. Abaixo de 1024 px vira barra de abas (@claude; testado em 320, 390, 768, 1024 e 1440 px)
+- [x] **Landing** — duas ações no topo, modos e preparo da guitarra logo abaixo, aviso de armazenamento no fluxo da página, sem cobrir botões (@claude)
+- [x] **Botão Voltar do navegador** — jogo, dupla, sala e Play Free têm entrada própria no histórico; Voltar fecha a tela em vez de sair do site. Título da aba por tela (@claude; testado no Edge e no Firefox, sala online só por leitura do código)
+- [x] **Continuar** — quem volta ao site vê a landing com um cartão da última música, em vez de cair direto no jogo. Abrir o site não chama mais o provedor de tablaturas (@claude)
+- [x] **Ranking visível** — o menu abre o placar do exercício, sem conta (@claude)
+- [x] **Painel de Áudio** — diagnóstico primeiro, duas colunas, ajustes avançados recolhidos (@claude; testado com microfone sintético, não com a interface real)
+- [x] **Jogo e Play Free no celular** — sem rolagem lateral, folha "Mais", seta de voltar e pista com pelo menos 45% da tela (@codex, revisado por @claude)
+
 ### Pendências conhecidas (sem dono)
 - [ ] **Permissão do provedor de tablaturas** — os termos dele proíbem transmitir, reutilizar e baixar o conteúdo sem autorização escrita. É o maior risco legal do projeto; depende de decisão do humano.
 - [ ] **Dupla online com guitarras de verdade** — testada de ponta a ponta no Supabase real com dois navegadores, contas temporárias e microfone sintético (partida, revanche com troca de música, queda e volta, saída do anfitrião, exportação e exclusão de conta) e o ranking com uma partida real aceita pelo servidor, mas nunca por duas pessoas com guitarra. Falta também o caso de sala cheia (`room_full`), que exige uma terceira conta.
 - [ ] **Revisões diferentes da mesma faixa na dupla** — o convidado carrega a revisão atual da tab, sem conferir a anunciada pelo anfitrião. Decisão: não corrigir por ora; é raro e a partida não vale para o ranking.
 - [ ] **Teste com interface de áudio real** — o humano ouviu a guitarra no Firefox com a rota nova, antes das correções finais. Falta validar a versão publicada, a latência, clicks na troca de device, afinador e scoring tocando de verdade, e um arquivo `.nam` real.
 - [ ] **`setCurrentTimeMs` a cada frame** — o `PracticeGame` ainda re-renderiza ~60×/s enquanto toca (posição da música em state). Mover para ref exige mexer no scoring; deixado de fora para não alterar comportamento.
-- [ ] **Sem router** — SPA sem rotas; se crescer, avaliar react-router.
+- [ ] **Sem router** — SPA sem rotas: só as telas de jogo têm entrada no histórico; se crescer, avaliar react-router.
+- [ ] **Voltar com um modal aberto** — o botão Voltar fecha a tela do jogo, não o modal que está por cima dela, e o modal continua aberto na landing.
 
 ### Concluídos
 - [x] **App.css é lixo** — removido

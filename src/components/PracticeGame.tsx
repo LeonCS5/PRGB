@@ -1,5 +1,6 @@
 import React, { useEffect, useId, useRef, useState, useEffectEvent, useMemo } from 'react';
 import {
+  ArrowLeft,
   Play,
   Pause,
   RotateCcw,
@@ -15,6 +16,7 @@ import {
   MessageSquareWarning
 } from 'lucide-react';
 import { BrandMark } from './BrandMark';
+import { GameMoreSheet } from './GameMoreSheet';
 import { ModalFrame } from './ModalFrame';
 import { DuoHud, LiveTuner, SoloHud } from './GameHud';
 import { ResultPanel } from './ResultPanel';
@@ -730,7 +732,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   };
 
   const { setFeedbackOpen } = useModals();
-  const toolClass = 'flex min-h-10 min-w-10 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-700 bg-ink-800 px-3 text-xs font-semibold text-ink-200 transition hover:border-ink-500 disabled:cursor-not-allowed disabled:opacity-50';
+  const toolClass = 'flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-700 bg-ink-800 px-3 text-xs font-semibold text-ink-200 transition hover:border-ink-500 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-10 sm:min-w-10';
   const lockedHint = isOnline ? 'Na dupla online a música segue sem pausa, em 1×.' : ranked.isOn ? 'Partidas ranqueadas valem só em 1× e sem saltos.' : undefined;
   const lockedHelp = ranked.isOn ? rankedHelpId : undefined;
   const duoParts = isDuo
@@ -741,7 +743,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     <div className="flex h-dvh w-full flex-col overflow-hidden bg-ink-950 text-ink-100 select-none">
       <header className="shrink-0 border-b border-ink-700 bg-ink-900 px-4 py-3 sm:px-6 [@media(max-height:500px)]:py-1">
         <div className="flex items-center justify-between gap-3">
-          <button onClick={onExit} aria-label="PRGB: voltar ao início" className="flex min-h-10 shrink-0 cursor-pointer items-center rounded-lg"><BrandMark size={26} className="[&>span]:text-lg" /></button>
+          <button onClick={onExit} aria-label="PRGB: voltar ao início" className="flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-lg sm:min-h-10"><ArrowLeft size={18} aria-hidden="true" /><BrandMark size={26} className="[&>span]:hidden sm:[&>span]:inline [&>span]:text-lg" /></button>
           <div className="min-w-0 flex-1 font-display">
             <h1 className="truncate text-base font-bold sm:text-xl">{mainTab.title}</h1>
             <p className="truncate text-xs text-ink-300">{isDuo ? `Dupla · ${duoParts}` : `${mainTab.artist} · ${mainTab.trackName}`}</p>
@@ -770,23 +772,25 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
             onChange={(event) => seekTo(Number(event.target.value))} className="h-10 min-w-0 flex-1 cursor-pointer accent-amp-400 disabled:cursor-not-allowed disabled:opacity-50" />
           <span className="font-mono text-xs text-ink-300">{formatTime(durationMs)}</span>
         </div>
-        <div className="mt-2 flex items-center gap-2 overflow-x-auto pb-1">
+        <div className="mt-2 flex flex-wrap items-center gap-2 pb-1">
           {!isOnline && ranked.isAvailable && (
-            <button role="switch" aria-checked={ranked.isOn} aria-describedby={lockedHelp} onClick={() => void toggleRanked()} className={toolClass + (ranked.isOn ? ' border-amp-400! text-amp-300!' : '')}>
+            <button role="switch" aria-checked={ranked.isOn} aria-describedby={lockedHelp} onClick={() => void toggleRanked()} className={toolClass + ' max-sm:gap-1.5 max-sm:px-2' + (ranked.isOn ? ' border-amp-400! text-amp-300!' : '')}>
               {ranked.phase === 'preparing' ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Trophy size={16} aria-hidden="true" />}<span>Valer para o ranking</span>
               <span aria-hidden="true" className={'relative h-4 w-7 shrink-0 rounded-full transition ' + (ranked.isOn ? 'bg-amp-400' : 'bg-ink-600')}>
                 <span className={'absolute top-0.5 size-3 rounded-full bg-ink-100 transition-all ' + (ranked.isOn ? 'left-3.5' : 'left-0.5')} />
               </span>
             </button>
           )}
-          <label title={lockedHint} className={toolClass + ((isOnline || ranked.isOn) ? ' cursor-not-allowed! opacity-50' : '')}><span className="sr-only">Velocidade</span><select aria-label="Velocidade" value={speed} disabled={isOnline || ranked.isOn} aria-describedby={lockedHelp} onChange={event => changeSpeed(Number(event.target.value))} className="min-h-10 cursor-pointer bg-ink-800 font-mono outline-none disabled:cursor-not-allowed">{[0.5, 0.75, 1].map(value => <option key={value} value={value}>{value}×</option>)}</select></label>
-          <button aria-label="Metrônomo" aria-pressed={metronomeEnabled} onClick={() => setMetronomeEnabled(!metronomeEnabled)} className={toolClass + (metronomeEnabled ? ' border-amp-400! text-amp-300!' : '')}><Clock size={16} /><span className="hidden sm:inline">Metrônomo</span></button>
-          <button aria-label="Sintetizador da tablatura" aria-pressed={synthAudioEnabled} onClick={() => setSynthAudioEnabled(!synthAudioEnabled)} className={toolClass + (synthAudioEnabled ? ' border-signal-500 text-signal-300' : '')}>{synthAudioEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}<span className="hidden sm:inline">Sintetizador</span></button>
-          <button aria-label="Configurações de áudio" onClick={onOpenAudioSettings} className={toolClass}><Sliders size={16} /><span className="hidden sm:inline">Áudio</span></button>
-          <button aria-label={`${toneSettings ? AMP_PRESETS[toneSettings.preset]?.badge : 'Amp'}: abrir PRGB Amp`} onClick={onOpenAmpRack} className={toolClass + ' text-amp-300!'}><Zap size={16} /><span>{toneSettings ? AMP_PRESETS[toneSettings.preset]?.badge : 'Amp'}</span></button>
-          <button aria-label={toneSettings?.isMonitoringEnabled ? 'Silenciar guitarra' : 'Ouvir guitarra'} aria-pressed={toneSettings?.isMonitoringEnabled ?? false} onClick={() => { if (ampEngine && toneSettings) ampEngine.setMonitoringEnabled(!toneSettings.isMonitoringEnabled); }} className={toolClass}>{toneSettings?.isMonitoringEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}</button>
-          <button aria-label="Reportar problema" title="Reportar problema" onClick={() => setFeedbackOpen(true)} className={toolClass}><MessageSquareWarning size={16} /></button>
-          {!isOnline && isRankingOn && <button aria-label="Minha conta do ranking" onClick={openRankingAccount} className={toolClass}><UserRound size={16} /><span className="hidden lg:inline">Minha conta</span></button>}
+          <label title={lockedHint} className={toolClass + ' max-sm:px-2' + ((isOnline || ranked.isOn) ? ' cursor-not-allowed! opacity-50' : '')}><span className="sr-only">Velocidade</span><select aria-label="Velocidade" value={speed} disabled={isOnline || ranked.isOn} aria-describedby={lockedHelp} onChange={event => changeSpeed(Number(event.target.value))} className="min-h-11 cursor-pointer bg-ink-800 font-mono disabled:cursor-not-allowed sm:min-h-10">{[0.5, 0.75, 1].map(value => <option key={value} value={value}>{value}×</option>)}</select></label>
+          <GameMoreSheet>{(close) => <>
+            <button aria-label="Metrônomo" aria-pressed={metronomeEnabled} onClick={() => setMetronomeEnabled(!metronomeEnabled)} className={toolClass + (metronomeEnabled ? ' border-amp-400! text-amp-300!' : '')}><Clock size={16} /><span>Metrônomo</span></button>
+            <button aria-label="Sintetizador da tablatura" aria-pressed={synthAudioEnabled} onClick={() => setSynthAudioEnabled(!synthAudioEnabled)} className={toolClass + (synthAudioEnabled ? ' border-signal-500 text-signal-300' : '')}>{synthAudioEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}<span>Sintetizador</span></button>
+            <button aria-label="Configurações de áudio" onClick={() => { close(); onOpenAudioSettings(); }} className={toolClass}><Sliders size={16} /><span>Áudio</span></button>
+            <button aria-label={`${toneSettings ? AMP_PRESETS[toneSettings.preset]?.badge : 'Amp'}: abrir PRGB Amp`} onClick={() => { close(); onOpenAmpRack?.(); }} className={toolClass + ' text-amp-300!'}><Zap size={16} /><span className="sm:hidden">Amp</span><span className="hidden sm:inline">{toneSettings ? AMP_PRESETS[toneSettings.preset]?.badge : 'Amp'}</span></button>
+            <button aria-label={toneSettings?.isMonitoringEnabled ? 'Silenciar guitarra' : 'Ouvir guitarra'} aria-pressed={toneSettings?.isMonitoringEnabled ?? false} onClick={() => { if (ampEngine && toneSettings) ampEngine.setMonitoringEnabled(!toneSettings.isMonitoringEnabled); }} className={toolClass}>{toneSettings?.isMonitoringEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}<span className="sm:hidden xl:inline">{toneSettings?.isMonitoringEnabled ? 'Silenciar guitarra' : 'Ouvir guitarra'}</span></button>
+            <button aria-label="Reportar problema" title="Reportar problema" onClick={() => { close(); setFeedbackOpen(true); }} className={toolClass}><MessageSquareWarning size={16} /><span className="sm:hidden xl:inline">Reportar problema</span></button>
+            {!isOnline && isRankingOn && <button aria-label="Minha conta do ranking" onClick={() => { close(); openRankingAccount(); }} className={toolClass}><UserRound size={16} /><span className="sm:hidden lg:inline">Minha conta</span></button>}
+          </>}</GameMoreSheet>
         </div>
         {!isOnline && ranked.isAvailable && (
           <div id={rankedHelpId} role="status" aria-live="polite" className="text-xs leading-5">

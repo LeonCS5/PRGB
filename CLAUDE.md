@@ -84,6 +84,7 @@ src/
 │   ├── ErrorNotice.tsx              # Aviso de erro dispensável com ação
 │   ├── FreePlay.tsx                 # Play Free: só escuta a guitarra e mostra as notas
 │   ├── GameHud.tsx                  # HUD do jogo: score, combo, accuracy, run ranqueado
+│   ├── GameMoreSheet.tsx            # Folha "Mais" do jogo no celular
 │   ├── LeaderboardModal.tsx         # Placar online (semanal + all-time)
 │   ├── LegalPage.tsx                # Páginas legais (Privacidade / Termos)
 │   ├── LocalDataControls.tsx / LocalRecords.tsx  # Dados locais e histórico de recordes
@@ -94,6 +95,7 @@ src/
 │   ├── RoomModal.tsx                # Modal da dupla online: criar/entrar, lobby e início
 │   ├── RankingAccountModal.tsx / RankingEntryModal.tsx / RankingModals.tsx  # Modais de ranking
 │   ├── ResultPanel.tsx              # Painel de resultado após a música
+│   ├── SiteNav.tsx                  # Menu superior, estado do áudio e barra de abas do celular
 │   ├── SongSearchModal.tsx          # Modal de busca de músicas no acervo
 │   └── AmpRack.tsx          # Modal do rack completo do amp modeler PRGB Amp
 │

@@ -2,7 +2,7 @@
 // makes this the quickest way to check an audio setup.
 
 import React, { useEffect, useRef, useState } from 'react';
-import { MessageSquareWarning, Mic, Sliders, Trash2, Zap } from 'lucide-react';
+import { ArrowLeft, MessageSquareWarning, Mic, Sliders, Trash2, Zap } from 'lucide-react';
 import { AudioRouteNotice, InputLevelMeter } from './AudioRouting';
 import { BrandMark } from './BrandMark';
 import { ErrorNotice } from './ErrorNotice';
@@ -29,7 +29,7 @@ export interface FreePlayProps {
 
 const NOW_LINE_MARGIN = 120; // room right of the line, so a note still ringing stays in view
 const RECENT_NOTES = 12;
-const TOOL_CLASS = 'flex min-h-10 min-w-10 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-700 bg-ink-800 px-3 text-xs font-semibold text-ink-200 transition hover:border-ink-500';
+const TOOL_CLASS = 'flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-700 bg-ink-800 px-3 text-xs font-semibold text-ink-200 transition hover:border-ink-500';
 
 interface Scene {
   width: number;
@@ -40,14 +40,14 @@ interface Scene {
   noteHeight: number;
 }
 
-// A phone on its side has no height for two rows of readings and the lane
-const SPARE_READING = '[@media(max-height:500px)]:hidden';
+// Keep more room for the lane on narrow or short screens.
+const SPARE_READING = 'hidden sm:block [@media(max-height:500px)]:hidden';
 
 const Reading: React.FC<{ label: string; className?: string; children: React.ReactNode }> = ({ label, className = '', children }) => (
-  <div className={`min-w-0 rounded-xl border border-ink-700 bg-ink-900 px-3 py-2 ${className}`}>
+  <div className={`col-span-2 min-w-0 rounded-xl border border-ink-700 bg-ink-900 px-2 py-1 sm:col-span-1 sm:px-3 sm:py-2 ${className}`}>
     <p className="text-[10px] tracking-wider text-ink-300">{label}</p>
-    {/* Room for two lines on a phone: a header that changes height with each note would resize the canvas */}
-    <div className="mt-0.5 min-h-10 break-words font-mono text-sm font-bold text-ink-100 sm:min-h-0">{children}</div>
+    {/* Reserve the meter's height so changing readings do not resize the canvas. */}
+    <div className="mt-0.5 min-h-7 break-words font-mono text-sm font-bold text-ink-100 sm:min-h-0">{children}</div>
   </div>
 );
 
@@ -174,10 +174,11 @@ export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings,
 
   return (
     <div className="flex h-dvh w-full flex-col overflow-hidden bg-ink-950 text-ink-100">
-      <header className="shrink-0 border-b border-ink-700 bg-ink-900 px-3 py-3 sm:px-6 [@media(max-height:500px)]:py-1">
+      <header className="shrink-0 border-b border-ink-700 bg-ink-900 px-3 py-2 sm:px-6 sm:py-3 [@media(max-height:500px)]:py-1">
         <div className="flex items-center gap-3">
-          <button type="button" onClick={onExit} aria-label="PRGB: voltar ao início" className="flex min-h-10 shrink-0 cursor-pointer items-center rounded-lg">
-            <BrandMark size={26} className="[&>span]:text-lg" />
+          <button type="button" onClick={onExit} aria-label="PRGB: voltar ao início" className="flex min-h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg">
+            <ArrowLeft size={18} aria-hidden="true" />
+            <BrandMark size={26} className="[&>span]:hidden [&>span]:text-lg sm:[&>span]:inline" />
           </button>
           <div className="min-w-0 font-display">
             <h1 className="truncate text-base font-bold sm:text-xl">Play Free</h1>
@@ -191,27 +192,23 @@ export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings,
               <span className="sr-only">Escolher entrada e saída de áudio</span>
             </button>
           )}
-          <button type="button" onClick={() => setFeedbackOpen(true)} aria-label="Reportar problema" title="Reportar problema"
-            className={`${activeInput ? 'ml-auto sm:ml-0' : 'ml-auto'} flex min-h-10 min-w-10 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-ink-700 bg-ink-800 text-ink-200 transition hover:border-ink-500`}>
-            <MessageSquareWarning size={16} />
-          </button>
         </div>
         <div className="mt-2 empty:hidden"><AudioRouteNotice /></div>
 
-        <div className="mt-3 flex gap-2 [@media(max-height:500px)]:mt-1">
-          <div className="flex w-28 shrink-0 flex-col items-center justify-center rounded-xl border border-signal-500/30 bg-signal-500/5 sm:w-32">
+        <div className="mt-2 grid grid-cols-6 gap-2 sm:mt-3 sm:flex [@media(max-height:500px)]:mt-1">
+          <div className="col-span-2 flex shrink-0 flex-col items-center justify-center rounded-xl border border-signal-500/30 bg-signal-500/5 py-1 sm:w-32 sm:py-0">
             <p className="text-[10px] tracking-wider text-ink-300">NOTA</p>
-            <p className="font-display text-4xl font-bold text-signal-300 sm:text-6xl [@media(max-height:500px)]:text-2xl">{pitch ? pitch.noteName : '--'}</p>
+            <p className="font-display text-3xl font-bold text-signal-300 sm:text-6xl [@media(max-height:500px)]:text-2xl">{pitch ? pitch.noteName : '--'}</p>
           </div>
-          <div className="grid min-w-0 flex-1 grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6 [@media(max-height:500px)]:grid-cols-4">
+          <div className="contents min-w-0 flex-1 gap-2 sm:grid sm:grid-cols-3 lg:grid-cols-6 [@media(max-height:500px)]:grid-cols-4">
             <Reading label="FREQUÊNCIA">{pitch ? `${pitch.frequency.toFixed(1)} Hz` : '--'}</Reading>
             <Reading label="AFINAÇÃO">
               {pitch
                 ? <span className={Math.abs(pitch.cents) <= 6 ? 'text-hit' : 'text-near'}>{pitch.cents > 0 ? '+' : ''}{pitch.cents} cents</span>
                 : '--'}
             </Reading>
-            <Reading label="POSIÇÃO"><span className="text-xs sm:whitespace-nowrap sm:text-[11px]">{pitch ? position : '--'}</span></Reading>
-            <Reading label="ENTRADA"><InputLevelMeter /></Reading>
+            <Reading label="POSIÇÃO" className="max-sm:col-span-3"><span className="text-xs sm:whitespace-nowrap sm:text-[11px]">{pitch ? position : '--'}</span></Reading>
+            <Reading label="ENTRADA" className="max-sm:col-span-3"><InputLevelMeter /></Reading>
             <Reading label="CLAREZA" className={SPARE_READING}>{pitch ? `${Math.round(pitch.clarity * 100)}%` : '--'}</Reading>
             <Reading label="NOTAS" className={SPARE_READING}><span className="text-amp-300">{total}</span></Reading>
           </div>
@@ -234,7 +231,7 @@ export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings,
             ))}
           </div>
         </div>
-        <div className="mt-2 flex items-center gap-2 overflow-x-auto pb-1">
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           {isAudioRunning ? (
             <span className="flex shrink-0 items-center gap-1.5 px-1 font-mono text-xs text-hit"><Mic size={14} aria-hidden="true" /> Ao vivo</span>
           ) : (
@@ -245,6 +242,9 @@ export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings,
           {onOpenAmpRack && (
             <button type="button" onClick={onOpenAmpRack} className={TOOL_CLASS + ' text-amp-300!'}><Zap size={16} aria-hidden="true" /> Amp</button>
           )}
+          <button type="button" onClick={() => setFeedbackOpen(true)} aria-label="Reportar problema" title="Reportar problema" className={TOOL_CLASS}>
+            <MessageSquareWarning size={16} aria-hidden="true" /> Reportar problema
+          </button>
         </div>
       </footer>
     </div>

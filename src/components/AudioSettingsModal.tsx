@@ -13,7 +13,7 @@ import { AudioEngine, type InputChannelMode } from '../services/audioEngine';
 import { useAudioSession, useLatestPitch } from '../context/AudioSessionContext';
 import { ErrorNotice } from './ErrorNotice';
 import { AudioRouteNotice, InputLevelMeter } from './AudioRouting';
-import { AudioRoutePanel } from './AudioRoutePanel';
+import { AdvancedAudioOptions, AudioRoutePanel, SignalControls } from './AudioRoutePanel';
 import { AMP_PRESETS, type AmpPresetId, type AmpSettings } from '../services/ampEngine';
 
 interface AudioSettingsModalProps {
@@ -57,7 +57,7 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
   const isMonitoring = toneSettings?.isMonitoringEnabled ?? true;
 
   return (
-    <ModalFrame titleId="AudioSettingsModal-title" onClose={onClose} className="max-w-3xl overflow-y-auto">
+    <ModalFrame titleId="AudioSettingsModal-title" onClose={onClose} className="max-w-5xl overflow-y-auto">
         <button
           onClick={onClose}
           aria-label="Fechar modal"
@@ -89,177 +89,176 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
               } finally {
                 setIsConnecting(false);
               }
-            }} className="rounded-xl bg-amp-500 px-4 py-2 text-sm font-bold text-ink-950 hover:bg-amp-400 disabled:opacity-50 cursor-pointer">
+            }} className="min-h-11 rounded-xl bg-amp-500 px-4 py-2 text-sm font-bold text-ink-950 hover:bg-amp-400 disabled:opacity-50 cursor-pointer">
               {isConnecting ? 'Conectando...' : 'Conectar / tentar novamente'}
             </button>
           )}
-          <AudioRoutePanel currentDeviceId={currentDeviceId} onDeviceChange={onDeviceChange} />
 
-          {/* PRGB Amp monitoring Card */}
-          <div className="rounded-2xl border border-amp-500/40 bg-gradient-to-b from-amp-700/40 via-ink-900 to-ink-900 p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amp-500/20 text-amp-400 border border-amp-500/30">
-                  <Zap size={18} className="fill-amp-400" />
-                </div>
-                <div>
-                  <span className="text-sm font-bold text-ink-100 block">
-                    Ouvir Som da Guitarra (PRGB Amp)
-                  </span>
-                  <span className="text-[11px] text-ink-300">
-                    Monitoramento em tempo real nos fones/caixas
-                  </span>
-                </div>
-              </div>
+          <div className="grid items-start gap-4 lg:grid-cols-2">
+            <div className="min-w-0 space-y-4">
+              <AudioRoutePanel currentDeviceId={currentDeviceId} onDeviceChange={onDeviceChange} />
 
-              <button
-                type="button"
-                onClick={() => ampEngine?.setMonitoringEnabled(!isMonitoring)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition flex items-center gap-1.5 cursor-pointer ${
-                  isMonitoring
-                    ? 'border-hit/80 bg-hit/10 text-hit shadow-sm shadow-hit/20'
-                    : 'border-amp-700 bg-amp-700/40 text-amp-400'
-                }`}
-              >
-                {isMonitoring ? <Volume2 size={14} /> : <VolumeX size={14} />}
-                {isMonitoring ? 'LIGADO' : 'MUTADO'}
-              </button>
-            </div>
-
-            {/* Quick Amp Presets */}
-            <div>
-              <div className="text-[11px] font-bold text-ink-300 uppercase tracking-wider mb-1.5 flex items-center justify-between">
-                <span>Timbre / Amplificador</span>
-                {onOpenAmpRack && (
+              {/* Channel Routing */}
+              <div role="group" aria-labelledby="audio-channel-title">
+                <p id="audio-channel-title" className="text-sm font-semibold text-ink-200 mb-2 flex items-center gap-2">
+                  <Sliders size={16} aria-hidden="true" />
+                  Canal de entrada
+                </p>
+                <div className="grid grid-cols-3 gap-2">
                   <button
-                    onClick={() => {
-                      onClose();
-                      onOpenAmpRack();
-                    }}
-                    className="text-[11px] text-amp-400 hover:underline flex items-center gap-1 font-semibold cursor-pointer"
+                    type="button"
+                    onClick={() => onChannelModeChange('ch1')}
+                    disabled={isDuoMode}
+                    className={`rounded-xl py-2.5 px-3 text-xs font-semibold border transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
+                      currentChannelMode === 'ch1'
+                        ? 'border-amp-500 bg-amp-700/60 text-amp-300 shadow-sm shadow-amp-500/30'
+                        : 'border-ink-700 bg-ink-800 text-ink-300 hover:border-ink-500'
+                    }`}
                   >
-                    <Sliders size={12} />
-                    Abrir Rack Completo
+                    Canal 1 (Esq)
                   </button>
-                )}
-              </div>
-              <div className="grid grid-cols-3 gap-1.5">
-                {(['metal', 'crunch', 'clean'] as AmpPresetId[]).map((pid) => {
-                  const p = AMP_PRESETS[pid];
-                  const isSel = toneSettings?.preset === pid;
-                  return (
-                    <button
-                      key={pid}
-                      type="button"
-                      onClick={() => ampEngine?.setPreset(pid)}
-                      className={`py-2 px-2.5 rounded-xl text-xs font-bold border transition truncate cursor-pointer ${
-                        isSel
-                          ? 'border-amp-500 bg-amp-700/60 text-amp-300'
-                          : 'border-ink-800 bg-ink-800 text-ink-300 hover:text-ink-100'
-                      }`}
-                    >
-                      {p.badge}
-                    </button>
-                  );
-                })}
+                  <button
+                    type="button"
+                    onClick={() => onChannelModeChange('ch2')}
+                    disabled={isDuoMode}
+                    className={`rounded-xl py-2.5 px-3 text-xs font-semibold border transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
+                      currentChannelMode === 'ch2'
+                        ? 'border-amp-500 bg-amp-700/60 text-amp-300 shadow-sm shadow-amp-500/30'
+                        : 'border-ink-700 bg-ink-800 text-ink-300 hover:border-ink-500'
+                    }`}
+                  >
+                    Canal 2 (Dir)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onChannelModeChange('both')}
+                    disabled={isDuoMode}
+                    className={`rounded-xl py-2.5 px-3 text-xs font-semibold border transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
+                      currentChannelMode === 'both'
+                        ? 'border-amp-500 bg-amp-700/60 text-amp-300 shadow-sm shadow-amp-500/30'
+                        : 'border-ink-700 bg-ink-800 text-ink-300 hover:border-ink-500'
+                    }`}
+                  >
+                    Ambos / Mono
+                  </button>
+                </div>
+                <p className="text-[11px] text-ink-400 mt-1.5">
+                  {isDuoMode
+                    ? 'Modo dupla: guitarra 1 no Canal 1 e guitarra 2 no Canal 2. Saia da dupla para trocar o canal.'
+                    : 'A guitarra costuma chegar no Canal 1 ou no Canal 2. Se o nível não subir, troque aqui.'}
+                </p>
               </div>
             </div>
 
-            {/* Monitor Volume Slider */}
-            <div>
-              <div className="flex items-center justify-between text-xs text-ink-300 mb-1">
-                <span>Volume de Monitoramento</span>
-                <span className="font-mono text-hit font-bold">
-                  {Math.round((toneSettings?.masterVolume ?? 0.75) * 100)}%
-                </span>
+            <div className="min-w-0 space-y-4">
+              {/* PRGB Amp monitoring Card */}
+              <div className="rounded-2xl border border-amp-500/40 bg-gradient-to-b from-amp-700/40 via-ink-900 to-ink-900 p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amp-500/20 text-amp-400 border border-amp-500/30">
+                      <Zap size={18} className="fill-amp-400" />
+                    </div>
+                    <div>
+                      <span className="text-sm font-bold text-ink-100 block">
+                        Ouvir som da guitarra
+                      </span>
+                      <span className="text-[11px] text-ink-300">
+                        O PRGB Amp nos fones ou nas caixas
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => ampEngine?.setMonitoringEnabled(!isMonitoring)}
+                    className={`min-h-10 px-3 py-1.5 rounded-xl text-xs font-bold border transition flex shrink-0 items-center gap-1.5 cursor-pointer ${
+                      isMonitoring
+                        ? 'border-hit/80 bg-hit/10 text-hit shadow-sm shadow-hit/20'
+                        : 'border-amp-700 bg-amp-700/40 text-amp-400'
+                    }`}
+                  >
+                    {isMonitoring ? <Volume2 size={14} /> : <VolumeX size={14} />}
+                    {isMonitoring ? 'LIGADO' : 'MUTADO'}
+                  </button>
+                </div>
+
+                {/* Quick Amp Presets */}
+                <div>
+                  <div className="text-[11px] font-bold text-ink-300 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                    <span>Timbre</span>
+                    {onOpenAmpRack && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClose();
+                          onOpenAmpRack();
+                        }}
+                        className="min-h-8 text-[11px] text-amp-400 hover:underline flex items-center gap-1 font-semibold normal-case tracking-normal cursor-pointer"
+                      >
+                        <Sliders size={12} />
+                        Abrir rack completo
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {(['metal', 'crunch', 'clean'] as AmpPresetId[]).map((pid) => {
+                      const p = AMP_PRESETS[pid];
+                      const isSel = toneSettings?.preset === pid;
+                      return (
+                        <button
+                          key={pid}
+                          type="button"
+                          onClick={() => ampEngine?.setPreset(pid)}
+                          className={`py-2 px-2.5 rounded-xl text-xs font-bold border transition truncate cursor-pointer ${
+                            isSel
+                              ? 'border-amp-500 bg-amp-700/60 text-amp-300'
+                              : 'border-ink-800 bg-ink-800 text-ink-300 hover:text-ink-100'
+                          }`}
+                        >
+                          {p.badge}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Monitor Volume Slider */}
+                <div>
+                  <div className="flex items-center justify-between text-xs text-ink-300 mb-1">
+                    <span>Volume</span>
+                    <span className="font-mono text-hit font-bold">
+                      {Math.round((toneSettings?.masterVolume ?? 0.75) * 100)}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    aria-label="Volume de monitoramento"
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    value={toneSettings?.masterVolume ?? 0.75}
+                    onChange={(e) => ampEngine?.setMasterVolume(Number(e.target.value))}
+                    className="w-full accent-amp-400 h-1.5 bg-ink-800 rounded-lg cursor-pointer"
+                  />
+                </div>
               </div>
-              <input
-                type="range"
-                aria-label="Volume de monitoramento"
-                min={0}
-                max={1}
-                step={0.01}
-                value={toneSettings?.masterVolume ?? 0.75}
-                onChange={(e) => ampEngine?.setMasterVolume(Number(e.target.value))}
-                className="w-full accent-amp-400 h-1.5 bg-ink-800 rounded-lg cursor-pointer"
-              />
+
+              <AudioInputMeter />
+              <SignalControls />
             </div>
           </div>
 
-          {/* Channel Routing */}
-          <div>
-            <label className="text-sm font-semibold text-ink-200 block mb-2 flex items-center gap-2">
-              <Sliders size={16} />
-              Canal de Entrada da Guitarra
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => onChannelModeChange('ch1')}
-                disabled={isDuoMode}
-                className={`rounded-xl py-2.5 px-3 text-xs font-semibold border transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
-                  currentChannelMode === 'ch1'
-                    ? 'border-amp-500 bg-amp-700/60 text-amp-300 shadow-sm shadow-amp-500/30'
-                    : 'border-ink-700 bg-ink-800 text-ink-300 hover:border-ink-500'
-                }`}
-              >
-                Canal 1 (Esq)
-              </button>
-              <button
-                type="button"
-                onClick={() => onChannelModeChange('ch2')}
-                disabled={isDuoMode}
-                className={`rounded-xl py-2.5 px-3 text-xs font-semibold border transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
-                  currentChannelMode === 'ch2'
-                    ? 'border-amp-500 bg-amp-700/60 text-amp-300 shadow-sm shadow-amp-500/30'
-                    : 'border-ink-700 bg-ink-800 text-ink-300 hover:border-ink-500'
-                }`}
-              >
-                Canal 2 (Dir)
-              </button>
-              <button
-                type="button"
-                onClick={() => onChannelModeChange('both')}
-                disabled={isDuoMode}
-                className={`rounded-xl py-2.5 px-3 text-xs font-semibold border transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
-                  currentChannelMode === 'both'
-                    ? 'border-amp-500 bg-amp-700/60 text-amp-300 shadow-sm shadow-amp-500/30'
-                    : 'border-ink-700 bg-ink-800 text-ink-300 hover:border-ink-500'
-                }`}
-              >
-                Ambos / Mono
-              </button>
-            </div>
-            <p className="text-[11px] text-ink-400 mt-1.5">
-              {isDuoMode
-                ? 'Modo dupla: guitarra 1 no Canal 1 e guitarra 2 no Canal 2. Saia da dupla para trocar o canal.'
-                : 'A guitarra costuma chegar no Canal 1 ou no Canal 2. Se o nível não subir, troque aqui.'}
-            </p>
-          </div>
-
-          {/* Live Level VU Meter */}
-          <AudioInputMeter />
+          <AdvancedAudioOptions />
         </div>
 
-        <div className="mt-6 flex items-center justify-between">
-          {onOpenAmpRack && (
-            <button
-              onClick={() => {
-                onClose();
-                onOpenAmpRack();
-              }}
-              className="flex items-center gap-2 text-xs font-bold text-amp-400 hover:text-amp-300 transition cursor-pointer"
-            >
-              <Zap size={14} />
-              Configurar Rack PRGB Amp
-            </button>
-          )}
-
+        {/* Long on a phone: the way out stays on screen */}
+        <div className="sticky -bottom-5 z-10 -mx-5 -mb-5 mt-5 flex justify-end border-t border-ink-700 bg-ink-900 px-5 py-3 sm:-bottom-6 sm:-mx-6 sm:-mb-6 sm:px-6">
           <button
+            type="button"
             onClick={onClose}
-            className="min-h-10 rounded-xl bg-amp-500 px-6 py-2.5 text-sm font-bold text-ink-950 shadow-lg shadow-amp-500/25 hover:bg-amp-400 transition cursor-pointer ml-auto"
+            className="min-h-11 rounded-xl bg-amp-500 px-6 py-2.5 text-sm font-bold text-ink-950 shadow-lg shadow-amp-500/25 hover:bg-amp-400 transition cursor-pointer"
           >
-            Pronto para Tocar
+            Pronto para tocar
           </button>
         </div>
     </ModalFrame>
@@ -270,19 +269,11 @@ const AudioInputMeter: React.FC = () => {
   const latestPitch = useLatestPitch();
   return (
     <div className="rounded-xl border border-ink-800 bg-ink-950 p-4 space-y-3">
-      <div className="flex items-center justify-between text-xs">
-        <span className="flex items-center gap-1.5 text-ink-300">
-          <Volume2 size={15} />
-          Sinal de Entrada da Interface (VU Meter)
-        </span>
-      </div>
-      <InputLevelMeter />
-
       {/* Live Tuner Pitch Display */}
-      <div className="mt-2 pt-3 border-t border-ink-800/80 flex items-center justify-between">
+      <div className="flex items-center justify-between">
         <div>
-          <span className="text-[11px] uppercase tracking-wider text-ink-400 font-bold block">
-            Afinador em Tempo Real
+          <span className="text-[11px] uppercase tracking-wider text-ink-300 font-bold block">
+            Afinador
           </span>
           <div className="flex items-baseline gap-2 mt-0.5">
             <span className="text-2xl font-black font-mono text-ink-100">
@@ -313,6 +304,14 @@ const AudioInputMeter: React.FC = () => {
             </span>
           </div>
         )}
+      </div>
+
+      <div className="pt-3 border-t border-ink-800/80">
+        <p className="flex items-center gap-1.5 text-xs text-ink-300 mb-2">
+          <Volume2 size={15} />
+          Nível de entrada
+        </p>
+        <InputLevelMeter />
       </div>
     </div>
   );
