@@ -182,12 +182,16 @@ export class AudioEngine {
 
   /** The speakers everything plays on: the amp here and the game sounds in SoundFX. '' is the system default. */
   async setOutputDevice(deviceId: string): Promise<boolean> {
-    this.outputDeviceId = deviceId;
-    const applied = await this.applyOutputDevice();
-    if (this.isRunning) {
-      this.rampMonitorGain(0);
-      await this.openMonitor();
-    }
+    let applied = false;
+    // In the queue: a stop in the middle of the loopback test would take its input away
+    await this.enqueue(async () => {
+      this.outputDeviceId = deviceId;
+      applied = await this.applyOutputDevice();
+      if (this.isRunning) {
+        this.rampMonitorGain(0);
+        await this.openMonitor();
+      }
+    });
     return applied;
   }
 

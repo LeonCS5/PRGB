@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AudioEngine, STANDARD_TUNING, computeNsdf, estimateStringAndFret, type InputChannelMode } from './audioEngine';
+import { SoundFX } from './synthAudio';
 
 vi.mock('./ampEngine', () => ({
   AmpEngine: class {
@@ -101,6 +102,7 @@ const sine = (hz: number, amplitude = 0.5) =>
   Float32Array.from({ length: 2048 }, (_, i) => amplitude * Math.sin((2 * Math.PI * hz * i) / 48000));
 
 class FakeAudioContext {
+  static outputLoopsBack = false; // when true, what plays reaches the analysers
   state: AudioContextState = 'running';
   currentTime = 0;
   sampleRate = 48000;
@@ -109,6 +111,7 @@ class FakeAudioContext {
   mergers: ReturnType<typeof audioNode>[] = [];
   analysers: ReturnType<typeof analyserNode>[] = [];
   gains: ReturnType<typeof gainNode>[] = [];
+  oscillators: { stop: ReturnType<typeof vi.fn> }[] = [];
   private listeners = new Set<() => void>();
 
   private keep<T>(list: T[], node: T): T {
@@ -121,6 +124,18 @@ class FakeAudioContext {
   createChannelSplitter() { return this.keep(this.splitters, audioNode()); }
   createChannelMerger() { return this.keep(this.mergers, audioNode()); }
   createAnalyser() { return this.keep(this.analysers, analyserNode()); }
+  createOscillator() {
+    const heard = (signal: Float32Array | null) => {
+      if (FakeAudioContext.outputLoopsBack) this.analysers.forEach((node) => { node.signal = signal; });
+    };
+    const oscillator = {
+      ...audioNode(),
+      frequency: { value: 0 },
+      start: () => heard(sine(oscillator.frequency.value, 0.01)),
+      stop: vi.fn(() => heard(null))
+    };
+    return this.keep(this.oscillators, oscillator);
+  }
   createConstantSource() {
     const source = {
       offset: { value: 0 },
@@ -159,6 +174,7 @@ describe('AudioEngine lifecycle', () => {
   let streams: FakeStream[];
   let missingDevices: Set<string>;
   let trackChannels: number | undefined; // what the browser reports for the next stream
+  let trackGroup: string | undefined;
   let getUserMedia: ReturnType<typeof vi.fn>;
   let nextFrame: FrameRequestCallback | null;
   const runFrame = () => nextFrame?.(0);
@@ -168,12 +184,14 @@ describe('AudioEngine lifecycle', () => {
     streams = [];
     missingDevices = new Set();
     trackChannels = 2;
+    trackGroup = undefined;
+    FakeAudioContext.outputLoopsBack = false;
     nextFrame = null;
     getUserMedia = vi.fn(async (constraints: MediaStreamConstraints) => {
       const audio = constraints.audio as MediaTrackConstraints;
       const deviceId = (audio.deviceId as ConstrainDOMStringParameters | undefined)?.exact as string | undefined;
       if (deviceId && missingDevices.has(deviceId)) throw new DOMException('gone', 'OverconstrainedError');
-      const settings: MediaTrackSettings = trackChannels === undefined ? {} : { channelCount: trackChannels };
+      const settings: MediaTrackSettings = trackChannels === undefined ? {} : { channelCount: trackChannels, groupId: trackGroup };
       const track: FakeTrack = { stop: () => { stream.stopped = true; }, getSettings: () => settings };
       const stream: FakeStream = {
         deviceId,
@@ -250,6 +268,76 @@ describe('AudioEngine lifecycle', () => {
     // The queue keeps working after a failed start
     await engine.start('usb-interface');
     expect(engine.getIsRunning()).toBe(true);
+  });
+
+  it('keeps a stop waiting while the output changes', async () => {
+    const engine = new AudioEngine();
+    await engine.start('a');
+    let finishRouting = () => {};
+    vi.spyOn(SoundFX, 'setOutputDevice').mockReturnValueOnce(new Promise<void>((resolve) => { finishRouting = resolve; }));
+    const changed = engine.setOutputDevice('speakers');
+    const stopped = engine.stop();
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(engine.getIsRunning()).toBe(true);
+    finishRouting();
+    await Promise.all([changed, stopped]);
+    expect(engine.getIsRunning()).toBe(false);
+  });
+
+  describe('loopback test', () => {
+    const monitorRamps = () =>
+      contexts[0].gains.flatMap((node) => node.gain.linearRampToValueAtTime.mock.calls.map(([target]) => target as number));
+
+    beforeEach(() => {
+      trackGroup = 'usb';
+      vi.stubGlobal('navigator', {
+        mediaDevices: {
+          getUserMedia,
+          enumerateDevices: async () => [
+            { kind: 'audiooutput', deviceId: 'default', groupId: 'usb' },
+            { kind: 'audiooutput', deviceId: 'speakers', groupId: 'pc' }
+          ]
+        }
+      });
+    });
+
+    it('keeps the monitor closed on an output that comes back, then takes the move the listener asks for', async () => {
+      FakeAudioContext.outputLoopsBack = true;
+      const engine = new AudioEngine();
+      let openWhenWarned: boolean | null = null;
+      let moved: Promise<boolean> = Promise.resolve(false);
+      // The warning arrives from inside start(), which is still holding the queue
+      engine.setFeedbackListener(() => {
+        openWhenWarned = monitorRamps().includes(1);
+        moved = engine.setOutputDevice('speakers');
+      });
+
+      await engine.start('usb-interface');
+      await expect(moved).resolves.toBe(true);
+
+      expect(openWhenWarned).toBe(false);
+      expect(contexts[0].oscillators).toHaveLength(1);
+      expect(contexts[0].oscillators[0].stop).toHaveBeenCalled();
+      expect(monitorRamps().at(-1)).toBe(1);
+    });
+
+    it('opens the monitor when the tone does not come back', async () => {
+      const listener = vi.fn();
+      const engine = new AudioEngine();
+      engine.setFeedbackListener(listener);
+      await engine.start('usb-interface');
+      expect(contexts[0].oscillators).toHaveLength(1);
+      expect(listener).not.toHaveBeenCalled();
+      expect(monitorRamps()).toEqual([1]);
+    });
+
+    it('plays no tone on an output on other hardware', async () => {
+      const engine = new AudioEngine();
+      await engine.setOutputDevice('speakers');
+      await engine.start('usb-interface');
+      expect(contexts[0].oscillators).toHaveLength(0);
+      expect(monitorRamps()).toEqual([1]);
+    });
   });
 
   it('does not hang stop() when the context suspends during the fade', async () => {
