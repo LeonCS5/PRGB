@@ -213,6 +213,14 @@ describe('history layers', () => {
     expect(entries[0].url.search).toBe('?desafio=abc');
   });
 
+  it('keeps a challenge link on the landing while a screen opens over it, so a reload still finds it', async () => {
+    const { openScreenLayer, entries } = await setup('https://prgb.test/?desafio=abc&demo');
+    openScreenLayer(vi.fn());
+    await settle();
+    expect(entries[0].url.search).toBe('?desafio=abc');
+    expect(entries[1].url.search).toBe('?desafio=abc&demo');
+  });
+
   it('reuses the entry left by a reload instead of stacking another', async () => {
     const { openScreenLayer, entries, position } = await setup('https://prgb.test/', { prgbLayers: 1 });
     openScreenLayer(vi.fn());

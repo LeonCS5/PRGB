@@ -27,8 +27,12 @@ const sync = () => {
   }
   for (let next = depth + 1; next <= wanted; next += 1) {
     const address = window.location.href;
-    // Whatever the address carried (?demo) belongs to the screen, so the landing's own entry drops it
-    if (next === 1 && screen) window.history.replaceState(window.history.state, '', window.location.pathname + window.location.hash);
+    if (next === 1 && screen) {
+      // ?demo opens the game, so it belongs to the screen: left on the landing, a reload would jump back in
+      const landing = new URL(address);
+      landing.searchParams.delete('demo');
+      window.history.replaceState(window.history.state, '', landing.pathname + landing.search + landing.hash);
+    }
     window.history.pushState({ prgbLayers: next }, '', address);
   }
 };
