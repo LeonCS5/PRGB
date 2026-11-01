@@ -29,6 +29,8 @@ import {
   type SignalReading
 } from './audioDevices';
 import { createAudioOutputRoute, type AudioOutputRoute } from './audioOutput';
+import { NAM_ASSET_BASE, NeuralFileRefused, checkFileSize, checkModelText, modelGainDb } from './neuralAmp';
+import type { NamModelInfo, NamNode } from '../vendor/nam-engine/index.js';
 import { SoundFX } from './synthAudio';
 import { AmpEngine } from './ampEngine';
 
@@ -144,6 +146,10 @@ export class AudioEngine {
   private inputTrim: GainNode | null = null;
   private monitorOpen = false;
   private cleanRoute = ''; // the last input and output tested without a loop
+  // Kept to come back when the AudioContext is rebuilt, which takes the nodes with it
+  private neuralModel: { name: string; text: string } | null = null;
+  private impulse: { name: string; bytes: ArrayBuffer } | null = null;
+  private namNode: NamNode | null = null;
   private feedbackWatch: ReturnType<typeof setInterval> | null = null;
   private hotReads = 0;
   private framesSinceDetection = 0;
@@ -419,6 +425,79 @@ export class AudioEngine {
     this.audioContext = null;
     this.ampEngine = null;
     this.monitorGain = null;
+    this.namNode = null;
+  }
+
+  getNeuralFiles(): { model: string | null; impulse: string | null } {
+    return { model: this.neuralModel?.name ?? null, impulse: this.impulse?.name ?? null };
+  }
+
+  async loadNeuralModel(file: File): Promise<NamModelInfo> {
+    checkFileSize(file.size);
+    const text = await file.text();
+    checkModelText(text);
+    let info: NamModelInfo | null = null;
+    await this.enqueue(async () => {
+      const previous = this.neuralModel;
+      this.neuralModel = { name: file.name, text };
+      try {
+        info = await this.applyNeuralModel();
+      } catch (err) {
+        this.neuralModel = previous;
+        throw err;
+      }
+    });
+    if (!info) throw new NeuralFileRefused('not_a_model');
+    return info;
+  }
+
+  clearNeuralModel(): Promise<void> {
+    return this.enqueue(async () => {
+      this.neuralModel = null;
+      this.ampEngine?.setNeuralStage(null);
+      await this.namNode?.dispose();
+      this.namNode = null;
+    });
+  }
+
+  private async applyNeuralModel(): Promise<NamModelInfo | null> {
+    const ctx = this.audioContext;
+    if (!ctx || !this.ampEngine || !this.neuralModel) return null;
+    const { NamEngine } = await import('../vendor/nam-engine/index.js');
+    const engine = await NamEngine.attach(ctx, { assetBaseUrl: NAM_ASSET_BASE });
+    this.namNode ??= await engine.createNode();
+    const info = await this.namNode.loadModel(this.neuralModel.text);
+    this.ampEngine.setNeuralStage(this.namNode, modelGainDb(info));
+    return info;
+  }
+
+  async loadImpulseResponse(file: File): Promise<void> {
+    checkFileSize(file.size);
+    const bytes = await file.arrayBuffer();
+    await this.enqueue(async () => {
+      const previous = this.impulse;
+      this.impulse = { name: file.name, bytes };
+      try {
+        await this.applyImpulseResponse();
+      } catch (err) {
+        this.impulse = previous;
+        throw new NeuralFileRefused('not_audio', { cause: err });
+      }
+    });
+  }
+
+  clearImpulseResponse(): Promise<void> {
+    return this.enqueue(async () => {
+      this.impulse = null;
+      this.ampEngine?.setImpulseResponse(null);
+    });
+  }
+
+  private async applyImpulseResponse(): Promise<void> {
+    const ctx = this.audioContext;
+    if (!ctx || !this.ampEngine || !this.impulse) return;
+    // decodeAudioData detaches the buffer it receives, and the file has to outlive this context
+    this.ampEngine.setImpulseResponse(await ctx.decodeAudioData(this.impulse.bytes.slice(0)));
   }
 
   /** Device names stay empty until the browser has microphone permission. Opens nothing else for good. */
@@ -495,6 +574,7 @@ export class AudioEngine {
       });
       this.ampEngine = null;
       this.monitorGain = null;
+      this.namNode = null;
       this.outputRoute = createAudioOutputRoute(this.audioContext);
       await this.applyOutputDevice();
     }
@@ -567,6 +647,7 @@ export class AudioEngine {
     // Initialize and route to PRGB Amp Modeler for live low-latency guitar monitoring
     if (!this.ampEngine) {
       this.ampEngine = new AmpEngine(this.audioContext, this.outputRoute?.node);
+      await this.restoreNeuralFiles();
     }
     if (!this.monitorGain) {
       this.monitorGain = this.audioContext.createGain();
@@ -579,6 +660,16 @@ export class AudioEngine {
     this.loopDetection();
     this.feedbackWatch = setInterval(this.watchForFeedback, AudioEngine.FEEDBACK_WATCH_MS);
     await this.openMonitor();
+  }
+
+  // A file that no longer loads must not cost the player their guitar sound
+  private async restoreNeuralFiles(): Promise<void> {
+    try {
+      await this.applyNeuralModel();
+      await this.applyImpulseResponse();
+    } catch (err) {
+      console.warn('Could not bring the neural files back:', err);
+    }
   }
 
   private createPlayerInput(ctx: AudioContext, slot: PlayerSlot): PlayerInput {

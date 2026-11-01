@@ -98,6 +98,7 @@ src/
 │   └── AmpRack.tsx          # Modal do rack completo do amp modeler PRGB Amp
 │
 ├── services/
+│   ├── audioOutput.ts               # Saída de áudio: direta no Chromium, por <audio> no Firefox
 │   ├── audioEngine.ts               # ⭐ Engine de captura de áudio + detecção de pitch (NSDF/MPM)
 │   ├── challenge.ts                 # Links de desafio (score pessoal codificado em URL)
 │   ├── demoSong.ts                  # Exercício original offline (sem rede, sem direitos de terceiros)

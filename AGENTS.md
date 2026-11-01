@@ -74,6 +74,9 @@ PRGB/
 │   ├── components/
 │   │   ├── AudioSettingsModal.tsx   # Modal: device selector, afinador, VU meter
 │   │   ├── FeedbackModal.tsx        # Caixa "Reportar problema": relato sem identificação, com o e-mail de contato se falhar
+│   │   ├── AudioRoutePanel.tsx      # Painel de rota: dispositivos por aparelho, buffer, compensação, caminho do som
+│   │   ├── NeuralAmpSection.tsx     # Carrega modelo .nam e IR .wav do jogador
+│   │   ├── StorageNotice.tsx        # Aviso da primeira visita (informa, não pede consentimento)
 │   │   ├── AudioRouting.tsx         # Medidor de entrada em dB e avisos de rota (microfone do PC, retorno da saída)
 │   │   ├── BrandMark.tsx            # Logo PRGB (palheta) + wordmark
 │   │   ├── ChallengeCard.tsx        # Card de desafio (melhor score pessoal de um amigo)
@@ -102,6 +105,8 @@ PRGB/
 │   │
 │   ├── services/                    # Cada service tem um *.test.ts (Vitest) ao lado
 │   │   ├── audioEngine.ts           # Captura, channel routing, pitch (NSDF), corda/casa estimadas, fila start/stop com fade
+│   │   ├── audioOutput.ts           # Saída: AudioContext.setSinkId (Chromium) ou <audio> com setSinkId (Firefox)
+│   │   ├── neuralAmp.ts             # Validação e nível dos modelos .nam (o motor vem de src/vendor, sob demanda)
 │   │   ├── audioDevices.ts          # Escolha da entrada, nível, saída e teste de retorno (lógica pura)
 │   │   ├── challenge.ts             # Geração e validação de links de desafio (score pessoal codificado em URL)
 │   │   ├── demoSong.ts              # Exercício original offline (pentatônica de Lá menor), sem direitos de terceiros
@@ -220,6 +225,7 @@ Guitarra → USB Interface → getUserMedia(48kHz, raw, sem noise suppress)
 - O conteúdo vem de um provedor externo de tablaturas: o rodapé precisa manter o aviso de não afiliação, e a Política precisa continuar dizendo que ele existe e o que recebe.
 - Sem nomes de artistas, músicas ou marcas em chamadas, exemplos, presets e textos do site: nomes de terceiros só aparecem nos resultados que o jogador buscar.
 - Alegações só com prova: nada de números de acervo, "baixa latência" ou "válvulas". O PRGB Amp é um simulador.
+- Licenças de terceiros não são uso de marca: `public/nam/`, `src/vendor/nam-engine/` e `/fonts` mantêm os avisos originais, como a licença exige. O código em `src/vendor/` não se edita.
 - O nome desse provedor só aparece onde é funcional: hosts em `vercel.json`, `vite.config.ts` e `handler.ts`, o código de erro devolvido pela função já publicada e as migrations congeladas.
 - Projeto gratuito; o único "monetizar" é o link "Apoie o projeto" (`VITE_SUPPORT_URL`, com fallback para estrela no GitHub).
 
@@ -337,7 +343,16 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 - [x] **Rota de áudio** — sai sozinho do microfone do PC, saída escolhida com `setSinkId`, medidor em dB. Interfaces USB podem devolver a saída para a própria entrada: antes de abrir o monitor no mesmo aparelho, um tom de -40 dBFS testa o retorno. **Não reproduza esse laço em teste**: ele satura a saída da interface (@claude; validado no hardware real, sem guitarra tocando)
 - [x] **Caixa de reportar problemas** — RPC `submit_feedback` com a chave pública, sem conta nem consentimento; guarda categoria, tela e texto, limite de 60 por hora para todos, apagados em 180 dias. Os relatos são lidos na tabela `feedback`, no painel do Supabase (@claude)
 
+### Rodada 8 — áudio no Firefox, conformidade e som neural (em `claude/som-neural`, sobre `claude/rota-audio` e `claude/conformidade`)
+- [x] **Laço de saída** — o teste de retorno só funcionava em silêncio, rodava uma vez e nem existia no Firefox. Agora: rajadas a 7 kHz, vigia por timer que fecha o monitor com a entrada saturada, monitor fechado antes de trocar a saída (@claude; validado com a interface real no Edge e no Firefox)
+- [x] **Painel de rota** — dispositivos por aparelho, buffer, reamostragem, baixo consumo, compensação, ganho de entrada e gate, com o caminho do som ao vivo (@claude)
+- [x] **Saída no Firefox** — ele não roteia AudioContext: o som vai por um `<audio>` com `setSinkId` e, se preciso, `selectAudioOutput` (@claude; latência maior que no Chromium, não medida)
+- [x] **Conformidade** — alegações sem prova, nomes de terceiros, Política, Termos, aviso de armazenamento, licenças, contraste e teclado. Auditorias: axe 0 violações, Tab em todos os controles, site só fala com o próprio domínio (@claude; não é parecer jurídico)
+- [x] **Som neural** — modelos .nam e IR do jogador, sem incluir modelos; WaveNet padrão usa ~30% de um núcleo deste PC (@claude; testado com modelos sintéticos, não com um .nam real)
+
 ### Pendências conhecidas (sem dono)
+- [ ] **Permissão do provedor de tablaturas** — os termos dele proíbem transmitir, reutilizar e baixar o conteúdo sem autorização escrita. É o maior risco legal do projeto; depende de decisão do humano.
+- [ ] **Treino de IA na Vercel** — plano Hobby vem ligado por padrão; desligar em Team Settings > Data Preferences (só o humano consegue).
 - [ ] **Migration `feedback` no banco** — `supabase/migrations/20261030150000_feedback.sql` precisa ser rodada no SQL Editor do Supabase. Sem ela a caixa mostra a falha e o e-mail de contato.
 - [ ] **Dupla online com guitarras de verdade** — testada de ponta a ponta no Supabase real com dois navegadores, contas temporárias e microfone sintético (partida, revanche com troca de música, queda e volta, saída do anfitrião, exportação e exclusão de conta) e o ranking com uma partida real aceita pelo servidor, mas nunca por duas pessoas com guitarra. Falta também o caso de sala cheia (`room_full`), que exige uma terceira conta.
 - [ ] **Revisões diferentes da mesma faixa na dupla** — o convidado carrega a revisão atual da tab, sem conferir a anunciada pelo anfitrião. Decisão: não corrigir por ora; é raro e a partida não vale para o ranking.

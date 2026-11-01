@@ -103,6 +103,7 @@ export const PRIVACY_POLICY: LegalDocument = {
       paragraphs: [
         `Para lembrar suas escolhas sem criar conta, o PRGB usa o armazenamento local do seu navegador (localStorage), sem cookies, publicidade ou rastreadores. Por isso o aviso da primeira visita só informa e não pede consentimento: o que fica guardado é o que você mesmo escolheu. Esses dados ficam no seu aparelho até você apagá-los com o botão “${CLEAR_LOCAL_LABEL}” ou limpar os dados do site no navegador.`,
         'O navegador também guarda uma cópia dos arquivos do site, para ele abrir mais rápido e funcionar sem internet. Essa cópia não contém dados seus.',
+        'Modelos de amplificador (.nam) e gabinetes (.wav) que você carregar são lidos só na memória desta página: não são enviados a nenhum servidor e somem ao fechá-la.',
         'Ficam só no seu aparelho, sem envio ao PRGB:'
       ],
       items: [
@@ -355,6 +356,14 @@ export const TERMS_OF_USE: LegalDocument = {
       ]
     },
     {
+      id: 'arquivos-que-voce-carrega',
+      title: 'Arquivos que você carrega',
+      paragraphs: [
+        'Você pode carregar seus próprios modelos de amplificador (.nam) e gabinetes (.wav). Eles ficam só no seu navegador e não são enviados a ninguém. O PRGB não inclui nem distribui esses arquivos, e cabe a você ter o direito de usá-los.',
+        'Modelos neurais podem pesar no computador e gerar som muito alto. Baixe o volume antes de trocar de modelo.'
+      ]
+    },
+    {
       id: 'regras-de-conduta',
       title: 'Regras de conduta',
       paragraphs: [
@@ -421,7 +430,7 @@ export const TERMS_OF_USE: LegalDocument = {
       paragraphs: [
         `O nome PRGB, o logotipo e a identidade visual do site pertencem a ${controller}. Não os use de forma que sugira parceria, patrocínio ou que você fala em nome do PRGB.`,
         'Músicas, tablaturas, nomes de artistas e marcas de terceiros pertencem aos seus titulares, e estes termos não dão a você nenhum direito sobre eles.',
-        'O PRGB usa software livre e fontes com licenças próprias, listadas em prgb.vercel.app/licencas-terceiros.md e na pasta /fonts do site.'
+        'O PRGB usa software livre e fontes com licenças próprias, listadas em prgb.vercel.app/licencas-terceiros.md, em /nam/NOTICE.txt e na pasta /fonts do site.'
       ]
     },
     {

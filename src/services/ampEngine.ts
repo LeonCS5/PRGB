@@ -2,6 +2,8 @@
 // Provides real-time guitar sound with tube preamp emulation, multi-stage cabinet filtering,
 // 4-band tone stack EQ, downward expander noise gate, and studio room ambience.
 
+import { dbToGain } from './audioDevices';
+
 export type AmpPresetId = 'metal' | 'crunch' | 'clean' | 'lead' | 'acoustic' | 'direct_di';
 export type CabSimType = '4x12_vintage' | '2x12_british' | '1x12_tweed' | '4x12_metal' | 'bypass';
 
@@ -162,6 +164,11 @@ export class AmpEngine {
   // Output
   private masterGainNode: GainNode;
   private outputAnalyserNode: AnalyserNode;
+
+  // The player's own files. A neural model takes the place of the preamp, an impulse response that of the cab
+  private neuralStage: AudioNode | null = null;
+  private neuralLevelNode: GainNode | null = null;
+  private impulseNode: ConvolverNode | null = null;
 
   // State
   private isGateOpen = true;
@@ -336,6 +343,42 @@ export class AmpEngine {
         this.gateGainNode.gain.setTargetAtTime(1.0, now, 0.004);
       }
     }
+  }
+
+  /** Null brings the preamp back. The tone stack, cabinet, reverb and master stay after the model either way. */
+  public setNeuralStage(stage: AudioNode | null, levelDb = 0): void {
+    this.gateGainNode.disconnect();
+    this.neuralStage?.disconnect();
+    this.neuralLevelNode?.disconnect();
+    this.neuralStage = stage;
+    if (!stage) {
+      this.gateGainNode.connect(this.preGainNode);
+      return;
+    }
+    this.neuralLevelNode ??= this.ctx.createGain();
+    this.neuralLevelNode.gain.value = dbToGain(levelDb);
+    this.gateGainNode.connect(stage);
+    stage.connect(this.neuralLevelNode);
+    this.neuralLevelNode.connect(this.toneBassNode);
+  }
+
+  /** Null brings the built-in cabinet back. */
+  public setImpulseResponse(impulse: AudioBuffer | null): void {
+    this.tonePresenceNode.disconnect();
+    this.impulseNode?.disconnect();
+    if (!impulse) {
+      this.tonePresenceNode.connect(this.cabSubCutNode);
+      this.tonePresenceNode.connect(this.cabDryGainNode);
+      this.applyCabSimSettings(this.settings.cabSim);
+      return;
+    }
+    this.impulseNode ??= this.ctx.createConvolver();
+    this.impulseNode.buffer = impulse;
+    this.tonePresenceNode.connect(this.impulseNode);
+    this.impulseNode.connect(this.cabWetGainNode);
+    const now = this.ctx.currentTime;
+    this.cabDryGainNode.gain.setTargetAtTime(0.0, now, 0.02);
+    this.cabWetGainNode.gain.setTargetAtTime(1.0, now, 0.02);
   }
 
   public getIsGateOpen(): boolean {

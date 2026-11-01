@@ -12,6 +12,7 @@ import {
   X,
   RotateCcw
 } from 'lucide-react';
+import { NeuralAmpSection } from './NeuralAmpSection';
 import {
   AmpEngine,
   AMP_PRESETS,
@@ -125,6 +126,8 @@ export const AmpRack: React.FC<AmpRackProps> = ({
             </button>
           </div>
         </div>
+
+        <NeuralAmpSection />
 
         {/* Headphone Safety Tip */}
         <div className="mt-4 flex items-center gap-2.5 rounded-xl border border-amp-500/20 bg-amp-500/5 px-3.5 py-2 text-xs text-amp-300/90">
