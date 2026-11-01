@@ -3,7 +3,6 @@ import {
   Music,
   Play,
   Sliders,
-  ArrowUpRight,
   ArrowRight,
   AudioLines,
   Check,
@@ -12,13 +11,14 @@ import {
   Headphones,
   PlugZap,
   Target,
-  Trophy,
+  UserRound,
   Volume2,
   Zap,
   Users,
   Wifi,
   X,
-  MessageSquareWarning
+  MessageSquareWarning,
+  type LucideIcon
 } from 'lucide-react';
 import { getDemoSong, DEMO_SONG_ID } from './services/demoSong';
 import { ErrorNotice } from './components/ErrorNotice';
@@ -46,6 +46,7 @@ import { ModalsProvider, useModals } from './context/ModalsContext';
 import { FeedbackModal } from './components/FeedbackModal';
 import { StorageNotice } from './components/StorageNotice';
 import { LEGAL_CONTACT } from './content/legal';
+import { AudioChip, HeaderNav, TabBar } from './components/SiteNav';
 import { readPreferences, savePreferences } from './context/preferences';
 import { DEFAULT_PLAYER_NAMES, nextSessionKey, type GamePart, type GameSession, type RankedStart, type SoloSession } from './context/gameSession';
 import { RankingProvider } from './context/RankingProvider';
@@ -147,6 +148,28 @@ const LandingPitch: React.FC = () => {
   );
 };
 
+const AMP_TONE = 'border-amp-500/25 bg-amp-500/10 text-amp-300';
+const SIGNAL_TONE = 'border-signal-500/25 bg-signal-500/10 text-signal-300';
+const HIT_TONE = 'border-hit/25 bg-hit/10 text-hit';
+
+interface ActionRowProps {
+  icon: LucideIcon;
+  tone: string;
+  title: string;
+  description: string;
+  disabled?: boolean;
+  onClick: () => void;
+}
+
+const ActionRow: React.FC<ActionRowProps> = ({ icon: Icon, tone, title, description, disabled = false, onClick }) => (
+  <button type="button" onClick={onClick} disabled={disabled}
+    className="group flex min-h-20 w-full cursor-pointer items-center gap-4 rounded-2xl border border-ink-700 bg-ink-900 px-4 py-3 text-left transition enabled:hover:border-ink-500 enabled:hover:bg-ink-800 disabled:cursor-default">
+    <span className={`flex size-11 shrink-0 items-center justify-center rounded-xl border ${tone}`}><Icon size={21} aria-hidden="true" /></span>
+    <span className="min-w-0 flex-1"><span className="block text-sm font-bold text-ink-100">{title}</span><span className="mt-0.5 block text-xs text-ink-300">{description}</span></span>
+    {!disabled && <ArrowRight size={16} className="shrink-0 text-ink-300 transition group-hover:text-amp-300" aria-hidden="true" />}
+  </button>
+);
+
 const AppContent: React.FC = () => {
   const {
     audioEngine,
@@ -170,7 +193,7 @@ const AppContent: React.FC = () => {
     setAmpRackOpen: setIsAmpRackOpen,
     setFeedbackOpen: setIsFeedbackOpen
   } = useModals();
-  const { isConfigured: isRankingOn, hasAccount, openAccount } = useRanking();
+  const { isConfigured: isRankingOn, hasAccount, openAccount, openLeaderboard } = useRanking();
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [isFreePlayOpen, setIsFreePlayOpen] = useState(false);
   const [onlineSession, setOnlineSession] = useState<{ part: GamePart; partnerName: string; startAtMs: number; sessionKey: number } | null>(null);
@@ -252,6 +275,22 @@ const AppContent: React.FC = () => {
     setIsFreePlayOpen(true);
   };
 
+  const handleOpenSearch = () => {
+    ensureSoloAudio();
+    setIsSearchOpen(true);
+  };
+
+  const handleOpenAudio = () => {
+    if (!isAudioRunning) void handleStartAudio();
+    setIsSettingsOpen(true);
+  };
+
+  // Every player can reach the exercise, so its board is the one all of them share
+  const handleOpenRanking = () => {
+    const { title, trackName } = getDemoSong();
+    openLeaderboard({ songId: DEMO_SONG_ID, partId: 0, title, trackName });
+  };
+
   const handleLoadDemo = () => {
     songSelectionVersion.current += 1;
     setRestoreError(null);
@@ -313,6 +352,14 @@ const AppContent: React.FC = () => {
     } catch (err) {
       return err instanceof Error ? err.message : 'Não foi possível recarregar a tablatura. Tente novamente.';
     }
+  };
+
+  const navProps = {
+    isAudioRunning,
+    onPlay: handleLoadDemo,
+    onSearch: handleOpenSearch,
+    onAudio: handleOpenAudio,
+    onRanking: isRankingOn ? handleOpenRanking : null
   };
 
   return (
@@ -396,140 +443,135 @@ const AppContent: React.FC = () => {
       ) : legalRoute ? (
         <LegalPage document={legalRoute.document} sectionId={legalRoute.sectionId} />
       ) : (
-        <div className="h-full overflow-y-auto overflow-x-hidden">
+        <div className="h-full scroll-smooth overflow-y-auto overflow-x-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom))] motion-reduce:scroll-auto lg:pb-0">
           <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-ink-800 focus:px-3 focus:py-2 focus:text-sm">Pular para o conteúdo</a>
-          <header className="fixed inset-x-0 top-0 z-40 border-b border-ink-700/70 bg-ink-950/95 backdrop-blur-xl">
-            <div className="mx-auto flex min-h-20 max-w-7xl items-center justify-between gap-3 px-5 sm:px-8 lg:px-12">
-              <BrandMark />
-              <div className="flex items-center gap-3 sm:gap-6">
-                <span role="status" className="flex items-center gap-2 text-xs text-ink-300">
-                  <span aria-hidden="true" className={`size-2 rounded-full ${isAudioRunning ? 'bg-hit' : 'bg-ink-400'}`} />
-                  <span className="hidden sm:inline">Áudio {isAudioRunning ? 'conectado' : 'desconectado'}</span>
-                  <span className="sr-only sm:hidden">Áudio {isAudioRunning ? 'conectado' : 'desconectado'}</span>
-                </span>
+          <header className="sticky top-0 z-40 border-b border-ink-700/70 bg-ink-950/95 backdrop-blur-xl">
+            <div className="mx-auto flex min-h-16 max-w-7xl items-center justify-between gap-3 px-5 sm:px-8 lg:px-12">
+              <div className="flex items-center gap-4 lg:gap-8">
+                <BrandMark size={32} />
+                <HeaderNav {...navProps} />
+              </div>
+              <div className="flex items-center gap-1 lg:gap-2">
+                <span role="status" className="sr-only">Áudio {isAudioRunning ? 'conectado' : 'desconectado'}</span>
+                <AudioChip isAudioRunning={isAudioRunning} onAudio={handleOpenAudio} />
                 {isRankingOn && (
                   <button type="button" onClick={openAccount} aria-label={hasAccount ? 'Minha conta do ranking' : 'Entrar no ranking'}
-                    className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-lg px-2 py-2 text-xs font-semibold text-ink-200 transition hover:bg-ink-800 hover:text-amp-300 sm:text-sm">
-                    <Trophy size={16} className="shrink-0 text-amp-400" aria-hidden="true" /><span className="hidden lg:inline">{hasAccount ? 'Minha conta do ranking' : 'Entrar no ranking'}</span>
+                    className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-lg px-2 text-sm font-semibold text-ink-200 transition hover:bg-ink-800 hover:text-amp-300">
+                    <UserRound size={18} className="shrink-0 text-amp-400" aria-hidden="true" /><span className="hidden xl:inline">{hasAccount ? 'Minha conta' : 'Entrar'}</span>
                   </button>
                 )}
-                <a href={supportHref} target="_blank" rel="noopener noreferrer" aria-label={supportLabel} className="flex min-h-11 max-w-48 items-center gap-2 rounded-lg px-2 py-2 text-xs font-semibold text-ink-200 transition hover:bg-ink-800 hover:text-amp-300 sm:max-w-none sm:text-sm">
-                  <Heart size={16} className="shrink-0 text-amp-400" aria-hidden="true" /><span className="sm:hidden">Apoiar</span><span className="hidden sm:inline">{supportLabel}</span>
+                <a href={supportHref} target="_blank" rel="noopener noreferrer" title={supportLabel} className="flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg px-2 text-sm font-semibold text-ink-200 transition hover:bg-ink-800 hover:text-amp-300">
+                  <Heart size={18} className="shrink-0 text-amp-400" aria-hidden="true" /><span className="sr-only xl:not-sr-only">Apoiar</span>
                 </a>
               </div>
             </div>
           </header>
+          <TabBar {...navProps} />
+          <StorageNotice />
 
-          <main id="main-content" className="pt-20">
-            <section aria-labelledby="hero-title" className="relative isolate mx-auto max-w-7xl px-5 pb-14 pt-14 sm:px-8 sm:pt-20 lg:px-12 lg:pb-20 lg:pt-24">
+          <main id="main-content" className="scroll-mt-16">
+            <section aria-labelledby="hero-title" className="relative isolate mx-auto max-w-7xl px-5 pb-10 pt-8 sm:px-8 sm:pt-12 lg:px-12 lg:pb-14">
               <div aria-hidden="true" className="pointer-events-none absolute -left-40 top-0 -z-10 size-96 rounded-full bg-amp-500/5 blur-3xl" />
               {pendingChallenge && (
                 <ChallengeCard challenge={pendingChallenge} isLoading={isLoadingChallenge}
                   onAccept={() => void handleAcceptChallenge(pendingChallenge)} onDismiss={handleDismissChallenge} />
               )}
-              <div className="grid items-center gap-12 lg:grid-cols-[1.05fr_1fr] lg:gap-12">
+              <div className="grid items-center gap-12 lg:grid-cols-[1.2fr_1fr]">
                 <div>
-                  <p className="mb-6 inline-flex items-center gap-2 rounded-full border border-amp-500/25 bg-amp-500/5 px-3 py-1.5 text-xs font-medium text-amp-300">
+                  <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-amp-500/25 bg-amp-500/5 px-3 py-1.5 text-xs font-medium text-amp-300">
                     <span className="size-1.5 rounded-full bg-amp-400" aria-hidden="true" /> Grátis. Sem instalar. Só tocar.
                   </p>
-                  <h1 id="hero-title" className="max-w-2xl font-display text-[2.75rem] leading-[1.08] font-bold tracking-[-0.045em] sm:text-6xl lg:text-[4.25rem]">
+                  <h1 id="hero-title" className="max-w-2xl font-display text-[2.5rem] leading-[1.08] font-bold tracking-[-0.045em] sm:text-5xl md:text-6xl lg:text-[2.75rem] xl:text-[3.5rem]">
                     Guitarra de verdade.<br /><span className="text-amp-400">Direto no navegador.</span>
                   </h1>
-                  <p className="mt-6 max-w-lg text-base leading-relaxed text-ink-300 sm:text-lg">
+                  <p className="mt-5 max-w-lg text-base leading-relaxed text-ink-300 sm:text-lg">
                     Conecte sua guitarra, encontre seu timbre e toque suas músicas favoritas. Cada nota é um passo no seu próximo riff.
                   </p>
-                  <div className="mt-8 flex flex-col flex-wrap gap-3 sm:flex-row">
-                    <button onClick={handleLoadDemo}
+                  <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+                    <button type="button" onClick={handleLoadDemo}
                       className="flex min-h-16 cursor-pointer items-center justify-center gap-3 rounded-xl bg-amp-400 px-6 py-3 text-ink-950 shadow-glow-amp transition hover:bg-amp-300">
                       <Play size={22} className="fill-current" aria-hidden="true" />
                       <span className="text-left"><span className="block text-base font-bold">Tocar agora</span><span className="mt-0.5 block text-xs font-medium">Exercício original · ~20 s</span></span>
                     </button>
-                    <button onClick={() => {
-                      ensureSoloAudio();
-                      setIsSearchOpen(true);
-                    }} className="flex min-h-16 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-600 bg-ink-900 px-6 py-3 text-sm font-semibold text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
+                    <button type="button" onClick={handleOpenSearch} className="flex min-h-16 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-600 bg-ink-900 px-6 py-3 text-sm font-semibold text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
                       <Music size={18} aria-hidden="true" /> Buscar música
                     </button>
-                    <button onClick={() => setIsDuoSetupOpen(true)} className="flex min-h-16 cursor-pointer items-center justify-center gap-3 rounded-xl border border-ink-600 bg-ink-900 px-5 py-3 text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
-                      <Users size={18} className="text-amp-300" aria-hidden="true" /><span className="text-left"><span className="block text-sm font-bold">Jogar em dupla</span><span className="mt-1 block text-xs text-ink-300">Duas guitarras, um computador</span></span>
-                    </button>
-                    {isRankingOn && (
-                      <button onClick={() => setIsRoomModalOpen(true)} className="flex min-h-16 cursor-pointer items-center justify-center gap-3 rounded-xl border border-signal-500/30 bg-signal-500/5 px-5 py-3 text-signal-300 transition hover:bg-signal-500/10">
-                        <Wifi size={18} aria-hidden="true" /><span className="text-left"><span className="block text-sm font-bold">Dupla online</span><span className="mt-1 block text-xs text-ink-300">Toque junto a distância</span></span>
-                      </button>
-                    )}
-                    <button onClick={handleOpenFreePlay} className="flex min-h-16 cursor-pointer items-center justify-center gap-3 rounded-xl border border-ink-600 bg-ink-900 px-5 py-3 text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
-                      <Guitar size={18} className="text-amp-300" aria-hidden="true" /><span className="text-left"><span className="block text-sm font-bold">Play Free</span><span className="mt-1 block text-xs text-ink-300">Só ouvir a guitarra e ver as notas</span></span>
-                    </button>
                   </div>
-                  <p className="mt-5 flex items-center gap-2 text-xs text-ink-300"><Check size={14} className="text-hit" aria-hidden="true" /> Sem cadastro para tocar. O ranking é opcional.</p>
+                  <p className="mt-4 flex items-center gap-2 text-xs text-ink-300"><Check size={14} className="text-hit" aria-hidden="true" /> Sem cadastro para tocar. O ranking é opcional.</p>
                 </div>
-                <PracticePreview />
+                <div className="hidden min-w-0 lg:block"><PracticePreview /></div>
               </div>
-
-              <div role="group" aria-label="Controles de áudio" className="mt-12 grid divide-y divide-ink-700 overflow-hidden rounded-2xl border border-ink-700 bg-ink-900 shadow-panel sm:mt-16 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-                <button onClick={() => void handleStartAudio()} disabled={isAudioRunning} className="group flex min-h-24 cursor-pointer items-center gap-3 px-5 py-4 text-left transition hover:bg-ink-800 disabled:cursor-default">
-                  <PlugZap size={23} className={isAudioRunning ? 'text-hit' : 'text-amp-400'} aria-hidden="true" />
-                  <span className="flex-1"><span className="block text-sm font-semibold">{isAudioRunning ? 'Guitarra conectada' : 'Conectar guitarra'}</span><span className="mt-1 block text-xs text-ink-300">{isAudioRunning ? 'Entrada de áudio ativa' : 'Interface não conectada'}</span></span>
-                  <span aria-hidden="true" className={`size-2 rounded-full ${isAudioRunning ? 'bg-hit' : 'bg-ink-400'}`} />
-                </button>
-                <button onClick={() => setIsSettingsOpen(true)} className="flex min-h-24 cursor-pointer items-center gap-3 px-5 py-4 text-left transition hover:bg-ink-800">
-                  <Sliders size={23} className="text-signal-400" aria-hidden="true" />
-                  <span className="flex-1"><span className="block text-sm font-semibold">Áudio e afinador</span><span className="mt-1 block text-xs text-ink-300">Entrada, saída, buffer e latência</span></span><ArrowUpRight size={16} className="text-ink-300" aria-hidden="true" />
-                </button>
-                <button onClick={() => {
-                  if (!isAudioRunning) void handleStartAudio();
-                  setIsAmpRackOpen(true);
-                }} className="flex min-h-24 cursor-pointer items-center gap-3 px-5 py-4 text-left transition hover:bg-ink-800">
-                  <Zap size={23} className="text-amp-400" aria-hidden="true" />
-                  <span className="flex-1"><span className="block text-sm font-semibold">Timbre do amp</span><span className="mt-1 block text-xs text-ink-300">Motor PRGB Amp</span></span><ArrowUpRight size={16} className="text-ink-300" aria-hidden="true" />
-                </button>
-              </div>
-              <div className="mt-4"><LandingPitch /></div>
             </section>
+
+            <div className="mx-auto grid max-w-7xl gap-10 px-5 pb-12 sm:px-8 lg:grid-cols-2 lg:gap-12 lg:px-12 lg:pb-16">
+              <section id="modos" aria-labelledby="modes-title" className="scroll-mt-20">
+                <h2 id="modes-title" className="font-display text-2xl font-bold tracking-tight">Modos de jogo</h2>
+                <div className="mt-4 grid gap-3">
+                  <ActionRow icon={Guitar} tone={AMP_TONE} title="Play Free" description="Só ouvir a guitarra e ver as notas" onClick={handleOpenFreePlay} />
+                  <ActionRow icon={Users} tone={AMP_TONE} title="Jogar em dupla" description="Duas guitarras, um computador" onClick={() => setIsDuoSetupOpen(true)} />
+                  {isRankingOn && <ActionRow icon={Wifi} tone={SIGNAL_TONE} title="Dupla online" description="Toque junto a distância" onClick={() => setIsRoomModalOpen(true)} />}
+                </div>
+              </section>
+
+              <section aria-labelledby="setup-title">
+                <h2 id="setup-title" className="font-display text-2xl font-bold tracking-tight">Prepare a guitarra</h2>
+                <div className="mt-4 grid gap-3">
+                  <ActionRow icon={PlugZap} tone={isAudioRunning ? HIT_TONE : AMP_TONE} title={isAudioRunning ? 'Guitarra conectada' : 'Conectar guitarra'}
+                    description={isAudioRunning ? 'Entrada de áudio ativa' : 'Interface não conectada'} disabled={isAudioRunning} onClick={() => void handleStartAudio()} />
+                  <ActionRow icon={Sliders} tone={SIGNAL_TONE} title="Áudio e afinador" description="Entrada, saída, buffer e latência" onClick={() => setIsSettingsOpen(true)} />
+                  <ActionRow icon={Zap} tone={AMP_TONE} title="Timbre do amp" description="Motor PRGB Amp" onClick={() => {
+                    if (!isAudioRunning) void handleStartAudio();
+                    setIsAmpRackOpen(true);
+                  }} />
+                </div>
+                <div className="mt-3"><LandingPitch /></div>
+              </section>
+            </div>
 
             <LocalRecords />
 
+            <div className="mx-auto max-w-2xl px-5 pb-12 sm:px-8 lg:hidden"><PracticePreview /></div>
+
             <section aria-labelledby="features-title" className="border-y border-ink-700/70 bg-ink-900/50">
-              <div className="mx-auto max-w-7xl px-5 py-16 sm:px-8 lg:px-12 lg:py-20">
-                <div className="mb-9 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-                  <div><p className="mb-3 font-mono text-xs tracking-[0.16em] text-amp-300">SEU SETUP, SIMPLIFICADO</p><h2 id="features-title" className="font-display text-3xl font-bold tracking-tight sm:text-4xl">Menos ajustes. Mais música.</h2></div>
+              <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8 lg:px-12 lg:py-16">
+                <div className="mb-7 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+                  <div><p className="mb-2 font-mono text-xs tracking-[0.16em] text-amp-300">SEU SETUP, SIMPLIFICADO</p><h2 id="features-title" className="font-display text-3xl font-bold tracking-tight sm:text-4xl">Menos ajustes. Mais música.</h2></div>
                   <p className="max-w-xs text-sm leading-relaxed text-ink-300">Do primeiro acorde ao riff que não sai da cabeça. Tudo no mesmo lugar.</p>
                 </div>
-                <div className="grid gap-4 md:grid-cols-3">
+                <div className="grid gap-3 md:grid-cols-3 md:gap-4">
                   {[
                     { icon: Zap, label: '01 / TIMBRE', title: 'Encontre o seu timbre.', description: 'Simulador de amplificador em tempo real, o PRGB Amp. Ajuste o ganho, o gabinete e o reverb até achar o seu som.', detail: 'PRGB Amp · Simulador + gabinete + reverb', color: 'text-amp-300', surface: 'bg-amp-500/10 border-amp-500/20' },
                     { icon: AudioLines, label: '02 / ENTRADA', title: 'Plugue. Afine. Toque.', description: 'Escolha sua interface, monte a rota de áudio e use o afinador integrado. A latência depende do seu navegador e do seu equipamento.', detail: 'Sua guitarra no centro de tudo', color: 'text-signal-300', surface: 'bg-signal-500/10 border-signal-500/20' },
                     { icon: Target, label: '03 / PRÁTICA', title: 'Cada nota conta.', description: 'Acompanhe as tablaturas, acerte as notas e construa seu combo. Perfeito, Bom ou Errou: veja seu progresso enquanto toca.', detail: 'Exercício próprio e busca em acervo externo', color: 'text-hit', surface: 'bg-hit/10 border-hit/20' }
                   ].map(({ icon: Icon, label, title, description, detail, color, surface }) => (
-                    <article key={label} className="flex flex-col rounded-2xl border border-ink-700 bg-ink-850 p-6 sm:p-7">
-                      <span className={`mb-7 flex size-12 items-center justify-center rounded-xl border ${color} ${surface}`}><Icon size={24} aria-hidden="true" /></span>
-                      <p className={`mb-3 font-mono text-[10px] tracking-widest ${color}`}>{label}</p>
-                      <h3 className="font-display text-xl font-bold tracking-tight">{title}</h3>
-                      <p className="mt-3 mb-6 flex-1 text-sm leading-7 text-ink-300">{description}</p>
-                      <p className="border-t border-ink-700 pt-4 text-xs text-ink-300">{detail}</p>
+                    <article key={label} className="grid grid-cols-[auto_1fr] items-center gap-x-3 rounded-2xl border border-ink-700 bg-ink-850 p-5 sm:p-6 md:grid-rows-[auto_auto_1fr_auto]">
+                      <span className={`flex size-10 items-center justify-center rounded-xl border ${color} ${surface}`}><Icon size={20} aria-hidden="true" /></span>
+                      <p className={`hidden font-mono text-[10px] tracking-widest md:block ${color}`}>{label}</p>
+                      <h3 className="font-display text-xl font-bold tracking-tight md:col-span-2 md:mt-4">{title}</h3>
+                      <p className="col-span-2 mt-2 self-start text-sm leading-6 text-ink-300 md:mb-4">{description}</p>
+                      <p className="col-span-2 hidden border-t border-ink-700 pt-3 text-xs text-ink-300 md:block">{detail}</p>
                     </article>
                   ))}
                 </div>
               </div>
             </section>
 
-            <section aria-labelledby="steps-title" className="mx-auto max-w-7xl px-5 py-16 sm:px-8 lg:px-12 lg:py-20">
-              <p className="mb-3 font-mono text-xs tracking-[0.16em] text-amp-300">COMO FUNCIONA</p>
+            <section aria-labelledby="steps-title" className="mx-auto max-w-7xl px-5 py-12 sm:px-8 lg:px-12 lg:py-16">
+              <p className="mb-2 font-mono text-xs tracking-[0.16em] text-amp-300">COMO FUNCIONA</p>
               <h2 id="steps-title" className="font-display text-3xl font-bold tracking-tight sm:text-4xl">Do cabo ao primeiro riff.</h2>
-              <ol className="mt-10 grid gap-8 md:grid-cols-3 md:gap-10">
+              <ol className="mt-7 grid gap-6 md:grid-cols-3 md:gap-10">
                 {[
                   { icon: PlugZap, title: 'Plugue a interface', description: 'Conecte a guitarra à sua interface USB e permita o acesso ao áudio no navegador.' },
                   { icon: Music, title: 'Escolha a música', description: 'Comece pelo exercício do PRGB ou busque sua próxima música no acervo.' },
                   { icon: Headphones, title: 'Dê o play. Toque.', description: 'Coloque os fones, ajuste seu timbre e siga as notas. Repita aquele trecho até sair.' }
                 ].map(({ icon: Icon, title, description }, index) => (
-                  <li key={title} className="relative border-t border-ink-600 pt-6">
-                    <div className="mb-5 flex items-center justify-between"><span className="font-display text-4xl font-medium text-amp-300">0{index + 1}</span><Icon size={22} className="text-ink-300" aria-hidden="true" /></div>
-                    <h3 className="font-display text-lg font-bold">{title}</h3><p className="mt-2 max-w-sm text-sm leading-7 text-ink-300">{description}</p>
+                  <li key={title} className="relative border-t border-ink-600 pt-4">
+                    <div className="mb-2 flex items-center justify-between"><span className="font-display text-2xl font-medium text-amp-300">0{index + 1}</span><Icon size={20} className="text-ink-300" aria-hidden="true" /></div>
+                    <h3 className="font-display text-lg font-bold">{title}</h3><p className="mt-1 max-w-sm text-sm leading-6 text-ink-300">{description}</p>
                   </li>
                 ))}
               </ol>
-              <div className="mt-14 flex flex-col items-start justify-between gap-5 rounded-2xl border border-amp-500/20 bg-amp-500/5 p-6 sm:flex-row sm:items-center sm:p-8">
+              <div className="mt-10 flex flex-col items-start justify-between gap-4 rounded-2xl border border-amp-500/20 bg-amp-500/5 p-5 sm:flex-row sm:items-center sm:p-7">
                 <div><p className="font-display text-xl font-bold">Feito para quem quer tocar.</p><p className="mt-2 text-sm text-ink-300">PRGB é grátis. Seu apoio ajuda o projeto a seguir em frente.</p></div>
                 <a href={supportHref} target="_blank" rel="noopener noreferrer" className="flex min-h-11 items-center gap-2 rounded-lg py-2 text-sm font-semibold text-amp-300 hover:text-amp-200"><Heart size={17} className="shrink-0" aria-hidden="true" /><span>{supportLabel}</span><ArrowRight size={16} className="shrink-0" aria-hidden="true" /></a>
               </div>
@@ -553,7 +595,6 @@ const AppContent: React.FC = () => {
               </div>
             </div>
           </footer>
-          <StorageNotice />
         </div>
       )}
 
