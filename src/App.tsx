@@ -34,6 +34,7 @@ import { rankingDevSetup } from './components/devRanking';
 import { RankingModals } from './components/RankingModals';
 import { CHALLENGE_PARAM, readChallengeFromSearch, type Challenge } from './services/challenge';
 import { BrandMark } from './components/BrandMark';
+import { openScreenLayer } from './context/historyLayers';
 import { getSongMetadata, loadSongTrack } from './context/uiErrors';
 import { PracticeGame } from './components/PracticeGame';
 import { FreePlay } from './components/FreePlay';
@@ -137,11 +138,8 @@ const initialSession = (devScene: ReturnType<typeof readDevScene>): GameSession 
 const clearChallengeParam = () => {
   const url = new URL(window.location.href);
   url.searchParams.delete(CHALLENGE_PARAM);
-  window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+  window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
 };
-
-// An entry in the browser's history marks each screen above the landing, so going back leaves the game and not the site
-const isScreenEntry = (): boolean => (window.history.state as { prgbScreen?: boolean } | null)?.prgbScreen === true;
 
 const LandingPitch: React.FC = () => {
   const latestPitch = useLatestPitch();
@@ -233,19 +231,6 @@ const AppContent: React.FC = () => {
 
   const screen = onlineSession ? 'sala' : isFreePlayOpen ? 'play_free' : session ? 'jogo' : 'inicio';
   const isOnScreen = screen !== 'inicio';
-  const wasOnScreen = useRef(false);
-
-  useEffect(() => {
-    if (isOnScreen && !isScreenEntry()) {
-      // Whatever the address carried (?demo) belongs to the screen, so the landing's own entry drops it
-      const address = window.location.href;
-      window.history.replaceState(window.history.state, '', window.location.pathname + window.location.hash);
-      window.history.pushState({ prgbScreen: true }, '', address);
-    } else if (!isOnScreen && wasOnScreen.current && isScreenEntry()) {
-      window.history.back(); // closed by a button: the entry would turn into a back press that does nothing
-    }
-    wasOnScreen.current = isOnScreen;
-  }, [isOnScreen]);
 
   // Duo is a session mode: leaving it restores the input channel saved in the preferences
   const soloChannelMode = () => channelMode === 'duo' ? readPreferences().channelMode : channelMode;
@@ -290,11 +275,7 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     if (!isOnScreen) return;
-    const onPopState = () => {
-      if (!isScreenEntry()) closeScreen();
-    };
-    window.addEventListener('popstate', onPopState);
-    return () => window.removeEventListener('popstate', onPopState);
+    return openScreenLayer(() => closeScreen());
   }, [isOnScreen]);
 
   const handleOpenFreePlay = () => {

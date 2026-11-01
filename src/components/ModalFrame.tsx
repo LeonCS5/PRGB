@@ -1,4 +1,5 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useEffectEvent, useRef } from 'react';
+import { openModalLayer } from '../context/historyLayers';
 
 export interface ModalFrameProps {
   titleId: string;
@@ -9,11 +10,16 @@ export interface ModalFrameProps {
 
 export const ModalFrame: React.FC<ModalFrameProps> = ({ titleId, onClose, className = '', children }) => {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const requestClose = useEffectEvent(onClose);
   useEffect(() => {
     const dialog = dialogRef.current;
     dialog?.showModal();
     dialog?.focus();
-    return () => dialog?.close();
+    const dropLayer = openModalLayer(() => requestClose());
+    return () => {
+      dropLayer();
+      dialog?.close();
+    };
   }, []);
 
   return (
