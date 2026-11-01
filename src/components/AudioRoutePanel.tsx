@@ -199,6 +199,7 @@ export const AudioRoutePanel: React.FC<AudioRoutePanelProps> = ({ currentDeviceI
     <section aria-labelledby="audio-route-title" className="rounded-2xl border border-ink-700 bg-ink-950 p-4">
       <h3 id="audio-route-title" className="font-display text-base font-bold">Rota de áudio</h3>
       <p className="mt-0.5 text-xs leading-5 text-ink-300">Monte a rota como num painel de driver: uma entrada e uma saída, buffer e compensação. O navegador usa os drivers do Windows, não ASIO.</p>
+      <p className="mt-1 text-xs leading-5 text-near">Use tomadas aterradas. Se sentir choque ao tocar nas cordas, pare, desconecte tudo e chame um eletricista.</p>
 
       <div className="mt-3 grid gap-4 md:grid-cols-[1.25fr_1fr]">
         <div>

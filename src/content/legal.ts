@@ -309,7 +309,8 @@ export const TERMS_OF_USE: LegalDocument = {
     'Ranking e sala online são só para maiores de 18 anos.',
     'Não vale apelido ofensivo ou que imite outra pessoa ou a equipe, nem trapaça ou envio automatizado.',
     'Podemos remover apelidos e pontuações e encerrar contas que violem estas regras.',
-    'Cuide da sua audição: comece sempre com o volume baixo.'
+    'Cuide da sua audição: comece sempre com o volume baixo.',
+    'Use tomadas aterradas. Se sentir choque ao tocar na guitarra, pare, desconecte tudo e chame um eletricista.'
   ],
   sections: [
     {
@@ -402,10 +403,11 @@ export const TERMS_OF_USE: LegalDocument = {
     },
     {
       id: 'audicao-e-equipamento',
-      title: 'Sua audição e seu equipamento',
+      title: 'Sua audição, sua segurança e seu equipamento',
       paragraphs: [
         'O PRGB envia o som da sua guitarra, já processado, para fones ou caixas de som em tempo real. Antes de tocar, abaixe o volume e aumente aos poucos. Volume alto, principalmente em fones de ouvido e por muito tempo, pode causar perda auditiva permanente. Faça pausas.',
         'Ganho alto no amplificador e microfonia (o som da caixa voltando para o microfone) podem gerar sons fortes de repente. Se usar microfone, prefira fones de ouvido.',
+        'Ligue o computador, a interface e os amplificadores em tomadas com aterramento. Sem isso, as cordas da guitarra podem ficar energizadas e dar choque. Se sentir choque ao tocar na guitarra, pare na hora, desconecte tudo e chame um eletricista antes de usar de novo. Um computador sem aterramento é um risco elétrico que o PRGB não consegue detectar.',
         'Você é responsável pelo seu equipamento (interface de áudio, cabos, fones e caixas de som) e pelo modo de usá-lo.'
       ]
     },
