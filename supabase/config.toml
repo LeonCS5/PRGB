@@ -1,0 +1,13 @@
+# Supabase CLI configuration for PRGB. Written by hand (`supabase init` could not run in the environment
+# where it was created): only what the project needs, every other setting keeps the CLI default.
+# The remote project is chosen with `supabase link --project-ref wpgjynobjocziltkasvv`.
+project_id = "wpgjynobjocziltkasvv"
+
+[auth]
+# Ranking accounts are anonymous and only created after the player accepts the terms (local stack;
+# on the hosted project this is set in the dashboard)
+enable_anonymous_sign_ins = true
+
+[functions.register-part]
+# Only called by signed-in players through supabase.functions.invoke
+verify_jwt = true

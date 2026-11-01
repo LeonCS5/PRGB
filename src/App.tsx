@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   Music,
   Play,
@@ -12,27 +12,51 @@ import {
   Headphones,
   PlugZap,
   Target,
+  Trophy,
   Volume2,
   Zap,
-  Loader2
+  Loader2,
+  Users,
+  Wifi,
+  X,
+  MessageSquareWarning
 } from 'lucide-react';
 import { getDemoSong, DEMO_SONG_ID } from './services/demoSong';
-import type { NormalizedSongTab } from './services/songsterrApi';
 import { ErrorNotice } from './components/ErrorNotice';
+import { ChallengeCard } from './components/ChallengeCard';
+import { LocalRecords } from './components/LocalRecords';
+import { DuoSetupModal } from './components/DuoSetupModal';
+import { LegalPage } from './components/LegalPage';
+import { readHash, resolveLegalRoute, subscribeToHash } from './context/legalRoute';
+import { consumeLocalDataCleared } from './context/localData';
+import { gameDevPreset, readDevScene } from './components/devScenes';
+import { rankingDevSetup } from './components/devRanking';
+import { RankingModals } from './components/RankingModals';
+import { CHALLENGE_PARAM, readChallengeFromSearch, type Challenge } from './services/challenge';
 import { BrandMark } from './components/BrandMark';
 import { getSongMetadata, loadSongTrack } from './context/uiErrors';
 import { PracticeGame } from './components/PracticeGame';
+import { FreePlay } from './components/FreePlay';
+import { OnlinePracticeGame } from './components/OnlinePracticeGame';
+import { RoomModal } from './components/RoomModal';
 import { SongSearchModal } from './components/SongSearchModal';
 import { AudioSettingsModal } from './components/AudioSettingsModal';
-import { Tone3000AmpRack } from './components/Tone3000AmpRack';
+import { AmpRack } from './components/AmpRack';
 import { AudioSessionProvider, useAudioSession, useLatestPitch } from './context/AudioSessionContext';
 import { ModalsProvider, useModals } from './context/ModalsContext';
+import { FeedbackModal } from './components/FeedbackModal';
 import { readPreferences, savePreferences } from './context/preferences';
+import { DEFAULT_PLAYER_NAMES, nextSessionKey, type GamePart, type GameSession, type RankedStart, type SoloSession } from './context/gameSession';
+import { RankingProvider } from './context/RankingProvider';
+import { RoomProvider } from './context/RoomProvider';
+import { useRanking } from './context/ranking';
 
 const supportUrl = import.meta.env.VITE_SUPPORT_URL?.trim();
 const supportHref = supportUrl || 'https://github.com/LeonCS5/PRGB';
 const supportLabel = supportUrl ? 'Apoie o projeto' : 'Apoie com uma estrela no GitHub';
 const currentYear = new Date().getFullYear();
+// Read once per page load (erasing local data reloads the page to confirm it here)
+const localDataWasCleared = consumeLocalDataCleared();
 
 const PracticePreview: React.FC = () => (
   <figure className="relative min-w-0 lg:-mr-8" aria-label="Ilustração do modo de prática: seis cordas, notas e pontuação em tempo real">
@@ -77,6 +101,40 @@ const PracticePreview: React.FC = () => (
   </figure>
 );
 
+const demoPart = (): GamePart => ({ tab: getDemoSong(), partId: 0, revisionId: null });
+
+// The demo has a single part (0): a demo challenge for any other part can't be played, so it's
+// ignored like any other invalid link
+const readValidChallenge = (): Challenge | null => {
+  const challenge = readChallengeFromSearch(window.location.search);
+  return challenge && challenge.songId === DEMO_SONG_ID && challenge.partId !== 0 ? null : challenge;
+};
+
+const soloSession = (part: GamePart, challenge: Challenge | null = null, rankedStart: RankedStart | null = null): GameSession =>
+  ({ mode: 'solo', key: nextSessionKey(), part, challenge, rankedStart });
+
+const duoSession = (parts: [GamePart, GamePart], names: [string, string]): GameSession =>
+  ({ mode: 'duo', key: nextSessionKey(), parts, names });
+
+const initialSession = (devScene: ReturnType<typeof readDevScene>): GameSession | null => {
+  if (devScene === 'dupla' || devScene === 'dupla-resultado') {
+    const demo = demoPart();
+    return duoSession([demo, demo], ['Ana', 'Beto']);
+  }
+  if (devScene === 'ranking-partida') return soloSession(demoPart(), null, 'on');
+  if (devScene === 'resultado' || devScene === 'desafio' || devScene === 'ranking-resultado' || new URLSearchParams(window.location.search).has('demo')) {
+    return soloSession(demoPart());
+  }
+  return null;
+};
+
+// Drops ?desafio= from the address bar without reloading, keeping any other parameter
+const clearChallengeParam = () => {
+  const url = new URL(window.location.href);
+  url.searchParams.delete(CHALLENGE_PARAM);
+  window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+};
+
 const LandingPitch: React.FC = () => {
   const latestPitch = useLatestPitch();
   if (!latestPitch) return null;
@@ -91,7 +149,7 @@ const LandingPitch: React.FC = () => {
 const AppContent: React.FC = () => {
   const {
     audioEngine,
-    tone3000,
+    ampEngine,
     isAudioRunning,
     audioError,
     dismissAudioError,
@@ -104,26 +162,52 @@ const AppContent: React.FC = () => {
   const {
     isSearchOpen,
     isSettingsOpen,
-    isTone3000RackOpen,
+    isAmpRackOpen,
+    isFeedbackOpen,
     setSearchOpen: setIsSearchOpen,
     setSettingsOpen: setIsSettingsOpen,
-    setTone3000RackOpen: setIsTone3000RackOpen
+    setAmpRackOpen: setIsAmpRackOpen,
+    setFeedbackOpen: setIsFeedbackOpen
   } = useModals();
+  const { isConfigured: isRankingOn, hasAccount, openAccount } = useRanking();
+  const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
+  const [isFreePlayOpen, setIsFreePlayOpen] = useState(false);
+  const [onlineSession, setOnlineSession] = useState<{ part: GamePart; partnerName: string; startAtMs: number; sessionKey: number } | null>(null);
 
-  const [activeTab, setActiveTab] = useState<NormalizedSongTab | null>(() => new URLSearchParams(window.location.search).has('demo') ? getDemoSong() : null);
+  const [devScene] = useState(readDevScene);
+  const [session, setSession] = useState<GameSession | null>(() => initialSession(devScene));
+  const [devSessionKey] = useState(() => session?.key ?? null);
+  const [isDuoSetupOpen, setIsDuoSetupOpen] = useState(() => devScene === 'dupla-assistente');
+  // Player names while the duo picks a song in the search modal (it's in duo mode while set)
+  const [duoSearchNames, setDuoSearchNames] = useState<[string, string] | null>(null);
   const [isLoadingDefault, setIsLoadingDefault] = useState(false);
   const [savedSong] = useState(() => readPreferences().lastSong);
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [restoreAttempt, setRestoreAttempt] = useState(0);
   const [defaultError, setDefaultError] = useState<string | null>(null);
+  const [pendingChallenge, setPendingChallenge] = useState<Challenge | null>(readValidChallenge);
+  const [openedWithChallenge] = useState(() => pendingChallenge !== null);
+  const [isLoadingChallenge, setIsLoadingChallenge] = useState(false);
+  const [showClearedNotice, setShowClearedNotice] = useState(localDataWasCleared);
+  const [challengeError, setChallengeError] = useState<string | null>(null);
   const songSelectionVersion = useRef(0);
+  const hash = useSyncExternalStore(subscribeToHash, readHash);
+  const legalRoute = useMemo(() => resolveLegalRoute(hash), [hash]);
+  const [openedOnLegalPage] = useState(() => legalRoute !== null);
+
+  const sessionParts = useMemo<GamePart[]>(
+    () => !session ? [] : session.mode === 'solo' ? [session.part] : session.parts,
+    [session]
+  );
 
   useEffect(() => {
-    if (activeTab) audioEngine.setTuning(activeTab.tuning);
-  }, [activeTab, audioEngine]);
+    sessionParts.forEach((part, player) => audioEngine.setTuning(part.tab.tuning, player === 0 ? 0 : 1));
+  }, [sessionParts, audioEngine]);
 
   useEffect(() => {
-    if (!savedSong || savedSong.songId === DEMO_SONG_ID || new URLSearchParams(window.location.search).has('demo')) return;
+    // A challenge link opens on the landing card instead of jumping into the last song, and a legal page
+    // (the consent form opens them in a new tab) stays on screen while it is being read
+    if (!savedSong || savedSong.songId === DEMO_SONG_ID || openedWithChallenge || openedOnLegalPage || devScene || new URLSearchParams(window.location.search).has('demo')) return;
     let cancelled = false;
     const version = songSelectionVersion.current;
     const restoreSong = async () => {
@@ -132,7 +216,7 @@ const AppContent: React.FC = () => {
         const trackIndex = meta.tracks.findIndex((track) => track.partId === savedSong.partId);
         if (trackIndex < 0) throw new Error('A faixa salva não está mais disponível.');
         const normalized = await loadSongTrack(meta, trackIndex);
-        if (!cancelled && version === songSelectionVersion.current) setActiveTab(normalized);
+        if (!cancelled && version === songSelectionVersion.current) setSession(soloSession({ tab: normalized, partId: savedSong.partId, revisionId: meta.revisionId }));
       } catch (err) {
         if (!cancelled && version === songSelectionVersion.current) {
           setRestoreError(`Não foi possível restaurar a última música. ${err instanceof Error ? err.message : 'Busque uma música para continuar.'}`);
@@ -141,25 +225,93 @@ const AppContent: React.FC = () => {
     };
     void restoreSong();
     return () => { cancelled = true; };
-  }, [savedSong, restoreAttempt]);
+  }, [savedSong, restoreAttempt, openedWithChallenge, openedOnLegalPage, devScene]);
+
+  // Duo is a session mode: leaving it restores the input channel saved in the preferences
+  const soloChannelMode = () => channelMode === 'duo' ? readPreferences().channelMode : channelMode;
+
+  const exitDuoAudio = () => {
+    if (channelMode === 'duo') void handleChannelModeChange(readPreferences().channelMode);
+  };
+
+  // Solo songs connect the audio if needed, in the solo channel mode
+  const ensureSoloAudio = () => {
+    if (!isAudioRunning || channelMode === 'duo') void handleStartAudio(undefined, soloChannelMode());
+  };
+
+  const startDuo = (parts: [GamePart, GamePart], names: [string, string]) => {
+    songSelectionVersion.current += 1;
+    setRestoreError(null);
+    setDefaultError(null);
+    setDuoSearchNames(null);
+    setSession(duoSession(parts, names));
+  };
+
+  const handleOpenFreePlay = () => {
+    songSelectionVersion.current += 1;
+    setRestoreError(null);
+    setDefaultError(null);
+    ensureSoloAudio();
+    setIsFreePlayOpen(true);
+  };
 
   const handleLoadDemo = () => {
     songSelectionVersion.current += 1;
     setRestoreError(null);
     setDefaultError(null);
-    setActiveTab(getDemoSong());
+    exitDuoAudio();
+    setSession(soloSession(demoPart()));
+  };
+
+  const handleAcceptChallenge = async (challenge: Challenge) => {
+    clearChallengeParam();
+    songSelectionVersion.current += 1;
+    const version = songSelectionVersion.current;
+    setRestoreError(null);
+    setDefaultError(null);
+    setChallengeError(null);
+    setIsLoadingChallenge(true);
+    ensureSoloAudio();
+    try {
+      let part: GamePart;
+      if (challenge.songId === DEMO_SONG_ID) {
+        part = demoPart();
+      } else {
+        const meta = await getSongMetadata(challenge.songId);
+        const trackIndex = meta.tracks.findIndex((track) => track.partId === challenge.partId);
+        if (trackIndex < 0) throw new Error('A faixa deste desafio não está mais disponível. Escolha outra música.');
+        part = { tab: await loadSongTrack(meta, trackIndex), partId: challenge.partId, revisionId: meta.revisionId };
+      }
+      if (version !== songSelectionVersion.current) return;
+      setPendingChallenge(null);
+      setSession(soloSession(part, challenge));
+      if (part.tab.songId !== DEMO_SONG_ID) savePreferences({ lastSong: { songId: part.tab.songId, partId: part.partId } });
+    } catch (err) {
+      if (version === songSelectionVersion.current) {
+        setChallengeError(err instanceof Error ? err.message : 'Não foi possível carregar a música do desafio.');
+      }
+    } finally {
+      setIsLoadingChallenge(false);
+    }
+  };
+
+  const handleDismissChallenge = () => {
+    clearChallengeParam();
+    setPendingChallenge(null);
+    setChallengeError(null);
   };
 
   // Load default song (Metallica - Creeping Death)
   const handleLoadDefaultSong = async () => {
     songSelectionVersion.current += 1;
+    const version = songSelectionVersion.current;
     setRestoreError(null);
     setDefaultError(null);
     setIsLoadingDefault(true);
     try {
       // Connect audio if not running
-      if (!isAudioRunning) {
-        await handleStartAudio();
+      if (!isAudioRunning || channelMode === 'duo') {
+        await handleStartAudio(undefined, soloChannelMode());
       }
 
       const songId = 5194; // Creeping Death
@@ -169,12 +321,34 @@ const AppContent: React.FC = () => {
       const track = meta.tracks[trackIndex];
 
       const normalized = await loadSongTrack(meta, trackIndex);
-      setActiveTab(normalized);
+      // Another song, the demo or a duo was picked while this one loaded: keep that one
+      if (version !== songSelectionVersion.current) return;
+      setSession(soloSession({ tab: normalized, partId: track.partId, revisionId: meta.revisionId }));
       savePreferences({ lastSong: { songId: meta.songId, partId: track.partId } });
     } catch (err) {
+      if (version !== songSelectionVersion.current) return;
       setDefaultError(err instanceof Error ? err.message : 'Não foi possível carregar a música padrão. Busque outra música.');
     } finally {
       setIsLoadingDefault(false);
+    }
+  };
+
+  // The server counted a newer revision of this tab: a ranked run needs that one, so the game remounts with it
+  const reloadOutdatedPart = async ({ part, challenge }: SoloSession): Promise<string | null> => {
+    songSelectionVersion.current += 1;
+    const version = songSelectionVersion.current;
+    const { tab, partId } = part;
+    try {
+      const meta = await getSongMetadata(tab.songId);
+      const trackIndex = meta.tracks.findIndex((track) => track.partId === partId);
+      if (trackIndex < 0) return 'Esta faixa não está mais disponível. Escolha outra música.';
+      const reloaded = await loadSongTrack(meta, trackIndex);
+      if (version === songSelectionVersion.current) {
+        setSession(soloSession({ tab: reloaded, partId, revisionId: meta.revisionId }, challenge, 'reloaded'));
+      }
+      return null;
+    } catch (err) {
+      return err instanceof Error ? err.message : 'Não foi possível recarregar a tablatura. Tente novamente.';
     }
   };
 
@@ -185,7 +359,7 @@ const AppContent: React.FC = () => {
           <ErrorNotice message={audioError} onDismiss={dismissAudioError}
             actionLabel="Abrir configurações de áudio" onAction={() => {
               setIsSearchOpen(false);
-              setIsTone3000RackOpen(false);
+              setIsAmpRackOpen(false);
               setIsSettingsOpen(true);
               dismissAudioError();
             }} />
@@ -201,19 +375,67 @@ const AppContent: React.FC = () => {
           <ErrorNotice message={defaultError} onDismiss={() => setDefaultError(null)}
             actionLabel="Tentar novamente" onAction={() => void handleLoadDefaultSong()} actionDisabled={isLoadingDefault} />
         )}
+        {showClearedNotice && (
+          <div role="status" className="flex items-center gap-3 rounded-2xl border border-hit/40 bg-ink-900 p-4 text-sm text-ink-100 shadow-panel">
+            <Check size={20} className="shrink-0 text-hit" aria-hidden="true" />
+            <p className="flex-1">Seus dados locais foram apagados.</p>
+            <button type="button" onClick={() => setShowClearedNotice(false)} aria-label="Dispensar aviso"
+              className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-xl hover:bg-ink-800">
+              <X size={18} aria-hidden="true" />
+            </button>
+          </div>
+        )}
+        {challengeError && pendingChallenge && (
+          <ErrorNotice message={challengeError} onDismiss={() => setChallengeError(null)}
+            actionLabel="Tentar novamente" onAction={() => void handleAcceptChallenge(pendingChallenge)} actionDisabled={isLoadingChallenge} />
+        )}
       </div>
-      {activeTab ? (
+      {onlineSession ? (
+        <OnlinePracticeGame
+          key={onlineSession.sessionKey}
+          myPart={onlineSession.part}
+          partnerName={onlineSession.partnerName}
+          startAtMs={onlineSession.startAtMs}
+          onExit={() => setOnlineSession(null)}
+          onBackToRoom={() => {
+            setOnlineSession(null);
+            setIsRoomModalOpen(true);
+          }}
+          onOpenAudioSettings={() => setIsSettingsOpen(true)}
+          ampEngine={ampEngine}
+          onOpenAmpRack={() => setIsAmpRackOpen(true)}
+        />
+      ) : isFreePlayOpen ? (
+        <FreePlay onExit={() => setIsFreePlayOpen(false)} onOpenAudioSettings={() => setIsSettingsOpen(true)}
+          onOpenAmpRack={() => setIsAmpRackOpen(true)} />
+      ) : session ? (
         /* Practice mode */
         <>
           <PracticeGame
-            tab={activeTab}
-            onExit={() => { songSelectionVersion.current += 1; setActiveTab(null); window.history.replaceState(null, '', window.location.pathname + window.location.hash); }}
-            onOpenSearch={() => setIsSearchOpen(true)}
+            key={session.key}
+            parts={sessionParts}
+            playerNames={session.mode === 'duo' ? session.names : null}
+            challenge={session.mode === 'solo' ? session.challenge : null}
+            devPreset={import.meta.env.DEV && devScene && session.key === devSessionKey ? gameDevPreset(devScene, Math.max(...sessionParts.map((part) => part.tab.totalDurationMs))) : null}
+            onExit={() => {
+              songSelectionVersion.current += 1;
+              if (session.mode === 'duo') exitDuoAudio();
+              setSession(null);
+              window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+            }}
+            onOpenSearch={() => {
+              setDuoSearchNames(session.mode === 'duo' ? session.names : null);
+              setIsSearchOpen(true);
+            }}
             onOpenAudioSettings={() => setIsSettingsOpen(true)}
-            tone3000={tone3000}
-            onOpenTone3000Rack={() => setIsTone3000RackOpen(true)}
+            ampEngine={ampEngine}
+            onOpenAmpRack={() => setIsAmpRackOpen(true)}
+            rankedStart={session.mode === 'solo' ? session.rankedStart : null}
+            onRankedTabOutdated={session.mode === 'solo' ? () => reloadOutdatedPart(session) : undefined}
           />
         </>
+      ) : legalRoute ? (
+        <LegalPage document={legalRoute.document} sectionId={legalRoute.sectionId} />
       ) : (
         <div className="h-full overflow-y-auto overflow-x-hidden">
           <header className="fixed inset-x-0 top-0 z-40 border-b border-ink-700/70 bg-ink-950/95 backdrop-blur-xl">
@@ -225,6 +447,12 @@ const AppContent: React.FC = () => {
                   <span className="hidden sm:inline">Áudio {isAudioRunning ? 'conectado' : 'desconectado'}</span>
                   <span className="sr-only sm:hidden">Áudio {isAudioRunning ? 'conectado' : 'desconectado'}</span>
                 </span>
+                {isRankingOn && (
+                  <button type="button" onClick={openAccount} aria-label={hasAccount ? 'Minha conta do ranking' : 'Entrar no ranking'}
+                    className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-lg px-2 py-2 text-xs font-semibold text-ink-200 transition hover:bg-ink-800 hover:text-amp-300 sm:text-sm">
+                    <Trophy size={16} className="shrink-0 text-amp-400" aria-hidden="true" /><span className="hidden lg:inline">{hasAccount ? 'Minha conta do ranking' : 'Entrar no ranking'}</span>
+                  </button>
+                )}
                 <a href={supportHref} target="_blank" rel="noopener noreferrer" aria-label={supportLabel} className="flex min-h-11 max-w-48 items-center gap-2 rounded-lg px-2 py-2 text-xs font-semibold text-ink-200 transition hover:bg-ink-800 hover:text-amp-300 sm:max-w-none sm:text-sm">
                   <Heart size={16} className="shrink-0 text-amp-400" aria-hidden="true" /><span className="sm:hidden">Apoiar</span><span className="hidden sm:inline">{supportLabel}</span>
                 </a>
@@ -235,6 +463,10 @@ const AppContent: React.FC = () => {
           <main id="main-content" className="pt-20">
             <section aria-labelledby="hero-title" className="relative isolate mx-auto max-w-7xl px-5 pb-14 pt-14 sm:px-8 sm:pt-20 lg:px-12 lg:pb-20 lg:pt-24">
               <div aria-hidden="true" className="pointer-events-none absolute -left-40 top-0 -z-10 size-96 rounded-full bg-amp-500/5 blur-3xl" />
+              {pendingChallenge && (
+                <ChallengeCard challenge={pendingChallenge} isLoading={isLoadingChallenge}
+                  onAccept={() => void handleAcceptChallenge(pendingChallenge)} onDismiss={handleDismissChallenge} />
+              )}
               <div className="grid items-center gap-12 lg:grid-cols-[1.05fr_1fr] lg:gap-12">
                 <div>
                   <p className="mb-6 inline-flex items-center gap-2 rounded-full border border-amp-500/25 bg-amp-500/5 px-3 py-1.5 text-xs font-medium text-amp-300">
@@ -253,13 +485,24 @@ const AppContent: React.FC = () => {
                       <span className="text-left"><span className="block text-base font-bold">{isLoadingDefault ? 'Carregando música…' : 'Tocar agora'}</span><span className="mt-0.5 block text-xs font-medium">Creeping Death - Metallica</span></span>
                     </button>
                     <button onClick={() => {
-                      if (!isAudioRunning) void handleStartAudio();
+                      ensureSoloAudio();
                       setIsSearchOpen(true);
                     }} className="flex min-h-16 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-600 bg-ink-900 px-6 py-3 text-sm font-semibold text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
                       <Music size={18} aria-hidden="true" /> Buscar música
                     </button>
                     <button onClick={handleLoadDemo} className="flex min-h-16 cursor-pointer items-center justify-center gap-3 rounded-xl border border-signal-500/30 bg-signal-500/5 px-5 py-3 text-signal-300 transition hover:bg-signal-500/10">
                       <Play size={18} aria-hidden="true" /><span className="text-left"><span className="block text-sm font-bold">Experimentar demo</span><span className="mt-1 block text-xs text-ink-300">Exercício offline - ~20 s</span></span>
+                    </button>
+                    <button onClick={() => setIsDuoSetupOpen(true)} className="flex min-h-16 cursor-pointer items-center justify-center gap-3 rounded-xl border border-ink-600 bg-ink-900 px-5 py-3 text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
+                      <Users size={18} className="text-amp-300" aria-hidden="true" /><span className="text-left"><span className="block text-sm font-bold">Jogar em dupla</span><span className="mt-1 block text-xs text-ink-300">Duas guitarras, um computador</span></span>
+                    </button>
+                    {isRankingOn && (
+                      <button onClick={() => setIsRoomModalOpen(true)} className="flex min-h-16 cursor-pointer items-center justify-center gap-3 rounded-xl border border-signal-500/30 bg-signal-500/5 px-5 py-3 text-signal-300 transition hover:bg-signal-500/10">
+                        <Wifi size={18} aria-hidden="true" /><span className="text-left"><span className="block text-sm font-bold">Dupla online</span><span className="mt-1 block text-xs text-ink-300">Toque junto a distância</span></span>
+                      </button>
+                    )}
+                    <button onClick={handleOpenFreePlay} className="flex min-h-16 cursor-pointer items-center justify-center gap-3 rounded-xl border border-ink-600 bg-ink-900 px-5 py-3 text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
+                      <Guitar size={18} className="text-amp-300" aria-hidden="true" /><span className="text-left"><span className="block text-sm font-bold">Play Free</span><span className="mt-1 block text-xs text-ink-300">Só ouvir a guitarra e ver as notas</span></span>
                     </button>
                   </div>
                   <p className="mt-5 flex items-center gap-2 text-xs text-ink-300"><Check size={14} className="text-hit" aria-hidden="true" /> Sem cadastro. O palco é seu.</p>
@@ -279,14 +522,16 @@ const AppContent: React.FC = () => {
                 </button>
                 <button onClick={() => {
                   if (!isAudioRunning) void handleStartAudio();
-                  setIsTone3000RackOpen(true);
+                  setIsAmpRackOpen(true);
                 }} className="flex min-h-24 cursor-pointer items-center gap-3 px-5 py-4 text-left transition hover:bg-ink-800">
                   <Zap size={23} className="text-amp-400" aria-hidden="true" />
-                  <span className="flex-1"><span className="block text-sm font-semibold">Timbre do amp</span><span className="mt-1 block text-xs text-ink-300">Motor TONE3000</span></span><ArrowUpRight size={16} className="text-ink-300" aria-hidden="true" />
+                  <span className="flex-1"><span className="block text-sm font-semibold">Timbre do amp</span><span className="mt-1 block text-xs text-ink-300">Motor PRGB Amp</span></span><ArrowUpRight size={16} className="text-ink-300" aria-hidden="true" />
                 </button>
               </div>
               <div className="mt-4"><LandingPitch /></div>
             </section>
+
+            <LocalRecords />
 
             <section aria-labelledby="features-title" className="border-y border-ink-700/70 bg-ink-900/50">
               <div className="mx-auto max-w-7xl px-5 py-16 sm:px-8 lg:px-12 lg:py-20">
@@ -296,9 +541,9 @@ const AppContent: React.FC = () => {
                 </div>
                 <div className="grid gap-4 md:grid-cols-3">
                   {[
-                    { icon: Zap, label: '01 / TIMBRE', title: 'O calor das válvulas.', description: 'Amp valvulado em tempo real com TONE3000. Ajuste o ganho, o gabinete e o reverb até encontrar o seu som.', detail: 'TONE3000 · Amp + gabinete + reverb', color: 'text-amp-300', surface: 'bg-amp-500/10 border-amp-500/20' },
+                    { icon: Zap, label: '01 / TIMBRE', title: 'O calor das válvulas.', description: 'Amp valvulado em tempo real com PRGB Amp. Ajuste o ganho, o gabinete e o reverb até encontrar o seu som.', detail: 'PRGB Amp · Amp + gabinete + reverb', color: 'text-amp-300', surface: 'bg-amp-500/10 border-amp-500/20' },
                     { icon: AudioLines, label: '02 / ENTRADA', title: 'Plugue. Afine. Toque.', description: 'Escolha sua interface e use o afinador integrado. Entrada de baixa latência para acompanhar cada movimento da palheta.', detail: 'Sua guitarra no centro de tudo', color: 'text-signal-300', surface: 'bg-signal-500/10 border-signal-500/20' },
-                    { icon: Target, label: '03 / PRÁTICA', title: 'Cada nota conta.', description: 'Acompanhe as tablaturas, acerte as notas e construa seu combo. Perfeito, Bom ou Errou: veja seu progresso enquanto toca.', detail: 'Tablaturas e metadados via Songsterr', color: 'text-hit', surface: 'bg-hit/10 border-hit/20' }
+                    { icon: Target, label: '03 / PRÁTICA', title: 'Cada nota conta.', description: 'Acompanhe as tablaturas, acerte as notas e construa seu combo. Perfeito, Bom ou Errou: veja seu progresso enquanto toca.', detail: 'Mais de 1 milhão de músicas no acervo', color: 'text-hit', surface: 'bg-hit/10 border-hit/20' }
                   ].map(({ icon: Icon, label, title, description, detail, color, surface }) => (
                     <article key={label} className="flex flex-col rounded-2xl border border-ink-700 bg-ink-850 p-6 sm:p-7">
                       <span className={`mb-7 flex size-12 items-center justify-center rounded-xl border ${color} ${surface}`}><Icon size={24} aria-hidden="true" /></span>
@@ -318,7 +563,7 @@ const AppContent: React.FC = () => {
               <ol className="mt-10 grid gap-8 md:grid-cols-3 md:gap-10">
                 {[
                   { icon: PlugZap, title: 'Plugue a interface', description: 'Conecte a guitarra à sua interface USB e permita o acesso ao áudio no navegador.' },
-                  { icon: Music, title: 'Escolha a música', description: 'Comece com Metallica ou busque sua próxima música nas tablaturas do Songsterr.' },
+                  { icon: Music, title: 'Escolha a música', description: 'Comece com Metallica ou busque sua próxima música no acervo.' },
                   { icon: Headphones, title: 'Dê o play. Toque.', description: 'Coloque os fones, ajuste seu timbre e siga as notas. Repita aquele trecho até sair.' }
                 ].map(({ icon: Icon, title, description }, index) => (
                   <li key={title} className="relative border-t border-ink-600 pt-6">
@@ -337,26 +582,75 @@ const AppContent: React.FC = () => {
           <footer className="border-t border-ink-700 bg-ink-900">
             <div className="mx-auto flex max-w-7xl flex-col gap-6 px-5 py-9 sm:px-8 lg:px-12">
               <div className="flex flex-wrap items-center justify-between gap-4"><BrandMark size={28} /><span className="font-mono text-[10px] tracking-widest text-ink-300">PLAY REAL GUITAR IN BROWSER</span></div>
-              <p className="max-w-3xl text-xs leading-6 text-ink-300">Tablaturas e metadados via Songsterr. PRGB não é afiliado ao Songsterr, Metallica ou outros artistas; todas as marcas pertencem aos seus donos.</p>
-              <div className="flex flex-wrap items-center justify-between gap-4 border-t border-ink-700 pt-5 text-xs text-ink-300"><span>© {currentYear} PRGB</span><a href={supportHref} target="_blank" rel="noopener noreferrer" className="rounded py-2 hover:text-amp-300">{supportLabel} ↗</a></div>
+              <p className="max-w-3xl text-xs leading-6 text-ink-300">Tablaturas e metadados vêm de um provedor externo. O PRGB não é afiliado a esse provedor, a artistas ou a gravadoras; todas as marcas pertencem aos seus donos.</p>
+              <div className="flex flex-wrap items-center justify-between gap-4 border-t border-ink-700 pt-5 text-xs text-ink-300">
+                <span>© {currentYear} PRGB</span>
+                <nav aria-label="Documentos legais" className="flex gap-5">
+                  <a href="#privacidade" className="rounded py-2 hover:text-amp-300">Privacidade</a>
+                  <a href="#termos" className="rounded py-2 hover:text-amp-300">Termos</a>
+                </nav>
+                <button type="button" onClick={() => setIsFeedbackOpen(true)} className="flex cursor-pointer items-center gap-2 rounded py-2 hover:text-amp-300"><MessageSquareWarning size={15} /> Reportar problema</button>
+                <a href={supportHref} target="_blank" rel="noopener noreferrer" className="rounded py-2 hover:text-amp-300">{supportLabel} ↗</a>
+              </div>
             </div>
           </footer>
         </div>
       )}
 
-      {/* Songsterr Search Modal */}
+      <FeedbackModal isOpen={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)}
+        screen={onlineSession ? 'sala' : isFreePlayOpen ? 'play_free' : session ? 'jogo' : 'inicio'} />
+
+      {/* Song Search Modal */}
       <SongSearchModal
         isOpen={isSearchOpen}
-        onClose={() => setIsSearchOpen(false)}
-        onSelectSong={(tab, song) => {
+        onClose={() => {
+          setIsSearchOpen(false);
+          // Left the search without a duo playing (gave up, or switched to Solo): back to the solo input
+          if (channelMode === 'duo' && session?.mode !== 'duo') exitDuoAudio();
+          setDuoSearchNames(null);
+        }}
+        duoNames={duoSearchNames}
+        onChooseMode={(mode) => {
+          if (mode === 'solo') {
+            setDuoSearchNames(null);
+          } else if (!duoSearchNames) {
+            // The duo needs its connection check and names first
+            setIsSearchOpen(false);
+            setIsDuoSetupOpen(true);
+          }
+        }}
+        onSelectDuo={(parts) => {
+          setIsSearchOpen(false);
+          startDuo(parts, duoSearchNames ?? DEFAULT_PLAYER_NAMES);
+        }}
+        onSelectSong={(tab, song, revisionId) => {
           songSelectionVersion.current += 1;
           setRestoreError(null);
           setDefaultError(null);
-          if (!isAudioRunning) handleStartAudio();
-          setActiveTab(tab);
+          ensureSoloAudio();
+          setSession(soloSession({ tab, partId: song.partId, revisionId }));
           if (song.songId !== DEMO_SONG_ID) savePreferences({ lastSong: song });
         }}
       />
+
+      {isDuoSetupOpen && (
+        <DuoSetupModal
+          onCancel={() => {
+            setIsDuoSetupOpen(false);
+            if (session?.mode !== 'duo') exitDuoAudio();
+          }}
+          onPlayDemo={(names) => {
+            setIsDuoSetupOpen(false);
+            const demo = demoPart();
+            startDuo([demo, demo], names);
+          }}
+          onSearchSong={(names) => {
+            setIsDuoSetupOpen(false);
+            setDuoSearchNames(names);
+            setIsSearchOpen(true);
+          }}
+        />
+      )}
 
       {/* Audio Interface Settings Modal */}
       <AudioSettingsModal
@@ -367,25 +661,44 @@ const AppContent: React.FC = () => {
         currentChannelMode={channelMode}
         onDeviceChange={handleDeviceChange}
         onChannelModeChange={handleChannelModeChange}
-        onOpenTone3000Rack={() => setIsTone3000RackOpen(true)}
+        onOpenAmpRack={() => setIsAmpRackOpen(true)}
       />
 
-      {/* TONE3000 Guitar Amp Modeler & Monitoring Rack */}
-      <Tone3000AmpRack
-        isOpen={isTone3000RackOpen}
-        onClose={() => setIsTone3000RackOpen(false)}
-        tone3000={tone3000}
+      {/* PRGB Amp & Monitoring Rack */}
+      <AmpRack
+        isOpen={isAmpRackOpen}
+        onClose={() => setIsAmpRackOpen(false)}
+        ampEngine={ampEngine}
+      />
+
+      <RankingModals />
+
+      <RoomModal
+        isOpen={isRoomModalOpen}
+        onClose={() => setIsRoomModalOpen(false)}
+        onStartGame={(part, partnerName, startAtMs) => {
+          songSelectionVersion.current += 1;
+          setOnlineSession({ part, partnerName, startAtMs, sessionKey: nextSessionKey() });
+          setIsRoomModalOpen(false);
+        }}
       />
     </div>
   );
 };
 
-export const App: React.FC = () => (
-  <AudioSessionProvider>
-    <ModalsProvider>
-      <AppContent />
-    </ModalsProvider>
-  </AudioSessionProvider>
-);
+export const App: React.FC = () => {
+  const [rankingDev] = useState(() => import.meta.env.DEV ? rankingDevSetup(readDevScene()) : null);
+  return (
+    <AudioSessionProvider>
+      <ModalsProvider>
+        <RankingProvider dev={rankingDev}>
+          <RoomProvider>
+            <AppContent />
+          </RoomProvider>
+        </RankingProvider>
+      </ModalsProvider>
+    </AudioSessionProvider>
+  );
+};
 
 export default App;

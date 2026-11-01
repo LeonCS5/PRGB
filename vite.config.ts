@@ -11,8 +11,17 @@ export default defineConfig({
     apply: 'build',
     enforce: 'post',
     generateBundle(_, bundle) {
-      const publicFiles = ['favicon.svg', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png']
-      const shellFiles = ['index.html', ...Object.keys(bundle).filter((file) => file.startsWith('assets/')), ...publicFiles]
+      const publicFiles = [
+        'favicon.svg', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png',
+        'fonts/inter-latin-wght-normal.woff2', 'fonts/space-grotesk-latin-wght-normal.woff2',
+        'fonts/jetbrains-mono-latin-wght-normal.woff2'
+      ]
+      // Lazy chunks (the Supabase client) stay out of the precache: visitors who never open the ranking
+      // shouldn't download them, and the game doesn't need them offline
+      const assets = Object.values(bundle).filter((file) => (
+        file.fileName.startsWith('assets/') && !(file.type === 'chunk' && file.isDynamicEntry)
+      ))
+      const shellFiles = ['index.html', ...assets.map((file) => file.fileName), ...publicFiles]
       const template = readFileSync(new URL('./public/sw.js', import.meta.url), 'utf8')
       const hash = createHash('sha256').update(template)
       for (const file of Object.values(bundle)) {
@@ -33,18 +42,26 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api/songsterr': {
+      '/api/tabs': {
         target: 'https://www.songsterr.com',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/songsterr/, '/api'),
+        rewrite: (path) => path.replace(/^\/api\/tabs/, '/api'),
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }
       },
-      '/cdn/songsterr': {
+      '/cdn/tabs': {
         target: 'https://dqsljvtekg760.cloudfront.net',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/cdn\/songsterr/, ''),
+        rewrite: (path) => path.replace(/^\/cdn\/tabs/, ''),
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      },
+      '/cdn2/tabs': {
+        target: 'https://d3d3l6a6rcgkaf.cloudfront.net',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/cdn2\/tabs/, ''),
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         }

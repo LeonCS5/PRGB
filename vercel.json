@@ -4,9 +4,10 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/api/songsterr/:path*", "destination": "https://www.songsterr.com/api/:path*" },
-    { "source": "/cdn/songsterr/:path*", "destination": "https://dqsljvtekg760.cloudfront.net/:path*" },
-    { "source": "/((?!api/|cdn/|assets/|icons/).*)", "destination": "/index.html" }
+    { "source": "/api/tabs/:path*", "destination": "https://www.songsterr.com/api/:path*" },
+    { "source": "/cdn/tabs/:path*", "destination": "https://dqsljvtekg760.cloudfront.net/:path*" },
+    { "source": "/cdn2/tabs/:path*", "destination": "https://d3d3l6a6rcgkaf.cloudfront.net/:path*" },
+    { "source": "/((?!api/|cdn/|assets/|icons/|fonts/).*)", "destination": "/index.html" }
   ],
   "headers": [
     {
@@ -16,6 +17,10 @@
     {
       "source": "/assets/(.*)",
       "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+    },
+    {
+      "source": "/fonts/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=2592000" }]
     }
   ]
 }

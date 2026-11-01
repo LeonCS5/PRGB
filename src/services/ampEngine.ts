@@ -1,11 +1,11 @@
-// TONE3000 Low-Latency Guitar Amp Modeler & Monitoring DSP Engine
+// PRGB Amp Low-Latency Guitar Amp Modeler & Monitoring DSP Engine
 // Provides real-time guitar sound with tube preamp emulation, multi-stage cabinet filtering,
 // 4-band tone stack EQ, downward expander noise gate, and studio room ambience.
 
 export type AmpPresetId = 'metal' | 'crunch' | 'clean' | 'lead' | 'acoustic' | 'direct_di';
 export type CabSimType = '4x12_vintage' | '2x12_british' | '1x12_tweed' | '4x12_metal' | 'bypass';
 
-export interface Tone3000Settings {
+export interface AmpSettings {
   isMonitoringEnabled: boolean; // Main guitar sound monitoring toggle
   preset: AmpPresetId;
   gain: number; // 0 to 100
@@ -19,7 +19,7 @@ export interface Tone3000Settings {
   cabSim: CabSimType;
 }
 
-export const TONE3000_DEFAULT_SETTINGS: Tone3000Settings = {
+export const AMP_DEFAULT_SETTINGS: AmpSettings = {
   isMonitoringEnabled: true,
   preset: 'metal',
   gain: 65,
@@ -37,10 +37,10 @@ export const AMP_PRESETS: Record<AmpPresetId, {
   name: string;
   tagline: string;
   badge: string;
-  settings: Partial<Tone3000Settings>;
+  settings: Partial<AmpSettings>;
 }> = {
   metal: {
-    name: 'TONE3000 Modern Metal',
+    name: 'PRGB Amp Modern Metal',
     tagline: 'Alto ganho agressivo, graves potentes e médios focados para riffs pesados',
     badge: '⚡ Metal High-Gain',
     settings: {
@@ -131,9 +131,9 @@ export const AMP_PRESETS: Record<AmpPresetId, {
   }
 };
 
-export class Tone3000AmpEngine {
+export class AmpEngine {
   private ctx: AudioContext;
-  private settings: Tone3000Settings = { ...TONE3000_DEFAULT_SETTINGS };
+  private settings: AmpSettings = { ...AMP_DEFAULT_SETTINGS };
 
   // Nodes
   public inputNode: GainNode;
@@ -165,7 +165,7 @@ export class Tone3000AmpEngine {
 
   // State
   private isGateOpen = true;
-  private listeners: Array<(settings: Tone3000Settings) => void> = [];
+  private listeners: Array<(settings: AmpSettings) => void> = [];
 
   constructor(audioContext: AudioContext) {
     this.ctx = audioContext;
@@ -430,11 +430,11 @@ export class Tone3000AmpEngine {
     this.notifyListeners();
   }
 
-  public getSettings(): Tone3000Settings {
+  public getSettings(): AmpSettings {
     return { ...this.settings };
   }
 
-  public subscribe(listener: (settings: Tone3000Settings) => void): () => void {
+  public subscribe(listener: (settings: AmpSettings) => void): () => void {
     this.listeners.push(listener);
     return () => {
       this.listeners = this.listeners.filter((l) => l !== listener);

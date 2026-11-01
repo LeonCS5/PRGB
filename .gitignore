@@ -23,3 +23,8 @@ dist-ssr
 *.sln
 *.sw?
 .screens/
+.vercel
+.env*
+
+# Agent worktrees created by Claude Code
+.claude/worktrees/

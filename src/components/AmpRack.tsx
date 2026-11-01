@@ -13,50 +13,50 @@ import {
   RotateCcw
 } from 'lucide-react';
 import {
-  Tone3000AmpEngine,
+  AmpEngine,
   AMP_PRESETS,
   type AmpPresetId,
   type CabSimType,
-  type Tone3000Settings
-} from '../services/tone3000Amp';
+  type AmpSettings
+} from '../services/ampEngine';
 
-interface Tone3000AmpRackProps {
+interface AmpRackProps {
   isOpen: boolean;
   onClose: () => void;
-  tone3000: Tone3000AmpEngine | null;
+  ampEngine: AmpEngine | null;
 }
 
-export const Tone3000AmpRack: React.FC<Tone3000AmpRackProps> = ({
+export const AmpRack: React.FC<AmpRackProps> = ({
   isOpen,
   onClose,
-  tone3000
+  ampEngine
 }) => {
-  const [settings, setSettings] = useState<Tone3000Settings | null>(
-    tone3000 ? tone3000.getSettings() : null
+  const [settings, setSettings] = useState<AmpSettings | null>(
+    ampEngine ? ampEngine.getSettings() : null
   );
   const [outputLevel, setOutputLevel] = useState<number>(0);
 
-  // Sync settings whenever tone3000 updates
+  // Sync settings whenever ampEngine updates
   useEffect(() => {
-    if (!tone3000) return;
-    setSettings(tone3000.getSettings());
-    const unsubscribe = tone3000.subscribe((newSettings) => {
+    if (!ampEngine) return;
+    setSettings(ampEngine.getSettings());
+    const unsubscribe = ampEngine.subscribe((newSettings) => {
       setSettings(newSettings);
     });
     return () => unsubscribe();
-  }, [tone3000]);
+  }, [ampEngine]);
 
   // Output level polling animation when rack is open
   useEffect(() => {
-    if (!isOpen || !tone3000) return;
+    if (!isOpen || !ampEngine) return;
     let animId: number;
     const poll = () => {
-      setOutputLevel(tone3000.getOutputLevel());
+      setOutputLevel(ampEngine.getOutputLevel());
       animId = requestAnimationFrame(poll);
     };
     animId = requestAnimationFrame(poll);
     return () => cancelAnimationFrame(animId);
-  }, [isOpen, tone3000]);
+  }, [isOpen, ampEngine]);
 
   if (!isOpen) return null;
 
@@ -64,7 +64,7 @@ export const Tone3000AmpRack: React.FC<Tone3000AmpRackProps> = ({
   const isMonitoring = settings?.isMonitoringEnabled ?? true;
 
   return (
-    <ModalFrame titleId="Tone3000AmpRack-title" onClose={onClose} className="max-w-3xl overflow-y-auto">
+    <ModalFrame titleId="AmpRack-title" onClose={onClose} className="max-w-3xl overflow-y-auto">
         
         {/* Close Button */}
         <button
@@ -75,7 +75,7 @@ export const Tone3000AmpRack: React.FC<Tone3000AmpRackProps> = ({
           <X size={20} />
         </button>
 
-        {/* Header with TONE3000 Branding and Master Monitor Toggle */}
+        {/* Header with PRGB Amp Branding and Master Monitor Toggle */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pr-8 border-b border-ink-800 pb-5">
           <div className="flex items-center gap-3.5">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-amp-600 to-amp-600 shadow-lg shadow-amp-500/25 border border-amp-400/30">
@@ -83,8 +83,8 @@ export const Tone3000AmpRack: React.FC<Tone3000AmpRackProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 id="Tone3000AmpRack-title" className="font-display text-2xl font-black tracking-tight text-ink-100">
-                  TONE3000
+                <h2 id="AmpRack-title" className="font-display text-2xl font-black tracking-tight text-ink-100">
+                  PRGB Amp
                 </h2>
                 <span className="rounded-full bg-amp-500/10 border border-amp-500/30 px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase text-amp-300">
                   Motor DSP
@@ -99,7 +99,7 @@ export const Tone3000AmpRack: React.FC<Tone3000AmpRackProps> = ({
           {/* Quick Monitor On/Off Master Switch */}
           <div className="flex items-center gap-3">
             <button
-              onClick={() => tone3000?.setMonitoringEnabled(!isMonitoring)}
+              onClick={() => ampEngine?.setMonitoringEnabled(!isMonitoring)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl font-bold text-xs border transition shadow-md cursor-pointer ${
                 isMonitoring
                   ? 'border-hit/60 bg-hit/10 text-hit shadow-hit/20'
@@ -138,7 +138,7 @@ export const Tone3000AmpRack: React.FC<Tone3000AmpRackProps> = ({
         <div className="mt-5">
           <div className="text-xs font-bold uppercase tracking-wider text-ink-300 mb-2.5 flex items-center gap-1.5">
             <Radio size={14} className="text-amp-400" />
-            Modelos de Amplificador (TONE3000 Presets)
+            Modelos de Amplificador (PRGB Amp Presets)
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {(Object.keys(AMP_PRESETS) as AmpPresetId[]).map((pid) => {
@@ -148,7 +148,7 @@ export const Tone3000AmpRack: React.FC<Tone3000AmpRackProps> = ({
                 <button
                   key={pid}
                   aria-pressed={isSelected}
-                  onClick={() => tone3000?.setPreset(pid)}
+                  onClick={() => ampEngine?.setPreset(pid)}
                   className={`flex flex-col items-center justify-center p-3 rounded-2xl border text-center transition cursor-pointer ${
                     isSelected
                       ? 'border-amp-500 bg-gradient-to-b from-amp-700/60 to-ink-900 text-ink-100 shadow-lg shadow-amp-500/20 ring-1 ring-amp-500'
@@ -172,7 +172,7 @@ export const Tone3000AmpRack: React.FC<Tone3000AmpRackProps> = ({
             </div>
             {settings && (
               <button
-                onClick={() => tone3000?.setPreset(settings.preset)}
+                onClick={() => ampEngine?.setPreset(settings.preset)}
                 className="flex items-center gap-1 text-[11px] text-ink-300 hover:text-amp-300 transition cursor-pointer"
                 title="Resetar controles para o padrão do preset atual"
               >
@@ -193,7 +193,7 @@ export const Tone3000AmpRack: React.FC<Tone3000AmpRackProps> = ({
                 min={0}
                 max={100}
                 value={settings?.gain ?? 50}
-                onChange={(e) => tone3000?.setGain(Number(e.target.value))}
+                onChange={(e) => ampEngine?.setGain(Number(e.target.value))}
                 className="w-full accent-amp-400 h-1.5 bg-ink-700 rounded-lg cursor-pointer"
               />
               <span className="text-xs font-mono font-bold text-amp-400 mt-2">
@@ -211,7 +211,7 @@ export const Tone3000AmpRack: React.FC<Tone3000AmpRackProps> = ({
                 max={12}
                 step={0.5}
                 value={settings?.bass ?? 0}
-                onChange={(e) => tone3000?.setBass(Number(e.target.value))}
+                onChange={(e) => ampEngine?.setBass(Number(e.target.value))}
                 className="w-full accent-amp-400 h-1.5 bg-ink-700 rounded-lg cursor-pointer"
               />
               <span className="text-xs font-mono font-bold text-ink-200 mt-2">
@@ -229,7 +229,7 @@ export const Tone3000AmpRack: React.FC<Tone3000AmpRackProps> = ({
                 max={12}
                 step={0.5}
                 value={settings?.mid ?? 0}
-                onChange={(e) => tone3000?.setMid(Number(e.target.value))}
+                onChange={(e) => ampEngine?.setMid(Number(e.target.value))}
                 className="w-full accent-amp-400 h-1.5 bg-ink-700 rounded-lg cursor-pointer"
               />
               <span className="text-xs font-mono font-bold text-ink-200 mt-2">
@@ -247,7 +247,7 @@ export const Tone3000AmpRack: React.FC<Tone3000AmpRackProps> = ({
                 max={12}
                 step={0.5}
                 value={settings?.treble ?? 0}
-                onChange={(e) => tone3000?.setTreble(Number(e.target.value))}
+                onChange={(e) => ampEngine?.setTreble(Number(e.target.value))}
                 className="w-full accent-amp-400 h-1.5 bg-ink-700 rounded-lg cursor-pointer"
               />
               <span className="text-xs font-mono font-bold text-ink-200 mt-2">
@@ -265,7 +265,7 @@ export const Tone3000AmpRack: React.FC<Tone3000AmpRackProps> = ({
                 max={12}
                 step={0.5}
                 value={settings?.presence ?? 0}
-                onChange={(e) => tone3000?.setPresence(Number(e.target.value))}
+                onChange={(e) => ampEngine?.setPresence(Number(e.target.value))}
                 className="w-full accent-amp-400 h-1.5 bg-ink-700 rounded-lg cursor-pointer"
               />
               <span className="text-xs font-mono font-bold text-ink-200 mt-2">
@@ -283,7 +283,7 @@ export const Tone3000AmpRack: React.FC<Tone3000AmpRackProps> = ({
                 max={1}
                 step={0.01}
                 value={settings?.masterVolume ?? 0.75}
-                onChange={(e) => tone3000?.setMasterVolume(Number(e.target.value))}
+                onChange={(e) => ampEngine?.setMasterVolume(Number(e.target.value))}
                 className="w-full accent-amp-400 h-1.5 bg-ink-700 rounded-lg cursor-pointer"
               />
               <span className="text-xs font-mono font-bold text-hit mt-2">
@@ -304,7 +304,7 @@ export const Tone3000AmpRack: React.FC<Tone3000AmpRackProps> = ({
             <select
               aria-label="Gabinete e alto-falante"
               value={settings?.cabSim ?? '4x12_metal'}
-              onChange={(e) => tone3000?.setCabSim(e.target.value as CabSimType)}
+              onChange={(e) => ampEngine?.setCabSim(e.target.value as CabSimType)}
               className="w-full rounded-xl border border-ink-700 bg-ink-800 px-3 py-2 text-xs text-ink-100 focus:border-amp-500 focus:outline-none"
             >
               <option value="4x12_metal">4x12 Modern Metal (Celestion V30)</option>
@@ -332,7 +332,7 @@ export const Tone3000AmpRack: React.FC<Tone3000AmpRackProps> = ({
               min={-80}
               max={-20}
               value={settings?.gateThreshold ?? -45}
-              onChange={(e) => tone3000?.setGateThreshold(Number(e.target.value))}
+              onChange={(e) => ampEngine?.setGateThreshold(Number(e.target.value))}
               className="w-full accent-amp-400 h-1.5 bg-ink-700 rounded-lg cursor-pointer"
             />
             <p className="text-[10px] text-ink-400 mt-1">
@@ -358,7 +358,7 @@ export const Tone3000AmpRack: React.FC<Tone3000AmpRackProps> = ({
               max={1}
               step={0.02}
               value={settings?.reverbMix ?? 0.15}
-              onChange={(e) => tone3000?.setReverbMix(Number(e.target.value))}
+              onChange={(e) => ampEngine?.setReverbMix(Number(e.target.value))}
               className="w-full accent-amp-400 h-1.5 bg-ink-700 rounded-lg cursor-pointer"
             />
             <p className="text-[10px] text-ink-400 mt-1">

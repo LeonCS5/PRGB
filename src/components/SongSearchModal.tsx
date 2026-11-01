@@ -1,16 +1,26 @@
 import { ModalFrame } from './ModalFrame';
-import React, { useState } from 'react';
-import { Search, Music, Disc, Loader2, Sparkles, X, ChevronRight } from 'lucide-react';
-import { SongsterrApi, type SongsterrSearchResult, type SongsterrMeta, type NormalizedSongTab } from '../services/songsterrApi';
+import React, { useMemo, useRef, useState } from 'react';
+import { Search, Music, Disc, ListOrdered, Loader2, Sparkles, X, ChevronRight, Trophy, User, Users } from 'lucide-react';
+import { TabsApi, type TabSearchResult, type SongMeta, type NormalizedSongTab } from '../services/tabsApi';
 import type { SavedSong } from '../context/preferences';
 import { ErrorNotice } from './ErrorNotice';
 import { getSongMetadata, loadSongTrack } from '../context/uiErrors';
+import { getPersonalBest } from '../services/records';
+import type { GamePart } from '../context/gameSession';
+import { useRanking } from '../context/ranking';
 
 interface SongSearchModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelectSong: (tab: NormalizedSongTab, song: SavedSong) => void;
+  onSelectSong: (tab: NormalizedSongTab, song: SavedSong, revisionId: number) => void;
+  // Duo: set when the players are ready (names); each picks a part of the chosen song.
+  // onSelectDuo must close the modal: onClose means the duo was given up
+  duoNames?: [string, string] | null;
+  onChooseMode?: (mode: 'solo' | 'duo') => void;
+  onSelectDuo?: (parts: [GamePart, GamePart]) => void;
 }
+
+const modeButton = 'flex min-h-10 cursor-pointer items-center gap-2 rounded-lg px-4 text-xs font-bold transition';
 
 const FEATURED_SONGS = [
   { title: 'Creeping Death', artist: 'Metallica', id: 5194 },
@@ -24,17 +34,35 @@ const FEATURED_SONGS = [
 export const SongSearchModal: React.FC<SongSearchModalProps> = ({
   isOpen,
   onClose,
-  onSelectSong
+  onSelectSong,
+  duoNames = null,
+  onChooseMode,
+  onSelectDuo
 }) => {
+  const { isConfigured: isRankingOn, openLeaderboard } = useRanking();
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<SongsterrSearchResult[]>([]);
+  const [results, setResults] = useState<TabSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [selectedSongMeta, setSelectedSongMeta] = useState<SongsterrMeta | null>(null);
+  const [selectedSongMeta, setSelectedSongMeta] = useState<SongMeta | null>(null);
   const [isLoadingTab, setIsLoadingTab] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState<(() => void) | null>(null);
+  const [duoTracks, setDuoTracks] = useState<[number, number]>([0, 0]);
+  // Bumped on close and on each tab load: a load that finishes after it was superseded or the modal
+  // was closed (Esc while loading) is dropped instead of starting a game nobody is waiting for
+  const loadTokenRef = useRef(0);
+  // Personal best at 1× of each part; re-read whenever the modal opens, a run may have just ended
+  const trackBests = useMemo(
+    () => isOpen && selectedSongMeta ? selectedSongMeta.tracks.map((track) => getPersonalBest(selectedSongMeta.songId, track.partId, 1)) : [],
+    [isOpen, selectedSongMeta]
+  );
 
   if (!isOpen) return null;
+
+  const close = () => {
+    loadTokenRef.current += 1;
+    onClose();
+  };
 
   const handleSearch = async (e?: React.FormEvent, searchQuery = query) => {
     if (e) e.preventDefault();
@@ -46,14 +74,14 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
     setSelectedSongMeta(null);
 
     try {
-      const data = await SongsterrApi.searchSongs(searchQuery);
+      const data = await TabsApi.searchSongs(searchQuery);
       setResults(data);
       if (data.length === 0) {
-        setError('Nenhuma música encontrada com esse nome no Songsterr.');
+        setError('Nenhuma música encontrada com esse nome no acervo.');
       }
     } catch {
       setResults([]);
-      setError('Não foi possível buscar músicas no Songsterr. Verifique sua conexão e tente novamente.');
+      setError('Não foi possível buscar músicas. Verifique sua conexão e tente novamente.');
       setRetry(() => () => void handleSearch(undefined, searchQuery));
     } finally {
       setIsSearching(false);
@@ -67,8 +95,9 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
     try {
       const meta = await getSongMetadata(songId);
       setSelectedSongMeta(meta);
+      setDuoTracks([0, 0]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Não foi possível obter os dados da música no Songsterr.');
+      setError(err instanceof Error ? err.message : 'Não foi possível obter os dados da música.');
       setRetry(() => () => void handleSelectSong(songId));
     } finally {
       setIsLoadingTab(false);
@@ -77,6 +106,7 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
 
   const handleSelectTrack = async (trackIndex: number) => {
     if (!selectedSongMeta) return;
+    const token = ++loadTokenRef.current;
 
     setIsLoadingTab(true);
     setError(null);
@@ -85,9 +115,11 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
     try {
       const track = selectedSongMeta.tracks[trackIndex];
       const normalized = await loadSongTrack(selectedSongMeta, trackIndex);
-      onSelectSong(normalized, { songId: selectedSongMeta.songId, partId: track.partId });
+      if (token !== loadTokenRef.current) return;
+      onSelectSong(normalized, { songId: selectedSongMeta.songId, partId: track.partId }, selectedSongMeta.revisionId);
       onClose();
     } catch (err) {
+      if (token !== loadTokenRef.current) return;
       setError(err instanceof Error ? err.message : 'Não foi possível carregar a tablatura. Escolha outra faixa.');
       setRetry(() => () => void handleSelectTrack(trackIndex));
     } finally {
@@ -95,10 +127,38 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
     }
   };
 
+  const handleStartDuo = async () => {
+    if (!selectedSongMeta || !onSelectDuo) return;
+    const [first, second] = duoTracks;
+    const token = ++loadTokenRef.current;
+    setIsLoadingTab(true);
+    setError(null);
+    setRetry(null);
+    try {
+      const firstTab = await loadSongTrack(selectedSongMeta, first);
+      // Same part for both (competition): one download, one tab
+      const secondTab = second === first ? firstTab : await loadSongTrack(selectedSongMeta, second);
+      if (token !== loadTokenRef.current) return;
+      // No onClose here: closing the search while picking a duo song means giving up the duo, so the
+      // caller closes the modal itself when the duo starts
+      const { revisionId } = selectedSongMeta;
+      onSelectDuo([
+        { tab: firstTab, partId: selectedSongMeta.tracks[first].partId, revisionId },
+        { tab: secondTab, partId: selectedSongMeta.tracks[second].partId, revisionId }
+      ]);
+    } catch (err) {
+      if (token !== loadTokenRef.current) return;
+      setError(err instanceof Error ? err.message : 'Não foi possível carregar as tablaturas. Escolha outras faixas.');
+      setRetry(() => () => void handleStartDuo());
+    } finally {
+      setIsLoadingTab(false);
+    }
+  };
+
   return (
-    <ModalFrame titleId="SongSearchModal-title" onClose={onClose} className="max-w-2xl flex flex-col">
+    <ModalFrame titleId="SongSearchModal-title" onClose={close} className="max-w-2xl flex flex-col">
         <button
-          onClick={onClose}
+          onClick={close}
           aria-label="Fechar modal"
           className="min-h-10 absolute right-3 top-3 flex size-10 items-center justify-center rounded-xl text-ink-300 transition hover:bg-ink-800 hover:text-ink-100 cursor-pointer"
         >
@@ -110,12 +170,32 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
             <Music className="text-ink-100" size={24} />
           </div>
           <div>
-            <h2 id="SongSearchModal-title" className="font-display text-xl font-bold">Acervo de Músicas do Songsterr</h2>
+            <h2 id="SongSearchModal-title" className="font-display text-xl font-bold">Acervo de Músicas</h2>
             <p className="text-xs text-ink-300">
               Mais de 1.000.000 de tablaturas interativas prontas para tocar
             </p>
           </div>
         </div>
+
+        {onChooseMode && (
+          <div className="mb-4">
+            <div role="group" aria-label="Modo de jogo" className="inline-flex rounded-xl border border-ink-700 bg-ink-850 p-1">
+              <button type="button" aria-pressed={!duoNames} onClick={() => onChooseMode('solo')}
+                className={modeButton + (duoNames ? ' text-ink-300 hover:text-ink-100' : ' bg-amp-400 text-ink-950')}>
+                <User size={14} aria-hidden="true" /> Solo
+              </button>
+              <button type="button" aria-pressed={Boolean(duoNames)} onClick={() => onChooseMode('duo')}
+                className={modeButton + (duoNames ? ' bg-amp-400 text-ink-950' : ' text-ink-300 hover:text-ink-100')}>
+                <Users size={14} aria-hidden="true" /> Dupla
+              </button>
+            </div>
+            {duoNames && (
+              <p className="mt-2 text-xs text-ink-300">
+                <span className="text-signal-300">{duoNames[0]}</span> (canal 1) e <span className="text-note-violet">{duoNames[1]}</span> (canal 2): escolham a música e a parte de cada um.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Search Bar */}
         <form onSubmit={handleSearch} className="relative mb-4">
@@ -163,17 +243,49 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
                 </button>
               </div>
 
+              {duoNames ? (
+                <div className="space-y-4">
+                  {([0, 1] as const).map((player) => (
+                    <label key={player} className="block">
+                      <span className={'text-xs font-semibold ' + (player === 0 ? 'text-signal-300' : 'text-note-violet')}>
+                        Parte de {duoNames[player]} (canal {player + 1})
+                      </span>
+                      <select value={duoTracks[player]} disabled={isLoadingTab}
+                        onChange={(event) => {
+                          const index = Number(event.target.value);
+                          setDuoTracks(player === 0 ? [index, duoTracks[1]] : [duoTracks[0], index]);
+                        }}
+                        className="mt-1.5 min-h-11 w-full rounded-xl border border-ink-700 bg-ink-800 px-3 text-sm text-ink-100 focus:border-amp-500 focus:outline-none">
+                        {selectedSongMeta.tracks.map((track, idx) => (
+                          <option key={idx} value={idx}>{track.name || track.instrument} · {track.instrument} · {track.tuning.length} cordas</option>
+                        ))}
+                      </select>
+                    </label>
+                  ))}
+                  <p className="text-xs text-ink-300">
+                    {duoTracks[0] === duoTracks[1]
+                      ? 'Mesma parte: vocês competem nas mesmas notas.'
+                      : 'Partes diferentes: cada um toca a sua, e o placar da equipe soma as duas.'}
+                  </p>
+                  <button type="button" onClick={() => void handleStartDuo()} disabled={isLoadingTab}
+                    className="flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-amp-400 px-4 font-bold text-ink-950 transition hover:bg-amp-300 disabled:cursor-wait disabled:opacity-70">
+                    {isLoadingTab ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Users size={16} aria-hidden="true" />}
+                    Começar dupla
+                  </button>
+                </div>
+              ) : (
+              <>
               <div className="text-xs font-semibold uppercase tracking-wider text-ink-300">
                 Escolha o Instrumento / Pista para Tocar:
               </div>
 
               <div className="space-y-2">
                 {selectedSongMeta.tracks.map((track, idx) => (
+                  <div key={idx} className="flex items-stretch gap-2">
                   <button
-                    key={idx}
                     onClick={() => handleSelectTrack(idx)}
                     disabled={isLoadingTab}
-                    className="w-full flex items-center justify-between p-3 rounded-xl border border-ink-800 bg-ink-900/80 hover:border-amp-500/60 hover:bg-ink-800 transition text-left group cursor-pointer"
+                    className="min-w-0 flex-1 flex items-center justify-between p-3 rounded-xl border border-ink-800 bg-ink-900/80 hover:border-amp-500/60 hover:bg-ink-800 transition text-left group cursor-pointer"
                   >
                     <div>
                       <div className="text-sm font-semibold text-ink-100 group-hover:text-amp-300 transition">
@@ -183,6 +295,11 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
                         {track.instrument} • {track.tuning.length} cordas
                         {track.difficulty ? ` • Nível ${track.difficulty}/5` : ''}
                       </div>
+                      {trackBests[idx] && (
+                        <div className="mt-1 flex items-center gap-1 font-mono text-xs text-amp-300">
+                          <Trophy size={12} aria-hidden="true" /> Seu recorde: {trackBests[idx].score.toLocaleString('pt-BR')}
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 text-amp-400 font-semibold text-xs">
                       {isLoadingTab ? (
@@ -194,8 +311,21 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
                       )}
                     </div>
                   </button>
+                  {isRankingOn && (
+                    <button
+                      type="button"
+                      onClick={() => openLeaderboard({ songId: selectedSongMeta.songId, partId: track.partId, title: selectedSongMeta.title, trackName: track.name || track.instrument })}
+                      aria-label={`Ver ranking de ${track.name || track.instrument}`}
+                      className="flex shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-ink-800 bg-ink-900/80 px-3 text-xs font-semibold text-ink-200 transition hover:border-ink-500"
+                    >
+                      <ListOrdered size={16} aria-hidden="true" /><span className="hidden sm:inline">Ver ranking</span>
+                    </button>
+                  )}
+                  </div>
                 ))}
               </div>
+              </>
+              )}
             </div>
           ) : results.length > 0 ? (
             /* Search Results */

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MetronomeScheduler, SoundFX } from './synthAudio';
-import type { BeatMark } from './songsterrApi';
+import type { BeatMark } from './tabsApi';
 
 interface FakeOscillator {
   startAt: number;
