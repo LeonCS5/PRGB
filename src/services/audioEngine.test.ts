@@ -1,11 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AudioEngine, STANDARD_TUNING, computeNsdf, estimateStringAndFret, type InputChannelMode } from './audioEngine';
+import { DEFAULT_AUDIO_OPTIONS, LOOPBACK_TONE_HZ, dbToGain } from './audioDevices';
 import { SoundFX } from './synthAudio';
 
 vi.mock('./ampEngine', () => ({
   AmpEngine: class {
     inputNode = {};
     processGate = vi.fn();
+    getIsGateOpen = () => true;
+    getSettings = () => ({ isMonitoringEnabled: true });
+    getOutputLevel = () => 0;
   }
 }));
 
@@ -97,21 +101,37 @@ const gainNode = () => ({
   gain: { value: 1, cancelScheduledValues: vi.fn(), setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn() }
 });
 
+const oscillatorNode = () => {
+  const node = {
+    ...audioNode(),
+    frequency: { value: 0 },
+    level: null as ReturnType<typeof gainNode> | null,
+    playing: false,
+    connect: (target: ReturnType<typeof gainNode>) => { node.level = target; },
+    start: () => { node.playing = true; },
+    stop: vi.fn(() => { node.playing = false; })
+  };
+  return node;
+};
+
 // 2048 samples (the analyser size) of a sine at 48 kHz
 const sine = (hz: number, amplitude = 0.5) =>
   Float32Array.from({ length: 2048 }, (_, i) => amplitude * Math.sin((2 * Math.PI * hz * i) / 48000));
 
 class FakeAudioContext {
   static outputLoopsBack = false; // when true, what plays reaches the analysers
+  static strings: Float32Array | null = null; // a guitar ringing into every analyser
   state: AudioContextState = 'running';
   currentTime = 0;
   sampleRate = 48000;
+  destination = {};
   holdClock = false; // when true, scheduled ends don't fire (frozen clock)
+  options: AudioContextOptions | undefined;
   splitters: ReturnType<typeof audioNode>[] = [];
   mergers: ReturnType<typeof audioNode>[] = [];
   analysers: ReturnType<typeof analyserNode>[] = [];
   gains: ReturnType<typeof gainNode>[] = [];
-  oscillators: { stop: ReturnType<typeof vi.fn> }[] = [];
+  oscillators: ReturnType<typeof oscillatorNode>[] = [];
   private listeners = new Set<() => void>();
 
   private keep<T>(list: T[], node: T): T {
@@ -123,19 +143,21 @@ class FakeAudioContext {
   createMediaStreamSource() { return { ...audioNode(), channelCount: 2 }; }
   createChannelSplitter() { return this.keep(this.splitters, audioNode()); }
   createChannelMerger() { return this.keep(this.mergers, audioNode()); }
-  createAnalyser() { return this.keep(this.analysers, analyserNode()); }
-  createOscillator() {
-    const heard = (signal: Float32Array | null) => {
-      if (FakeAudioContext.outputLoopsBack) this.analysers.forEach((node) => { node.signal = signal; });
+  createAnalyser() {
+    const node = analyserNode();
+    const read = node.getFloatTimeDomainData.bind(node);
+    node.getFloatTimeDomainData = (target: Float32Array) => {
+      read(target);
+      const tone = this.oscillators.at(-1);
+      const level = tone?.playing ? tone.level?.gain.value ?? 0 : 0;
+      const parts = [FakeAudioContext.strings, tone && FakeAudioContext.outputLoopsBack && level > 0 ? sine(tone.frequency.value, level * 2) : null];
+      for (const part of parts) {
+        if (part) for (let i = 0; i < target.length; i++) target[i] += part[i] ?? 0;
+      }
     };
-    const oscillator = {
-      ...audioNode(),
-      frequency: { value: 0 },
-      start: () => heard(sine(oscillator.frequency.value, 0.01)),
-      stop: vi.fn(() => heard(null))
-    };
-    return this.keep(this.oscillators, oscillator);
+    return this.keep(this.analysers, node);
   }
+  createOscillator() { return this.keep(this.oscillators, oscillatorNode()); }
   createConstantSource() {
     const source = {
       offset: { value: 0 },
@@ -158,6 +180,7 @@ class FakeAudioContext {
 }
 
 interface FakeTrack {
+  label: string;
   stop: () => void;
   getSettings: () => MediaTrackSettings;
 }
@@ -186,13 +209,14 @@ describe('AudioEngine lifecycle', () => {
     trackChannels = 2;
     trackGroup = undefined;
     FakeAudioContext.outputLoopsBack = false;
+    FakeAudioContext.strings = null;
     nextFrame = null;
     getUserMedia = vi.fn(async (constraints: MediaStreamConstraints) => {
       const audio = constraints.audio as MediaTrackConstraints;
       const deviceId = (audio.deviceId as ConstrainDOMStringParameters | undefined)?.exact as string | undefined;
       if (deviceId && missingDevices.has(deviceId)) throw new DOMException('gone', 'OverconstrainedError');
       const settings: MediaTrackSettings = trackChannels === undefined ? {} : { channelCount: trackChannels, groupId: trackGroup };
-      const track: FakeTrack = { stop: () => { stream.stopped = true; }, getSettings: () => settings };
+      const track: FakeTrack = { label: 'Linha (USB-Audio)', stop: () => { stream.stopped = true; }, getSettings: () => settings };
       const stream: FakeStream = {
         deviceId,
         stopped: false,
@@ -204,8 +228,9 @@ describe('AudioEngine lifecycle', () => {
     });
     vi.stubGlobal('window', {
       AudioContext: class extends FakeAudioContext {
-        constructor() {
+        constructor(options?: AudioContextOptions) {
           super();
+          this.options = options;
           contexts.push(this);
         }
       }
@@ -294,8 +319,8 @@ describe('AudioEngine lifecycle', () => {
         mediaDevices: {
           getUserMedia,
           enumerateDevices: async () => [
-            { kind: 'audiooutput', deviceId: 'default', groupId: 'usb' },
-            { kind: 'audiooutput', deviceId: 'speakers', groupId: 'pc' }
+            { kind: 'audiooutput', deviceId: 'default', groupId: 'usb', label: 'Padrão - Alto-falantes (USB-Audio)' },
+            { kind: 'audiooutput', deviceId: 'speakers', groupId: 'pc', label: 'Alto-falantes (Realtek(R) Audio)' }
           ]
         }
       });
@@ -321,6 +346,18 @@ describe('AudioEngine lifecycle', () => {
       expect(monitorRamps().at(-1)).toBe(1);
     });
 
+    it('hears the return with the strings ringing, a partial right on the old test tone included', async () => {
+      FakeAudioContext.outputLoopsBack = true;
+      FakeAudioContext.strings = sine(196, 0.3).map((value, i) => value + sine(997, 0.05)[i]);
+      const listener = vi.fn();
+      const engine = new AudioEngine();
+      engine.setFeedbackListener(listener);
+      await engine.start('usb-interface');
+      expect(contexts[0].oscillators[0].frequency.value).toBe(LOOPBACK_TONE_HZ);
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(monitorRamps()).not.toContain(1);
+    });
+
     it('opens the monitor when the tone does not come back', async () => {
       const listener = vi.fn();
       const engine = new AudioEngine();
@@ -331,12 +368,260 @@ describe('AudioEngine lifecycle', () => {
       expect(monitorRamps()).toEqual([1]);
     });
 
+    it('tests an output the browser does not name, as Firefox does with the default one', async () => {
+      FakeAudioContext.outputLoopsBack = true;
+      vi.stubGlobal('navigator', { mediaDevices: { getUserMedia, enumerateDevices: async () => [] } });
+      const listener = vi.fn();
+      const engine = new AudioEngine();
+      engine.setFeedbackListener(listener);
+      await engine.start('usb-interface');
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(monitorRamps()).not.toContain(1);
+    });
+
+    it('recognises the same hardware by its name when the groupIds differ', async () => {
+      FakeAudioContext.outputLoopsBack = true;
+      vi.stubGlobal('navigator', {
+        mediaDevices: {
+          getUserMedia,
+          enumerateDevices: async () => [{ kind: 'audiooutput', deviceId: 'usb-out', groupId: 'other', label: 'Alto-falantes (USB-Audio)' }]
+        }
+      });
+      const listener = vi.fn();
+      const engine = new AudioEngine();
+      engine.setFeedbackListener(listener);
+      await engine.setOutputDevice('usb-out');
+      await engine.start('usb-interface');
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the monitor shut when the new output does not take', async () => {
+      const engine = new AudioEngine();
+      await engine.start('usb-interface');
+      const spy = vi.spyOn(SoundFX, 'setOutputDevice').mockRejectedValueOnce(new DOMException('gone', 'NotFoundError'));
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const ramps = monitorRamps().length;
+      await expect(engine.setOutputDevice('speakers')).resolves.toBe(false);
+      expect(monitorRamps().slice(ramps)).toEqual([0]);
+      spy.mockRestore();
+    });
+
+    it('does not repeat a clean test on a chosen output at every reconnection', async () => {
+      const engine = new AudioEngine();
+      vi.stubGlobal('navigator', {
+        mediaDevices: {
+          getUserMedia,
+          enumerateDevices: async () => [{ kind: 'audiooutput', deviceId: 'usb-out', groupId: 'usb', label: 'Alto-falantes (USB-Audio)' }]
+        }
+      });
+      await engine.setOutputDevice('usb-out');
+      await engine.start('usb-interface');
+      await engine.start('usb-interface');
+      expect(contexts[0].oscillators).toHaveLength(1);
+    });
+
+    it('tests the system default each time, as it can change behind the app', async () => {
+      const engine = new AudioEngine();
+      await engine.start('usb-interface');
+      await engine.start('usb-interface');
+      expect(contexts[0].oscillators).toHaveLength(2);
+    });
+
+    it('stops playing as soon as the return is certain', async () => {
+      FakeAudioContext.outputLoopsBack = true;
+      const engine = new AudioEngine();
+      await engine.start('usb-interface');
+      expect(contexts[0].oscillators[0].level?.gain.value).toBe(0);
+      expect(contexts[0].oscillators[0].stop).toHaveBeenCalledTimes(1);
+    });
+
     it('plays no tone on an output on other hardware', async () => {
       const engine = new AudioEngine();
       await engine.setOutputDevice('speakers');
       await engine.start('usb-interface');
       expect(contexts[0].oscillators).toHaveLength(0);
       expect(monitorRamps()).toEqual([1]);
+    });
+  });
+
+  describe('feedback watch', () => {
+    const fullScale = sine(1100, 1);
+    const feed = (signal: Float32Array | null) => contexts[0].analysers.forEach((node) => { node.signal = signal; });
+    const start = async (listener = vi.fn()) => {
+      const engine = new AudioEngine();
+      engine.setFeedbackListener(listener);
+      await engine.start('usb-interface');
+      return { engine, listener };
+    };
+
+    beforeEach(() => { vi.useFakeTimers(); });
+    afterEach(() => { vi.useRealTimers(); });
+
+    it('shuts the monitor when the input holds full scale, and warns once the level collapses with it', async () => {
+      const { listener } = await start();
+      const monitor = contexts[0].gains[1].gain.linearRampToValueAtTime;
+      contexts[0].holdClock = true;
+      feed(fullScale);
+      await vi.advanceTimersByTimeAsync(240);
+      expect(monitor).toHaveBeenLastCalledWith(0, expect.any(Number));
+      feed(null);
+      contexts[0].setState('suspended');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('opens again for a guitar that is simply too hot', async () => {
+      const { listener } = await start();
+      contexts[0].holdClock = true;
+      feed(fullScale);
+      await vi.advanceTimersByTimeAsync(240);
+      contexts[0].setState('suspended');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(listener).not.toHaveBeenCalled();
+      expect(contexts[0].gains[1].gain.value).toBe(1);
+    });
+
+    it('leaves alone a level that does not hold', async () => {
+      const { listener } = await start();
+      const monitor = contexts[0].gains[1].gain.linearRampToValueAtTime;
+      feed(fullScale);
+      await vi.advanceTimersByTimeAsync(160);
+      feed(null);
+      await vi.advanceTimersByTimeAsync(400);
+      expect(monitor).toHaveBeenCalledTimes(1);
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('still fires with a negative input gain, which holds a full-scale loop under the usual limit', async () => {
+      const engine = new AudioEngine({ ...DEFAULT_AUDIO_OPTIONS, inputGainDb: -12 });
+      await engine.start('usb-interface');
+      contexts[0].holdClock = true;
+      feed(sine(1100, dbToGain(-12)));
+      await vi.advanceTimersByTimeAsync(240);
+      expect(contexts[0].gains[1].gain.linearRampToValueAtTime).toHaveBeenLastCalledWith(0, expect.any(Number));
+    });
+
+    it('treats a second trip right after opening as a loop, however loud the input stays', async () => {
+      const { listener } = await start();
+      feed(fullScale);
+      await vi.advanceTimersByTimeAsync(240);
+      expect(listener).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(240);
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not lock the queue when the context is already stopped', async () => {
+      const { engine } = await start();
+      contexts[0].state = 'suspended';
+      feed(fullScale);
+      await vi.advanceTimersByTimeAsync(240);
+      await expect(engine.stop()).resolves.toBeUndefined();
+    });
+
+    it('stops with the engine', async () => {
+      const { engine, listener } = await start();
+      await engine.stop();
+      feed(fullScale);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(vi.getTimerCount()).toBe(0);
+      expect(listener).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('audio options', () => {
+    it('asks for the chosen buffer and rate', async () => {
+      const engine = new AudioEngine({ ...DEFAULT_AUDIO_OPTIONS, bufferSamples: 512 });
+      await engine.start('a');
+      expect(contexts[0].options).toEqual({ sampleRate: 48000, latencyHint: 512 / 48000 });
+    });
+
+    it('keeps the fastest hint by default and a calmer one in low power mode', async () => {
+      await new AudioEngine().start('a');
+      await new AudioEngine({ ...DEFAULT_AUDIO_OPTIONS, lowPower: true }).start('a');
+      expect(contexts.map((ctx) => ctx.options?.latencyHint)).toEqual(['interactive', 'balanced']);
+    });
+
+    it('leaves the rate to the system when not resampling', async () => {
+      await new AudioEngine({ ...DEFAULT_AUDIO_OPTIONS, resampleTo48k: false }).start('a');
+      expect(contexts[0].options).toEqual({ latencyHint: 'interactive' });
+    });
+
+    it('applies the input gain at once, on the way into everything else', async () => {
+      const engine = new AudioEngine();
+      await engine.start('a');
+      await expect(engine.setAudioOptions({ ...DEFAULT_AUDIO_OPTIONS, inputGainDb: 12 })).resolves.toBe(false);
+      expect(contexts[0].gains[0].gain.value).toBeCloseTo(dbToGain(12), 5);
+      expect(engine.getIsRunning()).toBe(true);
+    });
+
+    it('closes the context for a new buffer and tells the caller to start again', async () => {
+      const engine = new AudioEngine();
+      await engine.start('a');
+      await expect(engine.setAudioOptions({ ...DEFAULT_AUDIO_OPTIONS, bufferSamples: 1024 })).resolves.toBe(true);
+      expect(contexts[0].state).toBe('closed');
+      await engine.start('a');
+      expect(contexts[1].options?.latencyHint).toBe(1024 / 48000);
+    });
+
+    it('asks for no restart when nothing was running', async () => {
+      const engine = new AudioEngine();
+      await engine.start('a');
+      await engine.stop();
+      await expect(engine.setAudioOptions({ ...DEFAULT_AUDIO_OPTIONS, bufferSamples: 1024 })).resolves.toBe(false);
+      expect(contexts[0].state).toBe('closed');
+    });
+
+    it('still restarts when the change was made during the first connection', async () => {
+      const engine = new AudioEngine();
+      const started = engine.start('a');
+      const changed = engine.setAudioOptions({ ...DEFAULT_AUDIO_OPTIONS, bufferSamples: 1024 });
+      await started;
+      await expect(changed).resolves.toBe(true);
+    });
+
+    it('has nothing to close before the first start', async () => {
+      await expect(new AudioEngine().setAudioOptions({ ...DEFAULT_AUDIO_OPTIONS, bufferSamples: 1024 })).resolves.toBe(false);
+    });
+
+    it('turns the compensation from samples into time', async () => {
+      const engine = new AudioEngine({ ...DEFAULT_AUDIO_OPTIONS, inputLatencySamples: 240, outputLatencySamples: 480 });
+      await engine.start('a');
+      expect(engine.getLatencyCompensationMs()).toBeCloseTo(15, 5);
+    });
+
+    it('analyses one frame in three in low power mode', async () => {
+      const engine = new AudioEngine({ ...DEFAULT_AUDIO_OPTIONS, lowPower: true });
+      await engine.start('a');
+      const read = vi.spyOn(contexts[0].analysers[0], 'getFloatTimeDomainData');
+      for (let frame = 0; frame < 9; frame++) runFrame();
+      expect(read).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  describe('unlockDeviceLabels', () => {
+    const devicesNamed = (label: string) => {
+      vi.stubGlobal('navigator', { mediaDevices: { getUserMedia, enumerateDevices: async () => [{ kind: 'audioinput', deviceId: 'a', label }] } });
+    };
+
+    it('asks for the permission once and lets go of the microphone', async () => {
+      devicesNamed('');
+      await new AudioEngine().unlockDeviceLabels();
+      expect(getUserMedia).toHaveBeenCalledTimes(1);
+      expect(streams[0].stopped).toBe(true);
+    });
+
+    it('opens nothing when the names are already known', async () => {
+      devicesNamed('Linha (USB-Audio)');
+      await new AudioEngine().unlockDeviceLabels();
+      expect(getUserMedia).not.toHaveBeenCalled();
+    });
+
+    it('takes a busy default microphone in stride but not a refusal', async () => {
+      devicesNamed('');
+      getUserMedia.mockRejectedValueOnce(new DOMException('busy', 'NotReadableError'));
+      await expect(new AudioEngine().unlockDeviceLabels()).resolves.toBeUndefined();
+      getUserMedia.mockRejectedValueOnce(new DOMException('denied', 'NotAllowedError'));
+      await expect(new AudioEngine().unlockDeviceLabels()).rejects.toThrow('denied');
     });
   });
 
@@ -540,7 +825,7 @@ describe('AudioEngine lifecycle', () => {
       expect(ctx.analysers).toHaveLength(1);
       expect(merger.connect).toHaveBeenCalledTimes(2);
       expect(merger.connect).toHaveBeenCalledWith(ctx.analysers[0]);
-      expect(merger.connect).toHaveBeenCalledWith(ctx.gains[0]);
+      expect(merger.connect).toHaveBeenCalledWith(ctx.gains[1]);
 
       ctx.analysers[0].signal = A3;
       onPitch.mockClear();
@@ -560,7 +845,7 @@ describe('AudioEngine lifecycle', () => {
       // The amp hears both guitars, but that mix feeds no detector
       expect(splitter.connect).toHaveBeenCalledWith(merger, 0, 0);
       expect(splitter.connect).toHaveBeenCalledWith(merger, 1, 0);
-      expect(merger.connect.mock.calls).toEqual([[ctx.gains[0]]]);
+      expect(merger.connect.mock.calls).toEqual([[ctx.gains[1]]]);
     });
 
     it('duo detects each guitar on its own and tags the player', async () => {
@@ -725,7 +1010,7 @@ describe('AudioEngine lifecycle', () => {
       const ctx = contexts[0];
       const queuedFrame = nextFrame;
       await engine[method]();
-      expect(ctx.gains[0].gain.linearRampToValueAtTime).toHaveBeenLastCalledWith(0, expect.any(Number));
+      expect(ctx.gains[1].gain.linearRampToValueAtTime).toHaveBeenLastCalledWith(0, expect.any(Number));
       for (const analyser of ctx.analysers) expect(analyser.disconnect).toHaveBeenCalled();
       ctx.analysers[0].signal = A3;
       onPitch.mockClear();

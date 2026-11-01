@@ -1,15 +1,20 @@
 // Web Audio Synthesizer for Song Playback, Metronome, and Hit Sounds
 
-import { routeAudioContext } from './audioDevices';
+import { createAudioOutputRoute, type AudioOutputRoute } from './audioOutput';
 import type { BeatMark } from './tabsApi';
 
 export class SoundFX {
   private static ctx: AudioContext | null = null;
+  private static route: AudioOutputRoute | null = null;
   private static outputDeviceId = '';
 
   static async setOutputDevice(deviceId: string): Promise<void> {
     this.outputDeviceId = deviceId;
-    if (this.ctx && this.ctx.state !== 'closed') await routeAudioContext(this.ctx, deviceId);
+    if (this.ctx && this.ctx.state !== 'closed') await this.route?.setDevice(deviceId);
+  }
+
+  private static outputNode(ctx: AudioContext): AudioNode {
+    return this.route?.node ?? ctx.destination;
   }
 
   static getContext(): AudioContext {
@@ -17,11 +22,13 @@ export class SoundFX {
       // webkitAudioContext (old Safari) isn't part of the DOM lib typings
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       this.ctx = new AudioCtx();
-      if (this.outputDeviceId) void routeAudioContext(this.ctx, this.outputDeviceId).catch(() => undefined);
+      this.route = createAudioOutputRoute(this.ctx);
+      if (this.outputDeviceId) void this.route.setDevice(this.outputDeviceId).catch(() => undefined);
     }
     if (this.ctx.state === 'suspended') {
       this.ctx.resume();
     }
+    this.route?.start();
     return this.ctx;
   }
 
@@ -47,7 +54,7 @@ export class SoundFX {
       gain.gain.exponentialRampToValueAtTime(0.0001, now + durSec);
 
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.outputNode(ctx));
 
       osc.start(now);
       osc.stop(now + durSec);
@@ -74,7 +81,7 @@ export class SoundFX {
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
 
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.outputNode(ctx));
 
       osc.start(now);
       osc.stop(now + 0.18);
@@ -101,7 +108,7 @@ export class SoundFX {
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
 
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.outputNode(ctx));
 
       osc.start(now);
       osc.stop(now + 0.15);
@@ -127,7 +134,7 @@ export class SoundFX {
       gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
 
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(this.outputNode(ctx));
 
       osc.start(now);
       osc.stop(now + 0.05);

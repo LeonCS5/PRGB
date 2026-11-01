@@ -62,7 +62,7 @@ export const getAudioErrorMessage = (error: unknown): string => {
     case 'NotFoundError':
       return 'Nenhuma entrada de áudio encontrada. Conecte sua interface ou microfone e tente novamente.';
     case 'NotReadableError':
-      return 'Não foi possível acessar a entrada de áudio. Ela pode estar ocupada por outro aplicativo; feche-o e tente novamente.';
+      return 'A entrada de áudio está presa por outro programa. Feche os programas que usam ASIO, como amplificadores e jogos de guitarra para PC, e tente de novo: enquanto estão abertos, eles seguram a interface e, às vezes, a saída do computador.';
     case 'OverconstrainedError':
       return 'A entrada selecionada não atende à configuração de áudio. Escolha outro dispositivo nas configurações de áudio.';
     default:

@@ -15,7 +15,6 @@ import {
   Trophy,
   Volume2,
   Zap,
-  Loader2,
   Users,
   Wifi,
   X,
@@ -45,6 +44,8 @@ import { AmpRack } from './components/AmpRack';
 import { AudioSessionProvider, useAudioSession, useLatestPitch } from './context/AudioSessionContext';
 import { ModalsProvider, useModals } from './context/ModalsContext';
 import { FeedbackModal } from './components/FeedbackModal';
+import { StorageNotice } from './components/StorageNotice';
+import { LEGAL_CONTACT } from './content/legal';
 import { readPreferences, savePreferences } from './context/preferences';
 import { DEFAULT_PLAYER_NAMES, nextSessionKey, type GamePart, type GameSession, type RankedStart, type SoloSession } from './context/gameSession';
 import { RankingProvider } from './context/RankingProvider';
@@ -65,7 +66,7 @@ const PracticePreview: React.FC = () => (
       <div className="flex items-center justify-between gap-3 border-b border-ink-700 bg-ink-850 px-4 py-4 sm:px-6">
         <div className="flex items-center gap-3">
           <span className="flex size-10 items-center justify-center rounded-lg border border-amp-500/25 bg-amp-500/10 text-amp-400"><Guitar size={20} /></span>
-          <div><p className="text-sm font-bold text-ink-100">Creeping Death</p><p className="mt-1 text-xs text-ink-300">Metallica · Guitarra rítmica</p></div>
+          <div><p className="text-sm font-bold text-ink-100">Exercício PRGB</p><p className="mt-1 text-xs text-ink-300">Pentatônica · Guitarra</p></div>
         </div>
         <span className="rounded-md border border-signal-500/25 bg-signal-500/10 px-2 py-1 font-mono text-[10px] font-bold tracking-wider text-signal-300">PRÁTICA</span>
       </div>
@@ -180,11 +181,9 @@ const AppContent: React.FC = () => {
   const [isDuoSetupOpen, setIsDuoSetupOpen] = useState(() => devScene === 'dupla-assistente');
   // Player names while the duo picks a song in the search modal (it's in duo mode while set)
   const [duoSearchNames, setDuoSearchNames] = useState<[string, string] | null>(null);
-  const [isLoadingDefault, setIsLoadingDefault] = useState(false);
   const [savedSong] = useState(() => readPreferences().lastSong);
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [restoreAttempt, setRestoreAttempt] = useState(0);
-  const [defaultError, setDefaultError] = useState<string | null>(null);
   const [pendingChallenge, setPendingChallenge] = useState<Challenge | null>(readValidChallenge);
   const [openedWithChallenge] = useState(() => pendingChallenge !== null);
   const [isLoadingChallenge, setIsLoadingChallenge] = useState(false);
@@ -242,7 +241,6 @@ const AppContent: React.FC = () => {
   const startDuo = (parts: [GamePart, GamePart], names: [string, string]) => {
     songSelectionVersion.current += 1;
     setRestoreError(null);
-    setDefaultError(null);
     setDuoSearchNames(null);
     setSession(duoSession(parts, names));
   };
@@ -250,7 +248,6 @@ const AppContent: React.FC = () => {
   const handleOpenFreePlay = () => {
     songSelectionVersion.current += 1;
     setRestoreError(null);
-    setDefaultError(null);
     ensureSoloAudio();
     setIsFreePlayOpen(true);
   };
@@ -258,7 +255,6 @@ const AppContent: React.FC = () => {
   const handleLoadDemo = () => {
     songSelectionVersion.current += 1;
     setRestoreError(null);
-    setDefaultError(null);
     exitDuoAudio();
     setSession(soloSession(demoPart()));
   };
@@ -268,7 +264,6 @@ const AppContent: React.FC = () => {
     songSelectionVersion.current += 1;
     const version = songSelectionVersion.current;
     setRestoreError(null);
-    setDefaultError(null);
     setChallengeError(null);
     setIsLoadingChallenge(true);
     ensureSoloAudio();
@@ -299,38 +294,6 @@ const AppContent: React.FC = () => {
     clearChallengeParam();
     setPendingChallenge(null);
     setChallengeError(null);
-  };
-
-  // Load default song (Metallica - Creeping Death)
-  const handleLoadDefaultSong = async () => {
-    songSelectionVersion.current += 1;
-    const version = songSelectionVersion.current;
-    setRestoreError(null);
-    setDefaultError(null);
-    setIsLoadingDefault(true);
-    try {
-      // Connect audio if not running
-      if (!isAudioRunning || channelMode === 'duo') {
-        await handleStartAudio(undefined, soloChannelMode());
-      }
-
-      const songId = 5194; // Creeping Death
-      const meta = await getSongMetadata(songId);
-      // Track index 3: James Hetfield Rhythm Guitar
-      const trackIndex = meta.tracks.length > 3 ? 3 : 0;
-      const track = meta.tracks[trackIndex];
-
-      const normalized = await loadSongTrack(meta, trackIndex);
-      // Another song, the demo or a duo was picked while this one loaded: keep that one
-      if (version !== songSelectionVersion.current) return;
-      setSession(soloSession({ tab: normalized, partId: track.partId, revisionId: meta.revisionId }));
-      savePreferences({ lastSong: { songId: meta.songId, partId: track.partId } });
-    } catch (err) {
-      if (version !== songSelectionVersion.current) return;
-      setDefaultError(err instanceof Error ? err.message : 'Não foi possível carregar a música padrão. Busque outra música.');
-    } finally {
-      setIsLoadingDefault(false);
-    }
   };
 
   // The server counted a newer revision of this tab: a ranked run needs that one, so the game remounts with it
@@ -370,10 +333,6 @@ const AppContent: React.FC = () => {
               setRestoreError(null);
               setRestoreAttempt((attempt) => attempt + 1);
             }} />
-        )}
-        {defaultError && (
-          <ErrorNotice message={defaultError} onDismiss={() => setDefaultError(null)}
-            actionLabel="Tentar novamente" onAction={() => void handleLoadDefaultSong()} actionDisabled={isLoadingDefault} />
         )}
         {showClearedNotice && (
           <div role="status" className="flex items-center gap-3 rounded-2xl border border-hit/40 bg-ink-900 p-4 text-sm text-ink-100 shadow-panel">
@@ -438,6 +397,7 @@ const AppContent: React.FC = () => {
         <LegalPage document={legalRoute.document} sectionId={legalRoute.sectionId} />
       ) : (
         <div className="h-full overflow-y-auto overflow-x-hidden">
+          <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-ink-800 focus:px-3 focus:py-2 focus:text-sm">Pular para o conteúdo</a>
           <header className="fixed inset-x-0 top-0 z-40 border-b border-ink-700/70 bg-ink-950/95 backdrop-blur-xl">
             <div className="mx-auto flex min-h-20 max-w-7xl items-center justify-between gap-3 px-5 sm:px-8 lg:px-12">
               <BrandMark />
@@ -479,19 +439,16 @@ const AppContent: React.FC = () => {
                     Conecte sua guitarra, encontre seu timbre e toque suas músicas favoritas. Cada nota é um passo no seu próximo riff.
                   </p>
                   <div className="mt-8 flex flex-col flex-wrap gap-3 sm:flex-row">
-                    <button onClick={() => void handleLoadDefaultSong()} disabled={isLoadingDefault} aria-busy={isLoadingDefault}
-                      className="flex min-h-16 cursor-pointer items-center justify-center gap-3 rounded-xl bg-amp-400 px-6 py-3 text-ink-950 shadow-glow-amp transition hover:bg-amp-300 disabled:cursor-wait disabled:opacity-70">
-                      {isLoadingDefault ? <Loader2 size={22} className="animate-spin" aria-hidden="true" /> : <Play size={22} className="fill-current" aria-hidden="true" />}
-                      <span className="text-left"><span className="block text-base font-bold">{isLoadingDefault ? 'Carregando música…' : 'Tocar agora'}</span><span className="mt-0.5 block text-xs font-medium">Creeping Death - Metallica</span></span>
+                    <button onClick={handleLoadDemo}
+                      className="flex min-h-16 cursor-pointer items-center justify-center gap-3 rounded-xl bg-amp-400 px-6 py-3 text-ink-950 shadow-glow-amp transition hover:bg-amp-300">
+                      <Play size={22} className="fill-current" aria-hidden="true" />
+                      <span className="text-left"><span className="block text-base font-bold">Tocar agora</span><span className="mt-0.5 block text-xs font-medium">Exercício original · ~20 s</span></span>
                     </button>
                     <button onClick={() => {
                       ensureSoloAudio();
                       setIsSearchOpen(true);
                     }} className="flex min-h-16 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-600 bg-ink-900 px-6 py-3 text-sm font-semibold text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
                       <Music size={18} aria-hidden="true" /> Buscar música
-                    </button>
-                    <button onClick={handleLoadDemo} className="flex min-h-16 cursor-pointer items-center justify-center gap-3 rounded-xl border border-signal-500/30 bg-signal-500/5 px-5 py-3 text-signal-300 transition hover:bg-signal-500/10">
-                      <Play size={18} aria-hidden="true" /><span className="text-left"><span className="block text-sm font-bold">Experimentar demo</span><span className="mt-1 block text-xs text-ink-300">Exercício offline - ~20 s</span></span>
                     </button>
                     <button onClick={() => setIsDuoSetupOpen(true)} className="flex min-h-16 cursor-pointer items-center justify-center gap-3 rounded-xl border border-ink-600 bg-ink-900 px-5 py-3 text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
                       <Users size={18} className="text-amp-300" aria-hidden="true" /><span className="text-left"><span className="block text-sm font-bold">Jogar em dupla</span><span className="mt-1 block text-xs text-ink-300">Duas guitarras, um computador</span></span>
@@ -505,12 +462,12 @@ const AppContent: React.FC = () => {
                       <Guitar size={18} className="text-amp-300" aria-hidden="true" /><span className="text-left"><span className="block text-sm font-bold">Play Free</span><span className="mt-1 block text-xs text-ink-300">Só ouvir a guitarra e ver as notas</span></span>
                     </button>
                   </div>
-                  <p className="mt-5 flex items-center gap-2 text-xs text-ink-300"><Check size={14} className="text-hit" aria-hidden="true" /> Sem cadastro. O palco é seu.</p>
+                  <p className="mt-5 flex items-center gap-2 text-xs text-ink-300"><Check size={14} className="text-hit" aria-hidden="true" /> Sem cadastro para tocar. O ranking é opcional.</p>
                 </div>
                 <PracticePreview />
               </div>
 
-              <div aria-label="Controles de áudio" className="mt-12 grid divide-y divide-ink-700 overflow-hidden rounded-2xl border border-ink-700 bg-ink-900 shadow-panel sm:mt-16 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+              <div role="group" aria-label="Controles de áudio" className="mt-12 grid divide-y divide-ink-700 overflow-hidden rounded-2xl border border-ink-700 bg-ink-900 shadow-panel sm:mt-16 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
                 <button onClick={() => void handleStartAudio()} disabled={isAudioRunning} className="group flex min-h-24 cursor-pointer items-center gap-3 px-5 py-4 text-left transition hover:bg-ink-800 disabled:cursor-default">
                   <PlugZap size={23} className={isAudioRunning ? 'text-hit' : 'text-amp-400'} aria-hidden="true" />
                   <span className="flex-1"><span className="block text-sm font-semibold">{isAudioRunning ? 'Guitarra conectada' : 'Conectar guitarra'}</span><span className="mt-1 block text-xs text-ink-300">{isAudioRunning ? 'Entrada de áudio ativa' : 'Interface não conectada'}</span></span>
@@ -518,7 +475,7 @@ const AppContent: React.FC = () => {
                 </button>
                 <button onClick={() => setIsSettingsOpen(true)} className="flex min-h-24 cursor-pointer items-center gap-3 px-5 py-4 text-left transition hover:bg-ink-800">
                   <Sliders size={23} className="text-signal-400" aria-hidden="true" />
-                  <span className="flex-1"><span className="block text-sm font-semibold">Entrada & afinador</span><span className="mt-1 block text-xs text-ink-300">Tudo pronto para afinar</span></span><ArrowUpRight size={16} className="text-ink-300" aria-hidden="true" />
+                  <span className="flex-1"><span className="block text-sm font-semibold">Áudio e afinador</span><span className="mt-1 block text-xs text-ink-300">Entrada, saída, buffer e latência</span></span><ArrowUpRight size={16} className="text-ink-300" aria-hidden="true" />
                 </button>
                 <button onClick={() => {
                   if (!isAudioRunning) void handleStartAudio();
@@ -541,9 +498,9 @@ const AppContent: React.FC = () => {
                 </div>
                 <div className="grid gap-4 md:grid-cols-3">
                   {[
-                    { icon: Zap, label: '01 / TIMBRE', title: 'O calor das válvulas.', description: 'Amp valvulado em tempo real com PRGB Amp. Ajuste o ganho, o gabinete e o reverb até encontrar o seu som.', detail: 'PRGB Amp · Amp + gabinete + reverb', color: 'text-amp-300', surface: 'bg-amp-500/10 border-amp-500/20' },
-                    { icon: AudioLines, label: '02 / ENTRADA', title: 'Plugue. Afine. Toque.', description: 'Escolha sua interface e use o afinador integrado. Entrada de baixa latência para acompanhar cada movimento da palheta.', detail: 'Sua guitarra no centro de tudo', color: 'text-signal-300', surface: 'bg-signal-500/10 border-signal-500/20' },
-                    { icon: Target, label: '03 / PRÁTICA', title: 'Cada nota conta.', description: 'Acompanhe as tablaturas, acerte as notas e construa seu combo. Perfeito, Bom ou Errou: veja seu progresso enquanto toca.', detail: 'Mais de 1 milhão de músicas no acervo', color: 'text-hit', surface: 'bg-hit/10 border-hit/20' }
+                    { icon: Zap, label: '01 / TIMBRE', title: 'Encontre o seu timbre.', description: 'Simulador de amplificador em tempo real, o PRGB Amp. Ajuste o ganho, o gabinete e o reverb até achar o seu som.', detail: 'PRGB Amp · Simulador + gabinete + reverb', color: 'text-amp-300', surface: 'bg-amp-500/10 border-amp-500/20' },
+                    { icon: AudioLines, label: '02 / ENTRADA', title: 'Plugue. Afine. Toque.', description: 'Escolha sua interface, monte a rota de áudio e use o afinador integrado. A latência depende do seu navegador e do seu equipamento.', detail: 'Sua guitarra no centro de tudo', color: 'text-signal-300', surface: 'bg-signal-500/10 border-signal-500/20' },
+                    { icon: Target, label: '03 / PRÁTICA', title: 'Cada nota conta.', description: 'Acompanhe as tablaturas, acerte as notas e construa seu combo. Perfeito, Bom ou Errou: veja seu progresso enquanto toca.', detail: 'Exercício próprio e busca em acervo externo', color: 'text-hit', surface: 'bg-hit/10 border-hit/20' }
                   ].map(({ icon: Icon, label, title, description, detail, color, surface }) => (
                     <article key={label} className="flex flex-col rounded-2xl border border-ink-700 bg-ink-850 p-6 sm:p-7">
                       <span className={`mb-7 flex size-12 items-center justify-center rounded-xl border ${color} ${surface}`}><Icon size={24} aria-hidden="true" /></span>
@@ -563,7 +520,7 @@ const AppContent: React.FC = () => {
               <ol className="mt-10 grid gap-8 md:grid-cols-3 md:gap-10">
                 {[
                   { icon: PlugZap, title: 'Plugue a interface', description: 'Conecte a guitarra à sua interface USB e permita o acesso ao áudio no navegador.' },
-                  { icon: Music, title: 'Escolha a música', description: 'Comece com Metallica ou busque sua próxima música no acervo.' },
+                  { icon: Music, title: 'Escolha a música', description: 'Comece pelo exercício do PRGB ou busque sua próxima música no acervo.' },
                   { icon: Headphones, title: 'Dê o play. Toque.', description: 'Coloque os fones, ajuste seu timbre e siga as notas. Repita aquele trecho até sair.' }
                 ].map(({ icon: Icon, title, description }, index) => (
                   <li key={title} className="relative border-t border-ink-600 pt-6">
@@ -588,12 +545,15 @@ const AppContent: React.FC = () => {
                 <nav aria-label="Documentos legais" className="flex gap-5">
                   <a href="#privacidade" className="rounded py-2 hover:text-amp-300">Privacidade</a>
                   <a href="#termos" className="rounded py-2 hover:text-amp-300">Termos</a>
+                  <a href="/licencas-terceiros.md" target="_blank" rel="noopener noreferrer" className="rounded py-2 hover:text-amp-300">Licenças</a>
+                  <a href={`mailto:${LEGAL_CONTACT.email}`} className="rounded py-2 hover:text-amp-300">Contato</a>
                 </nav>
-                <button type="button" onClick={() => setIsFeedbackOpen(true)} className="flex cursor-pointer items-center gap-2 rounded py-2 hover:text-amp-300"><MessageSquareWarning size={15} /> Reportar problema</button>
+                <button type="button" onClick={() => setIsFeedbackOpen(true)} className="flex cursor-pointer items-center gap-2 rounded py-2 hover:text-amp-300"><MessageSquareWarning size={15} aria-hidden="true" /> Reportar problema</button>
                 <a href={supportHref} target="_blank" rel="noopener noreferrer" className="rounded py-2 hover:text-amp-300">{supportLabel} ↗</a>
               </div>
             </div>
           </footer>
+          <StorageNotice />
         </div>
       )}
 
@@ -626,7 +586,6 @@ const AppContent: React.FC = () => {
         onSelectSong={(tab, song, revisionId) => {
           songSelectionVersion.current += 1;
           setRestoreError(null);
-          setDefaultError(null);
           ensureSoloAudio();
           setSession(soloSession({ tab, partId: song.partId, revisionId }));
           if (song.songId !== DEMO_SONG_ID) savePreferences({ lastSong: song });

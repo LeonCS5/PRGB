@@ -12,10 +12,8 @@ import {
 import { AudioEngine, type InputChannelMode } from '../services/audioEngine';
 import { useAudioSession, useLatestPitch } from '../context/AudioSessionContext';
 import { ErrorNotice } from './ErrorNotice';
-import { getAudioErrorMessage } from '../context/uiErrors';
 import { AudioRouteNotice, InputLevelMeter } from './AudioRouting';
-import { audioDeviceName, canChooseAudioOutput, isSystemAlias } from '../services/audioDevices';
-import { SoundFX } from '../services/synthAudio';
+import { AudioRoutePanel } from './AudioRoutePanel';
 import { AMP_PRESETS, type AmpPresetId, type AmpSettings } from '../services/ampEngine';
 
 interface AudioSettingsModalProps {
@@ -39,45 +37,18 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
   onChannelModeChange,
   onOpenAmpRack
 }) => {
-  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
-  const [outputs, setOutputs] = useState<MediaDeviceInfo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [deviceError, setDeviceError] = useState<string | null>(null);
-  const [deviceAttempt, setDeviceAttempt] = useState(0);
   const [isConnecting, setIsConnecting] = useState(false);
-  const { isAudioRunning, startAudio, outputDeviceId, changeOutputDevice } = useAudioSession();
+  const { isAudioRunning, startAudio, audioError, dismissAudioError } = useAudioSession();
   const ampEngine = audioEngine.getAmp();
   const [toneSettings, setToneSettings] = useState<AmpSettings | null>(
     ampEngine ? ampEngine.getSettings() : null
   );
 
   useEffect(() => {
-    if (!isOpen) return;
-    let cancelled = false;
-    setLoading(true);
-    setDeviceError(null);
-    void audioEngine.getAudioOutputDevices().then((list) => {
-      if (!cancelled) setOutputs(list);
-    });
-    audioEngine.getAudioInputDevices().then((devs) => {
-      if (cancelled) return;
-      setDevices(devs);
-      if (devs.length === 0) {
-        setDeviceError('Nenhuma entrada de áudio pôde ser listada. Conecte sua interface e confira a permissão de microfone no navegador.');
-      }
-    }).catch((err: unknown) => {
-      if (!cancelled) setDeviceError(getAudioErrorMessage(err));
-    }).finally(() => {
-      if (!cancelled) setLoading(false);
-    });
-
-    let unsubscribe: (() => void) | undefined;
-    if (ampEngine) {
-      setToneSettings(ampEngine.getSettings());
-      unsubscribe = ampEngine.subscribe((s) => setToneSettings(s));
-    }
-    return () => { cancelled = true; unsubscribe?.(); };
-  }, [isOpen, audioEngine, ampEngine, deviceAttempt]);
+    if (!isOpen || !ampEngine) return;
+    setToneSettings(ampEngine.getSettings());
+    return ampEngine.subscribe((s) => setToneSettings(s));
+  }, [isOpen, ampEngine]);
 
   if (!isOpen) return null;
 
@@ -86,7 +57,7 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
   const isMonitoring = toneSettings?.isMonitoringEnabled ?? true;
 
   return (
-    <ModalFrame titleId="AudioSettingsModal-title" onClose={onClose} className="max-w-lg overflow-y-auto">
+    <ModalFrame titleId="AudioSettingsModal-title" onClose={onClose} className="max-w-3xl overflow-y-auto">
         <button
           onClick={onClose}
           aria-label="Fechar modal"
@@ -100,32 +71,30 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
             <Mic className="text-ink-100" size={24} />
           </div>
           <div>
-            <h2 id="AudioSettingsModal-title" className="font-display text-xl font-bold">Interface de Áudio & Guitarra</h2>
+            <h2 id="AudioSettingsModal-title" className="font-display text-xl font-bold">Áudio</h2>
             <p className="text-xs text-ink-300">
-              Modo RAW 48kHz de baixa latência + Motor PRGB Amp
+              Entrada, saída, timbre e afinador
             </p>
           </div>
         </div>
 
         <div className="space-y-4">
-          {deviceError && (
-            <ErrorNotice message={deviceError} onDismiss={() => setDeviceError(null)}
-              actionLabel="Atualizar dispositivos" onAction={() => setDeviceAttempt((attempt) => attempt + 1)}
-              actionDisabled={loading} />
-          )}
+          {audioError && <ErrorNotice message={audioError} onDismiss={dismissAudioError} />}
+          <AudioRouteNotice />
           {!isAudioRunning && (
             <button type="button" disabled={isConnecting} onClick={async () => {
               setIsConnecting(true);
               try {
                 await startAudio();
-                setDeviceAttempt((attempt) => attempt + 1);
               } finally {
                 setIsConnecting(false);
               }
-            }} className="rounded-xl bg-amp-600 px-4 py-2 text-sm font-bold text-ink-100 hover:bg-amp-500 disabled:opacity-50 cursor-pointer">
+            }} className="rounded-xl bg-amp-500 px-4 py-2 text-sm font-bold text-ink-950 hover:bg-amp-400 disabled:opacity-50 cursor-pointer">
               {isConnecting ? 'Conectando...' : 'Conectar / tentar novamente'}
             </button>
           )}
+          <AudioRoutePanel currentDeviceId={currentDeviceId} onDeviceChange={onDeviceChange} />
+
           {/* PRGB Amp monitoring Card */}
           <div className="rounded-2xl border border-amp-500/40 bg-gradient-to-b from-amp-700/40 via-ink-900 to-ink-900 p-4 space-y-3">
             <div className="flex items-center justify-between">
@@ -217,62 +186,6 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
             </div>
           </div>
 
-          <AudioRouteNotice />
-
-          {/* Device Selector */}
-          <div>
-            <label className="text-sm font-semibold text-ink-200 block mb-2">
-              Dispositivo de Entrada
-            </label>
-            {loading ? (
-              <div className="text-xs text-ink-300">Procurando interfaces de áudio...</div>
-            ) : (
-              <select
-                aria-label="Dispositivo de entrada"
-                value={currentDeviceId}
-                onChange={(e) => onDeviceChange(e.target.value)}
-                className="w-full rounded-xl border border-ink-700 bg-ink-800 px-4 py-3 text-sm text-ink-100 focus:border-amp-500 focus:outline-none focus:ring-1 focus:ring-amp-500"
-              >
-                <option value="">Dispositivo Padrão do Sistema</option>
-                {devices.filter((d) => !isSystemAlias(d.deviceId)).map((d) => (
-                  <option key={d.deviceId} value={d.deviceId}>
-                    {d.label ? audioDeviceName(d.label) : `Microfone / Interface ${d.deviceId.slice(0, 8)}`}
-                  </option>
-                ))}
-              </select>
-            )}
-            <p className="mt-1.5 text-xs leading-5 text-ink-300">
-              O navegador só enxerga as entradas do sistema. Escolha aqui a da guitarra e feche os apps de música abertos, porque eles podem prender a interface e deixá-la muda para o navegador.
-            </p>
-          </div>
-
-          {canChooseAudioOutput() && (
-            <div>
-              <label htmlFor="audio-output" className="text-sm font-semibold text-ink-200 block mb-2">
-                Saída de Áudio
-              </label>
-              <div className="flex gap-2">
-                <select
-                  id="audio-output"
-                  value={outputDeviceId}
-                  onChange={(e) => void changeOutputDevice(e.target.value)}
-                  className="min-w-0 flex-1 rounded-xl border border-ink-700 bg-ink-800 px-4 py-3 text-sm text-ink-100 focus:border-amp-500 focus:outline-none"
-                >
-                  <option value="">Dispositivo Padrão do Sistema</option>
-                  {outputs.filter((d) => !isSystemAlias(d.deviceId)).map((d) => (
-                    <option key={d.deviceId} value={d.deviceId}>
-                      {d.label ? audioDeviceName(d.label) : `Saída ${d.deviceId.slice(0, 8)}`}
-                    </option>
-                  ))}
-                </select>
-                <button type="button" onClick={() => SoundFX.playPerfectHit()}
-                  className="shrink-0 cursor-pointer rounded-xl border border-ink-700 bg-ink-800 px-3 text-xs font-semibold text-ink-200 transition hover:border-ink-500">
-                  Testar som
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* Channel Routing */}
           <div>
             <label className="text-sm font-semibold text-ink-200 block mb-2 flex items-center gap-2">
@@ -320,7 +233,7 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
             <p className="text-[11px] text-ink-400 mt-1.5">
               {isDuoMode
                 ? 'Modo dupla: guitarra 1 no Canal 1 e guitarra 2 no Canal 2. Saia da dupla para trocar o canal.'
-                : 'Interfaces como Focusrite, Behringer ou Realtek costumam ter a guitarra no Canal 1 ou Canal 2.'}
+                : 'A guitarra costuma chegar no Canal 1 ou no Canal 2. Se o nível não subir, troque aqui.'}
             </p>
           </div>
 
@@ -344,7 +257,7 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
 
           <button
             onClick={onClose}
-            className="min-h-10 rounded-xl bg-gradient-to-r from-amp-500 to-amp-600 px-6 py-2.5 text-sm font-semibold text-ink-100 shadow-lg shadow-amp-500/25 hover:from-amp-400 hover:to-amp-500 transition cursor-pointer ml-auto"
+            className="min-h-10 rounded-xl bg-amp-500 px-6 py-2.5 text-sm font-bold text-ink-950 shadow-lg shadow-amp-500/25 hover:bg-amp-400 transition cursor-pointer ml-auto"
           >
             Pronto para Tocar
           </button>

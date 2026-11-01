@@ -2,6 +2,8 @@
 // Provides real-time guitar sound with tube preamp emulation, multi-stage cabinet filtering,
 // 4-band tone stack EQ, downward expander noise gate, and studio room ambience.
 
+import { dbToGain } from './audioDevices';
+
 export type AmpPresetId = 'metal' | 'crunch' | 'clean' | 'lead' | 'acoustic' | 'direct_di';
 export type CabSimType = '4x12_vintage' | '2x12_british' | '1x12_tweed' | '4x12_metal' | 'bypass';
 
@@ -55,8 +57,8 @@ export const AMP_PRESETS: Record<AmpPresetId, {
     }
   },
   crunch: {
-    name: 'British Plexi Crunch',
-    tagline: 'Overdrive clássico valvulado com dinâmica rica para rock clássico e blues',
+    name: 'British Crunch',
+    tagline: 'Overdrive clássico com dinâmica rica para rock clássico e blues',
     badge: '🔥 British Crunch',
     settings: {
       gain: 45,
@@ -70,9 +72,9 @@ export const AMP_PRESETS: Record<AmpPresetId, {
     }
   },
   clean: {
-    name: 'California Clean Deluxe',
+    name: 'California Clean',
     tagline: 'Som cristalino, brilhante e quente com headroom amplo',
-    badge: '🎸 Clean Deluxe',
+    badge: '🎸 Clean',
     settings: {
       gain: 20,
       bass: 1.0,
@@ -86,7 +88,7 @@ export const AMP_PRESETS: Record<AmpPresetId, {
   },
   lead: {
     name: 'Liquid Solo Lead',
-    tagline: 'Sustain infinito, compressão suave e harmônicos cantantes para solos',
+    tagline: 'Muito sustain, compressão suave e harmônicos cantantes para solos',
     badge: '🚀 Solo Lead',
     settings: {
       gain: 80,
@@ -163,11 +165,16 @@ export class AmpEngine {
   private masterGainNode: GainNode;
   private outputAnalyserNode: AnalyserNode;
 
+  // The player's own files. A neural model takes the place of the preamp, an impulse response that of the cab
+  private neuralStage: AudioNode | null = null;
+  private neuralLevelNode: GainNode | null = null;
+  private impulseNode: ConvolverNode | null = null;
+
   // State
   private isGateOpen = true;
   private listeners: Array<(settings: AmpSettings) => void> = [];
 
-  constructor(audioContext: AudioContext) {
+  constructor(audioContext: AudioContext, output: AudioNode = audioContext.destination) {
     this.ctx = audioContext;
 
     // 1. Input Gain & Gate
@@ -304,7 +311,7 @@ export class AmpEngine {
 
     // Connect to Analyser and Audio Destination (Speakers / Headphones)
     this.masterGainNode.connect(this.outputAnalyserNode);
-    this.masterGainNode.connect(this.ctx.destination);
+    this.masterGainNode.connect(output);
 
     // Apply Cab Sim preset
     this.applyCabSimSettings(this.settings.cabSim);
@@ -336,6 +343,45 @@ export class AmpEngine {
         this.gateGainNode.gain.setTargetAtTime(1.0, now, 0.004);
       }
     }
+  }
+
+  /** Null brings the preamp back. The tone stack, cabinet, reverb and master stay after the model either way. */
+  public setNeuralStage(stage: AudioNode | null, levelDb = 0): void {
+    this.gateGainNode.disconnect();
+    this.neuralStage?.disconnect();
+    this.neuralLevelNode?.disconnect();
+    this.neuralStage = stage;
+    if (!stage) {
+      this.gateGainNode.connect(this.preGainNode);
+      return;
+    }
+    this.neuralLevelNode ??= this.ctx.createGain();
+    this.neuralLevelNode.gain.value = dbToGain(levelDb);
+    this.gateGainNode.connect(stage);
+    stage.connect(this.neuralLevelNode);
+    this.neuralLevelNode.connect(this.toneBassNode);
+  }
+
+  /** Null brings the built-in cabinet back. */
+  public setImpulseResponse(impulse: AudioBuffer | null): void {
+    const next = impulse ? this.ctx.createConvolver() : null;
+    // Before touching the chain: the convolver refuses some files, and that must not cut the sound
+    if (next) next.buffer = impulse;
+    this.tonePresenceNode.disconnect();
+    this.impulseNode?.disconnect();
+    this.impulseNode = next;
+    if (next) {
+      this.tonePresenceNode.connect(next);
+      next.connect(this.cabWetGainNode);
+    } else {
+      this.tonePresenceNode.connect(this.cabSubCutNode);
+      this.tonePresenceNode.connect(this.cabDryGainNode);
+    }
+    this.applyCabSimSettings(this.settings.cabSim);
+  }
+
+  public getIsGateOpen(): boolean {
+    return this.isGateOpen;
   }
 
   /**
@@ -468,6 +514,11 @@ export class AmpEngine {
 
   private applyCabSimSettings(cab: CabSimType): void {
     const now = this.ctx.currentTime;
+    if (this.impulseNode) {
+      this.cabDryGainNode.gain.setTargetAtTime(0.0, now, 0.02);
+      this.cabWetGainNode.gain.setTargetAtTime(1.0, now, 0.02);
+      return;
+    }
     if (cab === 'bypass') {
       this.cabWetGainNode.gain.setTargetAtTime(0.0, now, 0.02);
       this.cabDryGainNode.gain.setTargetAtTime(1.0, now, 0.02);

@@ -15,7 +15,22 @@ export interface DetectedPitch {
   attackId: number;
 }
 
-import { LOOPBACK_TONE_GAIN, LOOPBACK_TONE_HZ, routeAudioContext, toneCameBack, toneLevel } from './audioDevices';
+import {
+  DEFAULT_AUDIO_OPTIONS,
+  LOOPBACK_BURSTS,
+  LOOPBACK_BURSTS_NEEDED,
+  LOOPBACK_TONE_GAIN,
+  LOOPBACK_TONE_HZ,
+  dbToGain,
+  onSameHardware,
+  toneCameBack,
+  toneLevel,
+  type AudioOptions,
+  type SignalReading
+} from './audioDevices';
+import { createAudioOutputRoute, type AudioOutputRoute } from './audioOutput';
+import { NAM_ASSET_BASE, NeuralFileRefused, checkFileSize, checkModelText, modelGainDb } from './neuralAmp';
+import type { NamModelInfo, NamNode } from '../vendor/nam-engine/index.js';
 import { SoundFX } from './synthAudio';
 import { AmpEngine } from './ampEngine';
 
@@ -24,6 +39,7 @@ export interface ActiveAudioInput {
   groupId: string;
   channelCount: number;
   sampleRate: number;
+  sampleSize: number | null;
   latencyMs: number | null;
 }
 
@@ -96,6 +112,7 @@ interface PlayerInput {
 
 export class AudioEngine {
   private audioContext: AudioContext | null = null;
+  private outputRoute: AudioOutputRoute | null = null;
   private mediaStream: MediaStream | null = null;
   private sourceNode: MediaStreamAudioSourceNode | null = null;
   private splitterNode: ChannelSplitterNode | null = null;
@@ -125,6 +142,19 @@ export class AudioEngine {
   private inputPeak = 0;
   private outputDeviceId = '';
   private onFeedback: (() => void) | null = null;
+  private options: AudioOptions;
+  private inputTrim: GainNode | null = null;
+  private monitorOpen = false;
+  private monitorChecking = false;
+  private cleanRoute = ''; // the last input and output tested without a loop
+  // Kept to come back when the AudioContext is rebuilt, which takes the nodes with it
+  private neuralModel: { name: string; text: string } | null = null;
+  private impulse: { name: string; bytes: ArrayBuffer } | null = null;
+  private namNode: NamNode | null = null;
+  private feedbackWatch: ReturnType<typeof setInterval> | null = null;
+  private hotReads = 0;
+  private monitorReopenedAt = -Infinity;
+  private framesSinceDetection = 0;
 
   // Guitar frequency bounds (E1 ~ 41 Hz for 4-string bass up to E6 ~ 1319 Hz, fret 24 of the high E)
   private readonly MIN_FREQ = 40;
@@ -149,10 +179,20 @@ export class AudioEngine {
   private static readonly MIRROR_FRAMES = 60;
   private static readonly MIRROR_MAX_DIFFERENCE = 0.02;
   private static readonly MIRROR_MIN_SHARE = 0.9;
+  // A guitar only touches this level for an instant; an output feeding the input holds it. The check runs on a
+  // timer and not on the frame loop, which stops while the window is covered.
+  private static readonly FEEDBACK_RMS = 0.5; // -6 dBFS
+  private static readonly FEEDBACK_READS = 3;
+  private static readonly FEEDBACK_WATCH_MS = 80;
+  private static readonly FEEDBACK_SETTLE_SEC = 0.4;
+  private static readonly FEEDBACK_RETRIP_SEC = 3;
+  // Low power mode analyses one frame in this many
+  private static readonly LOW_POWER_FRAMES = 3;
 
-  constructor() {
+  constructor(options: AudioOptions = DEFAULT_AUDIO_OPTIONS) {
     // Audio engine initialized in idle state
     this.mirrorHistory = new Uint8Array(AudioEngine.MIRROR_FRAMES);
+    this.options = options;
   }
 
   /**
@@ -185,58 +225,128 @@ export class AudioEngine {
     let applied = false;
     // In the queue: a stop in the middle of the loopback test would take its input away
     await this.enqueue(async () => {
+      // Shut first: for an instant the amp would otherwise play into an output that may feed the input
+      if (this.isRunning) await this.closeMonitor();
       this.outputDeviceId = deviceId;
       applied = await this.applyOutputDevice();
-      if (this.isRunning) {
-        this.rampMonitorGain(0);
-        await this.openMonitor();
-      }
+      // An output that didn't take leaves the sound wherever it was: that route is what may have to be left
+      if (this.isRunning && applied) await this.openMonitor();
     });
     return applied;
   }
 
+  private async closeMonitor(): Promise<void> {
+    this.monitorOpen = false;
+    const fadeEnd = this.rampMonitorGain(0);
+    if (fadeEnd !== null && this.audioContext) await AudioEngine.waitForAudioTime(this.audioContext, fadeEnd);
+  }
+
   private async openMonitor(): Promise<void> {
-    if (await this.outputLoopsBack()) this.onFeedback?.();
-    else this.rampMonitorGain(1);
+    if (await this.outputLoopsBack()) {
+      this.onFeedback?.();
+      return;
+    }
+    this.rampMonitorGain(1);
+    this.monitorOpen = true;
   }
 
   // Only an output on the same hardware as the input can return to it, so nothing plays in any other case
   private async outputLoopsBack(): Promise<boolean> {
     const ctx = this.audioContext;
+    const output = this.outputRoute?.node;
     const input = this.playerInputs[0];
-    const inputGroup = this.getActiveInput()?.groupId;
-    if (!ctx || !input || !inputGroup) return false;
+    const active = this.getActiveInput();
+    if (!ctx || !output || !input || !active) return false;
     const outputs = await this.getAudioOutputDevices();
     const playing = outputs.find((device) => device.deviceId === (this.outputDeviceId || 'default'));
-    if (playing?.groupId !== inputGroup) return false;
+    // Firefox lists no default output: what plays there is unknown, so it gets tested like the rest
+    if (playing && !onSameHardware(playing, active)) return false;
+    // Each test takes seconds, too long to repeat at every reconnection; the feedback watch stays on regardless
+    const route = this.outputDeviceId ? `${active.label}|${this.outputDeviceId}` : '';
+    if (route && route === this.cleanRoute) return false;
 
+    this.monitorChecking = true;
     const listen = () => {
       input.analyser.getFloatTimeDomainData(input.buffer);
       return toneLevel(input.buffer, LOOPBACK_TONE_HZ, ctx.sampleRate);
     };
-    await AudioEngine.waitForAudioTime(ctx, ctx.currentTime + 0.1);
-    const quiet = listen();
     const tone = ctx.createOscillator();
     tone.frequency.value = LOOPBACK_TONE_HZ;
     const level = ctx.createGain();
-    level.gain.value = LOOPBACK_TONE_GAIN;
+    level.gain.value = 0;
     tone.connect(level);
-    level.connect(ctx.destination);
+    level.connect(output);
     tone.start();
-    let heard = 0;
-    for (const delay of [0.15, 0.08, 0.08]) {
-      await AudioEngine.waitForAudioTime(ctx, ctx.currentTime + delay);
-      heard = Math.max(heard, listen());
+    let returned = 0;
+    // Longer than the trip through the output, the input and the analyser window
+    const settle = () => AudioEngine.waitForAudioTime(ctx, ctx.currentTime + 0.2);
+    for (let burst = 0; burst < LOOPBACK_BURSTS && returned < LOOPBACK_BURSTS_NEEDED; burst++) {
+      await settle();
+      const quiet = listen();
+      level.gain.value = LOOPBACK_TONE_GAIN;
+      await settle();
+      if (toneCameBack(quiet, listen())) returned++;
+      level.gain.value = 0;
     }
     tone.stop();
     level.disconnect();
-    return toneCameBack(quiet, heard);
+    this.monitorChecking = false;
+    const loops = returned >= LOOPBACK_BURSTS_NEEDED;
+    this.cleanRoute = loops ? '' : route;
+    return loops;
+  }
+
+  // The test above can't foresee everything: an output unmuted later, or a test that lost to a loud chord
+  private watchForFeedback = (): void => {
+    if (!this.monitorOpen) {
+      this.hotReads = 0;
+      return;
+    }
+    this.hotReads = this.readInputRms() >= this.feedbackLevel() ? this.hotReads + 1 : 0;
+    if (this.hotReads < AudioEngine.FEEDBACK_READS) return;
+    this.hotReads = 0;
+    this.monitorOpen = false;
+    this.rampMonitorGain(0);
+    void this.enqueue(() => this.confirmFeedback());
+  };
+
+  // With the monitor shut a loop collapses, while a guitar that is simply too hot keeps its level
+  private async confirmFeedback(): Promise<void> {
+    const ctx = this.audioContext;
+    if (!ctx || !this.isRunning) return;
+    const trippedAgain = ctx.currentTime - this.monitorReopenedAt < AudioEngine.FEEDBACK_RETRIP_SEC;
+    await AudioEngine.waitForAudioTime(ctx, ctx.currentTime + AudioEngine.FEEDBACK_SETTLE_SEC);
+    if (!this.isRunning) return;
+    if (!trippedAgain && this.readInputRms() >= this.feedbackLevel() / 2) {
+      this.rampMonitorGain(1);
+      this.monitorOpen = true;
+      this.monitorReopenedAt = ctx.currentTime;
+    } else {
+      this.cleanRoute = '';
+      this.onFeedback?.();
+    }
+  }
+
+  // Read after the input gain, which a negative setting would otherwise use to hide a loop at full scale
+  private feedbackLevel(): number {
+    return AudioEngine.FEEDBACK_RMS * Math.min(1, dbToGain(this.options.inputGainDb));
+  }
+
+  private readInputRms(): number {
+    let loudest = 0;
+    for (const input of this.playerInputs) {
+      input.analyser.getFloatTimeDomainData(input.buffer);
+      let sum = 0;
+      for (let i = 0; i < input.buffer.length; i++) sum += input.buffer[i] * input.buffer[i];
+      loudest = Math.max(loudest, Math.sqrt(sum / input.buffer.length));
+    }
+    return loudest;
   }
 
   // Speakers can be unplugged between sessions: the sound then stays on the system default
   private async applyOutputDevice(): Promise<boolean> {
     try {
-      if (this.audioContext) await routeAudioContext(this.audioContext, this.outputDeviceId);
+      if (this.outputRoute) this.outputDeviceId = await this.outputRoute.setDevice(this.outputDeviceId);
       await SoundFX.setOutputDevice(this.outputDeviceId);
       return true;
     } catch (err) {
@@ -244,6 +354,10 @@ export class AudioEngine {
       this.outputDeviceId = '';
       return false;
     }
+  }
+
+  getOutputDeviceId(): string {
+    return this.outputDeviceId;
   }
 
   /** Called when what the output plays comes back through the input; the monitor stays closed. */
@@ -256,6 +370,163 @@ export class AudioEngine {
     return { rms: this.inputRms, peak: this.inputPeak };
   }
 
+  getSignalReading(): SignalReading {
+    return {
+      running: this.isRunning,
+      contextRunning: this.audioContext?.state === 'running',
+      inputRms: this.inputRms,
+      gateOpen: this.ampEngine?.getIsGateOpen() ?? false,
+      monitoring: this.ampEngine?.getSettings().isMonitoringEnabled ?? false,
+      monitorOpen: this.monitorOpen,
+      monitorChecking: this.monitorChecking
+    };
+  }
+
+  /** Peak level leaving the amp, 0 to 1. */
+  getOutputLevel(): number {
+    return this.ampEngine?.getOutputLevel() ?? 0;
+  }
+
+  /** What the engine really runs at, which the system may have rounded from what was asked. */
+  getEngineInfo(): { sampleRate: number; engineLatencyMs: number; outputLatencyMs: number; outputChannels: number } | null {
+    const ctx = this.audioContext;
+    if (!ctx) return null;
+    return {
+      sampleRate: ctx.sampleRate,
+      engineLatencyMs: (ctx.baseLatency ?? 0) * 1000,
+      outputLatencyMs: (ctx.outputLatency ?? 0) * 1000,
+      outputChannels: ctx.destination?.maxChannelCount ?? 2
+    };
+  }
+
+  /** How much later than played a note reaches the judge, as the player set it. */
+  getLatencyCompensationMs(): number {
+    const { inputLatencySamples, outputLatencySamples } = this.options;
+    return ((inputLatencySamples + outputLatencySamples) / (this.audioContext?.sampleRate ?? 48000)) * 1000;
+  }
+
+  resumeContext(): Promise<void> {
+    return this.audioContext?.resume() ?? Promise.resolve();
+  }
+
+  /**
+   * Input gain and compensation apply at once; buffer, rate and power mode need a new AudioContext. Returns
+   * true when that stopped running audio: the caller starts it again, with its saved amp settings.
+   */
+  async setAudioOptions(options: AudioOptions): Promise<boolean> {
+    let closed = false;
+    await this.enqueue(async () => {
+      const previous = this.options;
+      this.options = options;
+      if (this.inputTrim) this.inputTrim.gain.value = dbToGain(options.inputGainDb);
+      const sameContext = previous.bufferSamples === options.bufferSamples
+        && previous.resampleTo48k === options.resampleTo48k && previous.lowPower === options.lowPower;
+      if (sameContext || !this.audioContext) return;
+      closed = this.isRunning;
+      await this.releaseContext();
+    });
+    return closed;
+  }
+
+  private async releaseContext(): Promise<void> {
+    await this.stopNow();
+    if (this.audioContext && this.audioContext.state !== 'closed') {
+      await this.audioContext.close();
+    }
+    this.outputRoute?.close();
+    this.outputRoute = null;
+    this.audioContext = null;
+    this.ampEngine = null;
+    this.monitorGain = null;
+    this.namNode = null;
+  }
+
+  getNeuralFiles(): { model: string | null; impulse: string | null } {
+    return { model: this.neuralModel?.name ?? null, impulse: this.impulse?.name ?? null };
+  }
+
+  async loadNeuralModel(file: File): Promise<NamModelInfo> {
+    checkFileSize(file.size);
+    const text = await file.text();
+    checkModelText(text);
+    let info: NamModelInfo | null = null;
+    await this.enqueue(async () => {
+      const previous = this.neuralModel;
+      this.neuralModel = { name: file.name, text };
+      try {
+        info = await this.applyNeuralModel();
+      } catch (err) {
+        this.neuralModel = previous;
+        throw err;
+      }
+    });
+    if (!info) throw new NeuralFileRefused('not_a_model');
+    return info;
+  }
+
+  clearNeuralModel(): Promise<void> {
+    return this.enqueue(async () => {
+      this.neuralModel = null;
+      this.ampEngine?.setNeuralStage(null);
+      await this.namNode?.dispose();
+      this.namNode = null;
+    });
+  }
+
+  private async applyNeuralModel(): Promise<NamModelInfo | null> {
+    const ctx = this.audioContext;
+    if (!ctx || !this.ampEngine || !this.neuralModel) return null;
+    const { NamEngine } = await import('../vendor/nam-engine/index.js');
+    const engine = await NamEngine.attach(ctx, { assetBaseUrl: NAM_ASSET_BASE });
+    this.namNode ??= await engine.createNode();
+    const info = await this.namNode.loadModel(this.neuralModel.text);
+    this.ampEngine.setNeuralStage(this.namNode, modelGainDb(info));
+    return info;
+  }
+
+  async loadImpulseResponse(file: File): Promise<void> {
+    checkFileSize(file.size);
+    const bytes = await file.arrayBuffer();
+    await this.enqueue(async () => {
+      const previous = this.impulse;
+      this.impulse = { name: file.name, bytes };
+      try {
+        await this.applyImpulseResponse();
+      } catch (err) {
+        this.impulse = previous;
+        throw new NeuralFileRefused('not_audio', { cause: err });
+      }
+    });
+  }
+
+  clearImpulseResponse(): Promise<void> {
+    return this.enqueue(async () => {
+      this.impulse = null;
+      this.ampEngine?.setImpulseResponse(null);
+    });
+  }
+
+  private async applyImpulseResponse(): Promise<void> {
+    const ctx = this.audioContext;
+    if (!ctx || !this.ampEngine || !this.impulse) return;
+    // decodeAudioData detaches the buffer it receives, and the file has to outlive this context
+    this.ampEngine.setImpulseResponse(await ctx.decodeAudioData(this.impulse.bytes.slice(0)));
+  }
+
+  /** Device names stay empty until the browser has microphone permission. Opens nothing else for good. */
+  async unlockDeviceLabels(): Promise<void> {
+    if (!navigator.mediaDevices?.getUserMedia) return;
+    const inputs = await this.getAudioInputDevices();
+    if (inputs.some((device) => device.label)) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((track) => track.stop());
+    } catch (err) {
+      // A busy default microphone says nothing about the interface; only a refusal is the player's answer
+      if (err instanceof DOMException && err.name === 'NotAllowedError') throw err;
+    }
+  }
+
   getActiveInput(): ActiveAudioInput | null {
     const track = this.mediaStream?.getAudioTracks?.()[0];
     if (!track) return null;
@@ -266,6 +537,7 @@ export class AudioEngine {
       groupId: settings.groupId ?? '',
       channelCount: settings.channelCount ?? 1,
       sampleRate: settings.sampleRate ?? this.audioContext?.sampleRate ?? 48000,
+      sampleSize: settings.sampleSize ?? null,
       latencyMs: typeof settings.latency === 'number' ? settings.latency * 1000 : null,
     };
   }
@@ -308,14 +580,18 @@ export class AudioEngine {
     if (!this.audioContext || this.audioContext.state === 'closed') {
       // webkitAudioContext (old Safari) isn't part of the DOM lib typings
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      const { bufferSamples, lowPower, resampleTo48k } = this.options;
       this.audioContext = new AudioContextClass({
-        sampleRate: 48000,
-        latencyHint: 'interactive'
+        ...(resampleTo48k ? { sampleRate: 48000 } : {}),
+        latencyHint: bufferSamples ? bufferSamples / 48000 : lowPower ? 'balanced' : 'interactive'
       });
       this.ampEngine = null;
       this.monitorGain = null;
+      this.namNode = null;
+      this.outputRoute = createAudioOutputRoute(this.audioContext);
       await this.applyOutputDevice();
     }
+    this.outputRoute?.start();
 
     if (this.audioContext.state === 'suspended') {
       await this.audioContext.resume();
@@ -351,7 +627,10 @@ export class AudioEngine {
     this.splitterNode = this.audioContext.createChannelSplitter(2);
     this.mergerNode = this.audioContext.createChannelMerger(1);
 
-    this.sourceNode.connect(this.splitterNode);
+    this.inputTrim = this.audioContext.createGain();
+    this.inputTrim.gain.value = dbToGain(this.options.inputGainDb);
+    this.sourceNode.connect(this.inputTrim);
+    this.inputTrim.connect(this.splitterNode);
 
     if (this.channelMode === 'ch1') {
       // Route only channel 1 (Left)
@@ -380,7 +659,8 @@ export class AudioEngine {
 
     // Initialize and route to PRGB Amp Modeler for live low-latency guitar monitoring
     if (!this.ampEngine) {
-      this.ampEngine = new AmpEngine(this.audioContext);
+      this.ampEngine = new AmpEngine(this.audioContext, this.outputRoute?.node);
+      await this.restoreNeuralFiles();
     }
     if (!this.monitorGain) {
       this.monitorGain = this.audioContext.createGain();
@@ -391,7 +671,18 @@ export class AudioEngine {
 
     this.isRunning = true;
     this.loopDetection();
+    this.feedbackWatch = setInterval(this.watchForFeedback, AudioEngine.FEEDBACK_WATCH_MS);
     await this.openMonitor();
+  }
+
+  // A file that no longer loads must not cost the player their guitar sound
+  private async restoreNeuralFiles(): Promise<void> {
+    try {
+      await this.applyNeuralModel();
+      await this.applyImpulseResponse();
+    } catch (err) {
+      console.warn('Could not bring the neural files back:', err);
+    }
   }
 
   private createPlayerInput(ctx: AudioContext, slot: PlayerSlot): PlayerInput {
@@ -422,16 +713,17 @@ export class AudioEngine {
     this.isRunning = false;
     this.inputRms = 0;
     this.inputPeak = 0;
+    if (this.feedbackWatch !== null) {
+      clearInterval(this.feedbackWatch);
+      this.feedbackWatch = null;
+    }
     if (this.animationFrameId !== null) {
       cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = null;
     }
 
     // Fade out before cutting the stream; an abrupt disconnect is heard as a click
-    const fadeEnd = this.rampMonitorGain(0);
-    if (fadeEnd !== null && this.audioContext) {
-      await AudioEngine.waitForAudioTime(this.audioContext, fadeEnd);
-    }
+    await this.closeMonitor();
 
     if (this.mediaStream) {
       this.mediaStream.getTracks().forEach((t) => t.stop());
@@ -439,11 +731,13 @@ export class AudioEngine {
     }
 
     this.sourceNode?.disconnect();
+    this.inputTrim?.disconnect();
     this.splitterNode?.disconnect();
     this.mergerNode?.disconnect();
     for (const input of this.playerInputs) input.analyser.disconnect();
 
     this.sourceNode = null;
+    this.inputTrim = null;
     this.splitterNode = null;
     this.mergerNode = null;
     this.playerInputs = [];
@@ -453,15 +747,7 @@ export class AudioEngine {
    * Stop capture and fully release the AudioContext and PRGB Amp chain
    */
   dispose(): Promise<void> {
-    return this.enqueue(async () => {
-      await this.stopNow();
-      if (this.audioContext && this.audioContext.state !== 'closed') {
-        await this.audioContext.close();
-      }
-      this.audioContext = null;
-      this.ampEngine = null;
-      this.monitorGain = null;
-    });
+    return this.enqueue(() => this.releaseContext());
   }
 
   /**
@@ -470,9 +756,14 @@ export class AudioEngine {
    */
   private rampMonitorGain(target: number): number | null {
     const ctx = this.audioContext;
-    if (!ctx || !this.monitorGain || ctx.state !== 'running') return null;
-    const now = ctx.currentTime;
+    if (!ctx || !this.monitorGain) return null;
     const gain = this.monitorGain.gain;
+    // A ramp on a stopped clock never ends, which would leave the monitor closed once the context resumes
+    if (ctx.state !== 'running') {
+      gain.value = target;
+      return null;
+    }
+    const now = ctx.currentTime;
     gain.cancelScheduledValues(now);
     gain.setValueAtTime(gain.value, now);
     gain.linearRampToValueAtTime(target, now + AudioEngine.FADE_SEC);
@@ -485,6 +776,7 @@ export class AudioEngine {
    * stops running, since its clock freezes and `ended` might never fire (nothing is audible then).
    */
   private static waitForAudioTime(ctx: AudioContext, time: number): Promise<void> {
+    if (ctx.state !== 'running') return Promise.resolve();
     return new Promise((resolve) => {
       const clock = ctx.createConstantSource();
       const finish = () => {
@@ -515,6 +807,12 @@ export class AudioEngine {
    */
   private loopDetection = () => {
     if (!this.isRunning || this.playerInputs.length === 0 || !this.audioContext) return;
+
+    if (this.options.lowPower && ++this.framesSinceDetection < AudioEngine.LOW_POWER_FRAMES) {
+      this.animationFrameId = requestAnimationFrame(this.loopDetection);
+      return;
+    }
+    this.framesSinceDetection = 0;
 
     // Calculate RMS volume level
     let loudest = 0;

@@ -13,8 +13,8 @@
 
 **PRGB** (Play Real Guitar in Browser) é um aplicativo web gratuito de prática de guitarra que permite ao usuário:
 
-1. **Conectar sua guitarra real** via interface de áudio USB (Focusrite, Behringer, Realtek, etc.)
-2. **Ouvir o som processado** em tempo real pelo motor DSP **PRGB Amp** (emulação de amplificador valvulado, gabinete, noise gate, reverb)
+1. **Conectar sua guitarra real** via interface de áudio USB
+2. **Ouvir o som processado** em tempo real pelo motor DSP **PRGB Amp** (simulador de amplificador, gabinete, noise gate, reverb)
 3. **Tocar junto com tablaturas** baixadas de um provedor externo (1M+ músicas), com detecção de pitch e gamificação (score, combo, acertos Perfect/Good/Miss)
 
 **Sem servidor próprio.** O jogo roda 100% no navegador (todo o áudio via Web Audio API, nunca enviado); ranking e salas online, opcionais e só com consentimento 18+, usam Supabase gerenciado (Auth anônimo, RPC security definer, Edge Function, Realtime — região São Paulo). Regras em AGENTS.md › Regras INVIOLÁVEIS 1 e 11.
@@ -98,6 +98,7 @@ src/
 │   └── AmpRack.tsx          # Modal do rack completo do amp modeler PRGB Amp
 │
 ├── services/
+│   ├── audioOutput.ts               # Saída de áudio: direta no Chromium, por <audio> no Firefox
 │   ├── audioEngine.ts               # ⭐ Engine de captura de áudio + detecção de pitch (NSDF/MPM)
 │   ├── challenge.ts                 # Links de desafio (score pessoal codificado em URL)
 │   ├── demoSong.ts                  # Exercício original offline (sem rede, sem direitos de terceiros)
@@ -221,7 +222,7 @@ O backlog fica **só** no `AGENTS.md` (seção "Problemas Conhecidos"), com dono
 
 ### RECOMENDADO
 - Ao criar novos componentes, seguir o padrão `React.FC<Props>` existente
-- Ao mexer no áudio, testar com uma interface de áudio real (Focusrite, Behringer)
+- Ao mexer no áudio, testar com uma interface de áudio real, no Chrome/Edge e no Firefox
 - Ao adicionar dependências, preferir bibliotecas leves e sem dependências transitivas pesadas
 - Commits devem ser atômicos e focados (1 feature ou 1 fix por commit)
 
@@ -260,7 +261,7 @@ npm run lint
 
 ## 9. Fluxo do Usuário
 
-1. **Landing Page** → Usuário vê tela inicial com opções "Tocar Metallica" ou "Buscar Música"
+1. **Landing Page** → Usuário vê tela inicial com opções "Tocar agora" ou "Buscar música"
 2. **Conectar Áudio** → Ao clicar em qualquer botão, `getUserMedia` é chamado (permissão de mic)
 3. **PRGB Amp Ativo** → Som da guitarra começa a sair pelos fones/caixas em tempo real
 4. **Carregar Música** → Tab é baixada do CDN do acervo e parseada em `NoteEvent[]`
@@ -280,5 +281,5 @@ npm run lint
 | Tone Stack | Equalizador de 4 bandas (Bass, Mid, Treble, Presence) |
 | WaveShaper | Nó Web Audio que aplica distorção não-linear (emulação de válvula) |
 | Acervo | Provedor externo de tablaturas (API não oficial) |
-| Rails | As linhas horizontais coloridas do jogo onde as notas descem (estilo Guitar Hero) |
+| Rails | As linhas horizontais coloridas do jogo onde as notas passam |
 | Hit Window | Janela de tolerância temporal para acertar uma nota (±130ms) |

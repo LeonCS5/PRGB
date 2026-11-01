@@ -12,6 +12,7 @@ import {
   X,
   RotateCcw
 } from 'lucide-react';
+import { NeuralAmpSection } from './NeuralAmpSection';
 import {
   AmpEngine,
   AMP_PRESETS,
@@ -126,6 +127,8 @@ export const AmpRack: React.FC<AmpRackProps> = ({
           </div>
         </div>
 
+        <NeuralAmpSection />
+
         {/* Headphone Safety Tip */}
         <div className="mt-4 flex items-center gap-2.5 rounded-xl border border-amp-500/20 bg-amp-500/5 px-3.5 py-2 text-xs text-amp-300/90">
           <ShieldAlert size={16} className="text-amp-400 shrink-0" />
@@ -168,7 +171,7 @@ export const AmpRack: React.FC<AmpRackProps> = ({
           <div className="flex items-center justify-between mb-4 pb-2 border-b border-ink-800/80 text-xs">
             <div className="flex items-center gap-2 text-ink-200 font-mono font-bold">
               <Sliders size={14} className="text-amp-400" />
-              <span>PAINEL DE CONTROLE VALVULADO (TONE STACK)</span>
+              <span>CONTROLES DE TOM (TONE STACK)</span>
             </div>
             {settings && (
               <button
@@ -307,10 +310,10 @@ export const AmpRack: React.FC<AmpRackProps> = ({
               onChange={(e) => ampEngine?.setCabSim(e.target.value as CabSimType)}
               className="w-full rounded-xl border border-ink-700 bg-ink-800 px-3 py-2 text-xs text-ink-100 focus:border-amp-500 focus:outline-none"
             >
-              <option value="4x12_metal">4x12 Modern Metal (Celestion V30)</option>
-              <option value="4x12_vintage">4x12 Vintage 30 (American Lead)</option>
-              <option value="2x12_british">2x12 British Greenback (Plexi)</option>
-              <option value="1x12_tweed">1x12 California Tweed (Clean)</option>
+              <option value="4x12_metal">4x12 Modern Metal</option>
+              <option value="4x12_vintage">4x12 American Lead</option>
+              <option value="2x12_british">2x12 British Crunch</option>
+              <option value="1x12_tweed">1x12 California Clean</option>
               <option value="bypass">Bypass Cab Sim (Sinal Direto)</option>
             </select>
           </div>
@@ -362,7 +365,7 @@ export const AmpRack: React.FC<AmpRackProps> = ({
               className="w-full accent-amp-400 h-1.5 bg-ink-700 rounded-lg cursor-pointer"
             />
             <p className="text-[10px] text-ink-400 mt-1">
-              Simula a acústica natural de uma sala de estúdio profissional.
+              Simula o som de uma sala.
             </p>
           </div>
         </div>
@@ -387,7 +390,7 @@ export const AmpRack: React.FC<AmpRackProps> = ({
           <div className="flex items-center justify-end gap-3">
             <button
               onClick={onClose}
-              className="min-h-10 rounded-xl bg-gradient-to-r from-amp-500 to-amp-600 px-6 py-2.5 text-sm font-bold text-ink-100 shadow-lg shadow-amp-500/25 hover:from-amp-400 hover:to-amp-500 transition cursor-pointer"
+              className="min-h-10 rounded-xl bg-gradient-to-r from-amp-500 to-amp-600 px-6 py-2.5 text-sm font-bold text-ink-950 shadow-lg shadow-amp-500/25 hover:from-amp-400 hover:to-amp-500 transition cursor-pointer"
             >
               Aplicar & Tocar
             </button>

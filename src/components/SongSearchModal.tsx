@@ -1,6 +1,6 @@
 import { ModalFrame } from './ModalFrame';
 import React, { useMemo, useRef, useState } from 'react';
-import { Search, Music, Disc, ListOrdered, Loader2, Sparkles, X, ChevronRight, Trophy, User, Users } from 'lucide-react';
+import { Search, Music, Disc, ListOrdered, Loader2, X, ChevronRight, Trophy, User, Users } from 'lucide-react';
 import { TabsApi, type TabSearchResult, type SongMeta, type NormalizedSongTab } from '../services/tabsApi';
 import type { SavedSong } from '../context/preferences';
 import { ErrorNotice } from './ErrorNotice';
@@ -21,15 +21,6 @@ interface SongSearchModalProps {
 }
 
 const modeButton = 'flex min-h-10 cursor-pointer items-center gap-2 rounded-lg px-4 text-xs font-bold transition';
-
-const FEATURED_SONGS = [
-  { title: 'Creeping Death', artist: 'Metallica', id: 5194 },
-  { title: 'Master of Puppets', artist: 'Metallica', id: 550 },
-  { title: 'Back In Black', artist: 'AC/DC', id: 104 },
-  { title: 'Come As You Are', artist: 'Nirvana', id: 89 },
-  { title: 'Iron Man', artist: 'Black Sabbath', id: 25 },
-  { title: 'The Trooper', artist: 'Iron Maiden', id: 102 }
-];
 
 export const SongSearchModal: React.FC<SongSearchModalProps> = ({
   isOpen,
@@ -172,7 +163,7 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
           <div>
             <h2 id="SongSearchModal-title" className="font-display text-xl font-bold">Acervo de Músicas</h2>
             <p className="text-xs text-ink-300">
-              Mais de 1.000.000 de tablaturas interativas prontas para tocar
+              Busque uma música e escolha a faixa para tocar
             </p>
           </div>
         </div>
@@ -204,14 +195,14 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
             aria-label="Nome da música ou banda"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Digite o nome de uma música ou banda (ex: Metallica, Nirvana, AC/DC)..."
+            placeholder="Digite o nome de uma música ou banda"
             className="w-full rounded-xl border border-ink-700 bg-ink-800/90 pl-11 pr-24 py-3 text-sm text-ink-100 placeholder-ink-400 focus:border-amp-500 focus:outline-none focus:ring-1 focus:ring-amp-500"
           />
           <Search className="absolute left-3.5 top-3.5 text-ink-300" size={18} />
           <button
             type="submit"
             disabled={isSearching || isLoadingTab}
-            className="min-h-10 absolute right-2 top-1 rounded-lg bg-gradient-to-r from-amp-500 to-amp-500 px-4 py-1.5 text-xs font-bold text-ink-100 shadow-md hover:from-amp-400 hover:to-amp-400 transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+            className="min-h-10 absolute right-2 top-1 rounded-lg bg-gradient-to-r from-amp-500 to-amp-500 px-4 py-1.5 text-xs font-bold text-ink-950 shadow-md hover:from-amp-400 hover:to-amp-400 transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
           >
             {isSearching ? <Loader2 size={14} className="animate-spin" /> : 'Buscar'}
           </button>
@@ -354,26 +345,7 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
               ))}
             </div>
           ) : (
-            /* Featured Songs / Suggestions */
-            <div className="space-y-3">
-              <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-ink-300">
-                <Sparkles size={14} className="text-amp-400" />
-                Músicas em Destaque para Treinar:
-              </div>
-              <div className="grid grid-cols-2 gap-2.5">
-                {FEATURED_SONGS.map((song) => (
-                  <button
-                    key={song.id}
-                    onClick={() => handleSelectSong(song.id)}
-                    disabled={isLoadingTab || isSearching}
-                    className="flex flex-col p-3 rounded-xl border border-ink-800 bg-ink-800/30 hover:border-amp-500/50 hover:bg-ink-800 transition text-left cursor-pointer"
-                  >
-                    <span className="text-sm font-bold text-ink-100">{song.title}</span>
-                    <span className="text-xs text-ink-300">{song.artist}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+            <p className="text-sm leading-6 text-ink-300">Digite o nome de uma música ou banda para começar.</p>
           )}
         </div>
     </ModalFrame>
