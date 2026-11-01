@@ -55,6 +55,8 @@ PRGB/
 │   ├── content/
 │   │   └── legal.ts                 # Cópia legal (LGPD): Política de Privacidade, Termos de Uso, LEGAL_VERSION, ConsentCopy
 │   │
+│   ├── vendor/nam-engine/           # Motor neural de terceiros, sem alterações: módulo, worklet e wasm (não editar)
+│   │
 │   ├── context/
 │   │   ├── AudioSessionContext.tsx  # AudioEngine, PRGB Amp, device/canal, erros de áudio; pitch em store próprio (useLatestPitch)
 │   │   ├── gameSession.ts           # Tipos de sessão de jogo: GamePart, SoloSession, DuoSession, RunSummary, RankedSubmission
@@ -130,7 +132,8 @@ PRGB/
 │   │   ├── 20261028200100_retention.sql      # Política de retenção de dados (purge diário, LGPD)
 │   │   ├── 20261029120000_reaccept_terms.sql # RPC de reaceitação de termos versionados
 │   │   ├── 20261029120100_room_realtime.sql  # Tabelas e policies para salas online (Realtime)
-│   │   └── 20261030120000_room_data_export.sql # Exportação de dados de sala (LGPD)
+│   │   ├── 20261030120000_room_data_export.sql # Exportação de dados de sala (LGPD)
+│   │   └── 20261030150000_feedback.sql       # Relatos da caixa "Reportar problema" (RPC, limite, retenção de 180 dias)
 │   ├── functions/
 │   │   ├── _shared/
 │   │   │   ├── scoreLimits.ts       # countScorableNotes / maxPossibleScore (shared entre Edge Function e app)
@@ -142,12 +145,14 @@ PRGB/
 │       ├── harness.ts               # Utilitários de setup para testes de banco (roles, JWT, dados de seed)
 │       ├── ranking.test.ts          # Testes de integração das migrations de ranking
 │       ├── retention.test.ts        # Testes do purge de retenção de dados
+│       ├── feedback.test.ts         # Testes da caixa de relatos: acesso, limite por hora e retenção
 │       └── roomRealtime.test.ts     # Testes de integração das policies e RPCs das salas online
 │
 └── public/
     ├── favicon.svg                  # Logo (palheta laranja com onda de sinal)
     ├── fonts/                       # Fontes locais (Inter, Space Grotesk, JetBrains Mono — woff2)
     ├── icons/                       # Ícones PNG do app (192, 512, maskable)
+    ├── nam/                         # Avisos de licença do motor neural (NOTICE.txt, LICENSE)
     ├── og-image.png                 # Imagem de compartilhamento 1200×630
     ├── manifest.webmanifest         # PWA
     └── sw.js                        # Template do service worker (o build injeta versão e arquivos)
@@ -175,7 +180,8 @@ PRGB/
    - `VITE_SUPABASE_ANON_KEY` — chave pública `anon` do Supabase (prefixo `VITE_` é seguro; nunca a `service_role key`)
 3. Opcional: `VITE_SUPPORT_URL` com o link de apoio (Ko-fi, Pix, GitHub Sponsors...).
 4. Na Edge Function `register-part`, configurar `ALLOWED_ORIGINS` para incluir a URL de produção (`https://prgb.vercel.app`) e os ambientes de preview/local.
-5. `/api/tabs/*`, `/cdn/tabs/*` e `/cdn2/tabs/*` são reescritos para o provedor de tablaturas pela própria plataforma Vercel (sem backend nosso). Funciona em produção.
+5. `/api/tabs/*`, `/cdn/tabs/*` e `/cdn2/tabs/*` são reescritos para o provedor de tablaturas pela própria plataforma Vercel (sem backend nosso). Funciona em produção. O CDN reserva não tem todas as tablaturas e responde 403 para as que faltam; o app só o tenta se o principal falhar.
+6. **Para conferir produção, compare o conteúdo ou o hash do bundle com o log do build.** O último rewrite devolve a página do app com status 200 para quase qualquer caminho, então o status sozinho não prova nada.
 
 ---
 
@@ -323,7 +329,7 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 - [x] **Sem tratamento de erros na UI** — `ErrorNotice` + `uiErrors.ts` (@codex, aprovado por @claude)
 - [x] **Metrônomo impreciso** — `beatGrid` (compasso + mudanças de tempo) e `MetronomeScheduler` no relógio do AudioContext; `initialBpm` corrigido (@claude; a revisão de @codex achou 4 bugs — primeiro clique, contexto suspenso, anacruse, retomada — corrigidos com testes e aprovados)
 - [x] **Sem testes** — Vitest nos services; cada correção tem teste que falha no código anterior (@claude)
-- [x] **Sem PWA/offline** — manifest + service worker do app shell gerado no build; tablaturas nunca vão para o cache (@codex, aprovado por @claude; não testado offline num navegador real)
+- [x] **Sem PWA/offline** — manifest + service worker do app shell gerado no build; tablaturas nunca vão para o cache (@codex, aprovado por @claude; testado offline no Edge com o build de produção)
 
 ### Rodada 4 — ranking Supabase (concluída, em `main`)
 - [x] **Ranking online** — `supabase/migrations/` (ranking, retention, reaccept_terms), `src/services/backend/rankingApi.ts`, `src/services/backend/supabaseClient.ts`, `src/services/scoring.ts`, `src/services/records.ts`, `src/services/nickname.ts`, `src/context/rankedRun.ts`, `src/context/ranking.ts`, `src/context/RankingProvider.tsx`, componentes de ranking (@claude/@codex)
@@ -343,20 +349,19 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 - [x] **Rota de áudio** — sai sozinho do microfone do PC, saída escolhida com `setSinkId`, medidor em dB. Interfaces USB podem devolver a saída para a própria entrada: antes de abrir o monitor no mesmo aparelho, um tom de -40 dBFS testa o retorno. **Não reproduza esse laço em teste**: ele satura a saída da interface (@claude; validado no hardware real, sem guitarra tocando)
 - [x] **Caixa de reportar problemas** — RPC `submit_feedback` com a chave pública, sem conta nem consentimento; guarda categoria, tela e texto, limite de 60 por hora para todos, apagados em 180 dias. Os relatos são lidos na tabela `feedback`, no painel do Supabase (@claude)
 
-### Rodada 8 — áudio no Firefox, conformidade e som neural (em `claude/som-neural`, sobre `claude/rota-audio` e `claude/conformidade`)
+### Rodada 8 — áudio no Firefox, conformidade e som neural (concluída, em `main`)
 - [x] **Laço de saída** — o teste de retorno só funcionava em silêncio, rodava uma vez e nem existia no Firefox. Agora: rajadas a 7 kHz, vigia por timer que fecha o monitor com a entrada saturada, monitor fechado antes de trocar a saída (@claude; validado com a interface real no Edge e no Firefox)
 - [x] **Painel de rota** — dispositivos por aparelho, buffer, reamostragem, baixo consumo, compensação, ganho de entrada e gate, com o caminho do som ao vivo (@claude)
 - [x] **Saída no Firefox** — ele não roteia AudioContext: o som vai por um `<audio>` com `setSinkId` e, se preciso, `selectAudioOutput` (@claude; latência maior que no Chromium, não medida)
 - [x] **Conformidade** — alegações sem prova, nomes de terceiros, Política, Termos, aviso de armazenamento, licenças, contraste e teclado. Auditorias: axe 0 violações, Tab em todos os controles, site só fala com o próprio domínio (@claude; não é parecer jurídico)
 - [x] **Som neural** — modelos .nam e IR do jogador, sem incluir modelos; WaveNet padrão usa ~30% de um núcleo deste PC (@claude; testado com modelos sintéticos, não com um .nam real)
+- [x] **Build sem avisos do projeto** — o worklet e o wasm do motor ficam ao lado do módulo, fora do precache, e o React vai num chunk próprio. O aviso `cache-dir` vem do ambiente da Vercel, não do repositório (@claude)
 
 ### Pendências conhecidas (sem dono)
 - [ ] **Permissão do provedor de tablaturas** — os termos dele proíbem transmitir, reutilizar e baixar o conteúdo sem autorização escrita. É o maior risco legal do projeto; depende de decisão do humano.
-- [ ] **Treino de IA na Vercel** — plano Hobby vem ligado por padrão; desligar em Team Settings > Data Preferences (só o humano consegue).
-- [ ] **Migration `feedback` no banco** — `supabase/migrations/20261030150000_feedback.sql` precisa ser rodada no SQL Editor do Supabase. Sem ela a caixa mostra a falha e o e-mail de contato.
 - [ ] **Dupla online com guitarras de verdade** — testada de ponta a ponta no Supabase real com dois navegadores, contas temporárias e microfone sintético (partida, revanche com troca de música, queda e volta, saída do anfitrião, exportação e exclusão de conta) e o ranking com uma partida real aceita pelo servidor, mas nunca por duas pessoas com guitarra. Falta também o caso de sala cheia (`room_full`), que exige uma terceira conta.
 - [ ] **Revisões diferentes da mesma faixa na dupla** — o convidado carrega a revisão atual da tab, sem conferir a anunciada pelo anfitrião. Decisão: não corrigir por ora; é raro e a partida não vale para o ranking.
-- [ ] **Teste com interface de áudio real e no navegador** — nada disso foi validado por humano: latência, clicks na troca de device, afinador, scoring tocando de verdade.
+- [ ] **Teste com interface de áudio real** — o humano ouviu a guitarra no Firefox com a rota nova, antes das correções finais. Falta validar a versão publicada, a latência, clicks na troca de device, afinador e scoring tocando de verdade, e um arquivo `.nam` real.
 - [ ] **`setCurrentTimeMs` a cada frame** — o `PracticeGame` ainda re-renderiza ~60×/s enquanto toca (posição da música em state). Mover para ref exige mexer no scoring; deixado de fora para não alterar comportamento.
 - [ ] **Sem router** — SPA sem rotas; se crescer, avaliar react-router.
 

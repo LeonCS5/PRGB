@@ -29,7 +29,7 @@ import {
   type SignalReading
 } from './audioDevices';
 import { createAudioOutputRoute, type AudioOutputRoute } from './audioOutput';
-import { NAM_ASSET_BASE, NeuralFileRefused, checkFileSize, checkModelText, modelGainDb } from './neuralAmp';
+import { NeuralFileRefused, checkFileSize, checkModelText, modelGainDb } from './neuralAmp';
 import type { NamModelInfo, NamNode } from '../vendor/nam-engine/index.js';
 import { SoundFX } from './synthAudio';
 import { AmpEngine } from './ampEngine';
@@ -477,7 +477,7 @@ export class AudioEngine {
     const ctx = this.audioContext;
     if (!ctx || !this.ampEngine || !this.neuralModel) return null;
     const { NamEngine } = await import('../vendor/nam-engine/index.js');
-    const engine = await NamEngine.attach(ctx, { assetBaseUrl: NAM_ASSET_BASE });
+    const engine = await NamEngine.attach(ctx);
     this.namNode ??= await engine.createNode();
     const info = await this.namNode.loadModel(this.neuralModel.text);
     this.ampEngine.setNeuralStage(this.namNode, modelGainDb(info));
