@@ -293,3 +293,15 @@ describe('challengeShareText', () => {
     expect(challengeShareText(challenge({ artist: '' }), url)).toContain('em “Ação e Reação 🎸”, com');
   });
 });
+
+describe('exercises', () => {
+  it('carries an exercise through a link', () => {
+    const sent = challenge({ songId: -1600, partId: 7, title: 'Escala maior em G', artist: 'Exercício original', trackName: 'Sobe e desce' });
+    expect(decodeChallenge(encodeChallenge(sent))).toEqual({ ...sent, nickname: 'João' });
+  });
+
+  it('still refuses other negative ids', () => {
+    expect(decodeChallenge(codeFor(JSON.stringify(tuple({ 1: -2 }))))).toBeNull();
+    expect(decodeChallenge(codeFor(JSON.stringify(tuple({ 1: -999 }))))).toBeNull();
+  });
+});
