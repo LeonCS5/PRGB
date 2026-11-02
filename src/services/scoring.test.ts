@@ -166,6 +166,11 @@ describe('judgeNote', () => {
     expect([55, 59].map((midi) => judgeNote(a3, 0, heard(midi)))).toEqual([null, null]);
   });
 
+  it('takes the note one octave off as good: a detector can land there on a low string', () => {
+    expect([45, 69].map((midi) => judgeNote(a3, 0, heard(midi)))).toEqual(['good', 'good']);
+    expect([44, 46, 68, 70, 33, 81].map((midi) => judgeNote(a3, 0, heard(midi)))).toEqual([null, null, null, null, null, null]);
+  });
+
   it('gives perfect only for the exact note: a semitone off is at most good', () => {
     expect([0, 30, -55].map((diff) => judgeNote(a3, diff, heard(57)))).toEqual(['perfect', 'perfect', 'perfect']);
     expect([0, 30, -55, 100].map((diff) => judgeNote(a3, diff, heard(58)))).toEqual(['good', 'good', 'good', 'good']);

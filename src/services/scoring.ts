@@ -177,8 +177,9 @@ export function judgeNote(
       Math.abs(pitch.midiNote - note.midiNote),
       Math.abs(pitch.midiNote - bendTargetMidi(note))
     );
-    if (midiDiff > 1) return note.acceptClasses?.includes(pitchClassOf(pitch.midiNote)) ? 'good' : null;
-    // A semitone off (wrong fret, out of tune) still counts, but is never perfect
+    // A semitone off (wrong fret, out of tune) still counts, and so does an octave off (where a detector can land on
+    // a low string), but neither is ever perfect
+    if (midiDiff > 1 && midiDiff !== 12) return note.acceptClasses?.includes(pitchClassOf(pitch.midiNote)) ? 'good' : null;
     return isPerfectTime(timeDiffMs) && midiDiff === 0 ? 'perfect' : 'good';
   }
 
