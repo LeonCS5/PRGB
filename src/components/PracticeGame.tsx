@@ -52,7 +52,7 @@ import {
   createAttackLedger,
   createScoreState,
   judgeNote,
-  HIT_WINDOW_MS,
+  HIT_LATE_MS,
   type AttackLedger,
   type ScoreState
 } from '../services/scoring';
@@ -335,7 +335,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
 
   // Notes jumped over are skipped rather than missed
   const skipNotesBefore = (position: number) => forEachNote((note, noteStates) => {
-    if (note.timeMs - position < -HIT_WINDOW_MS && (noteStates.get(note.id) ?? 'pending') === 'pending') {
+    if (note.timeMs - position < -HIT_LATE_MS && (noteStates.get(note.id) ?? 'pending') === 'pending') {
       noteStates.set(note.id, 'skipped');
     }
   });
