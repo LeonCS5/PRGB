@@ -1,9 +1,9 @@
 import React from 'react';
-import { LayoutGrid, Music, Play, PlugZap, Sliders, Trophy, type LucideIcon } from 'lucide-react';
+import { Dumbbell, LayoutGrid, Music, PlugZap, Sliders, Trophy, type LucideIcon } from 'lucide-react';
 
 export interface SiteNavProps {
   isAudioRunning: boolean;
-  onPlay: () => void;
+  onExercises: () => void;
   onSearch: () => void;
   onAudio: () => void;
   onRanking: (() => void) | null; // null when the ranking is not configured
@@ -16,8 +16,8 @@ interface NavItem {
   onSelect?: () => void; // without it, the item is a link to the game modes on the landing
 }
 
-const navItems = ({ onPlay, onSearch, onRanking }: SiteNavProps): NavItem[] => [
-  { label: 'Tocar', icon: Play, onSelect: onPlay },
+const navItems = ({ onExercises, onSearch, onRanking }: SiteNavProps): NavItem[] => [
+  { label: 'Exercícios', icon: Dumbbell, onSelect: onExercises },
   { label: 'Músicas', icon: Music, onSelect: onSearch },
   { label: 'Modos', icon: LayoutGrid },
   ...(onRanking ? [{ label: 'Ranking', icon: Trophy, onSelect: onRanking }] : [])

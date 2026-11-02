@@ -6,6 +6,7 @@ import {
   ArrowRight,
   AudioLines,
   Check,
+  Dumbbell,
   Guitar,
   Heart,
   Headphones,
@@ -34,7 +35,7 @@ import { rankingDevSetup } from './components/devRanking';
 import { RankingModals } from './components/RankingModals';
 import { CHALLENGE_PARAM, readChallengeFromSearch, type Challenge } from './services/challenge';
 import { BrandMark } from './components/BrandMark';
-import { openScreenLayer } from './context/historyLayers';
+import { openModalLayer, openScreenLayer } from './context/historyLayers';
 import { getSongMetadata, loadSongTrack } from './context/uiErrors';
 import { PracticeGame } from './components/PracticeGame';
 import { FreePlay } from './components/FreePlay';
@@ -49,6 +50,9 @@ import { FeedbackModal } from './components/FeedbackModal';
 import { StorageNotice } from './components/StorageNotice';
 import { LEGAL_CONTACT } from './content/legal';
 import { AudioChip, HeaderNav, TabBar } from './components/SiteNav';
+import { CategoryIcon, ExerciseLibrary, type LibraryView } from './components/ExerciseLibrary';
+import { EXERCISE_CATEGORIES, exercisePart, findExercisePart, type Exercise, type ExerciseCategoryId, type ExercisePattern } from './services/exercises';
+import { isExerciseSongId } from './services/exerciseIds';
 import { readPreferences, savePreferences, type SavedSong } from './context/preferences';
 import { DEFAULT_PLAYER_NAMES, nextSessionKey, type GamePart, type GameSession, type RankedStart, type SoloSession } from './context/gameSession';
 import { RankingProvider } from './context/RankingProvider';
@@ -113,6 +117,7 @@ const demoPart = (): GamePart => ({ tab: getDemoSong(), partId: 0, revisionId: n
 // ignored like any other invalid link
 const readValidChallenge = (): Challenge | null => {
   const challenge = readChallengeFromSearch(window.location.search);
+  if (challenge && isExerciseSongId(challenge.songId)) return findExercisePart(challenge.songId, challenge.partId) ? challenge : null;
   return challenge && challenge.songId === DEMO_SONG_ID && challenge.partId !== 0 ? null : challenge;
 };
 
@@ -201,6 +206,8 @@ const AppContent: React.FC = () => {
   const { leaveRoom } = useRoom();
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [isFreePlayOpen, setIsFreePlayOpen] = useState(false);
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+  const [libraryView, setLibraryView] = useState<LibraryView>({ categoryId: EXERCISE_CATEGORIES[0].id, key: 9, patterns: {} });
   const [onlineSession, setOnlineSession] = useState<{ part: GamePart; partnerName: string; startAtMs: number; sessionKey: number } | null>(null);
 
   const [devScene] = useState(readDevScene);
@@ -230,7 +237,9 @@ const AppContent: React.FC = () => {
   }, [sessionParts, audioEngine]);
 
   const screen = onlineSession ? 'sala' : isFreePlayOpen ? 'play_free' : session ? 'jogo' : 'inicio';
-  const isOnScreen = screen !== 'inicio';
+  const isPlayScreen = screen !== 'inicio';
+  const isOnScreen = isPlayScreen || isLibraryOpen;
+  const isOverLibrary = isPlayScreen && isLibraryOpen;
 
   // Duo is a session mode: leaving it restores the input channel saved in the preferences
   const soloChannelMode = () => channelMode === 'duo' ? readPreferences().channelMode : channelMode;
@@ -262,7 +271,7 @@ const AppContent: React.FC = () => {
     setSession(null);
   };
 
-  const closeScreen = useEffectEvent(() => {
+  const closePlayScreen = useEffectEvent(() => {
     if (onlineSession) {
       void leaveRoom();
       setOnlineSession(null);
@@ -273,10 +282,22 @@ const AppContent: React.FC = () => {
     }
   });
 
+  // Each layer closes only its own screen: a jump back in the browser's list can close both in one go
+  const closeBottomScreen = useEffectEvent(() => {
+    if (isLibraryOpen) setIsLibraryOpen(false);
+    else closePlayScreen();
+  });
+
   useEffect(() => {
     if (!isOnScreen) return;
-    return openScreenLayer(() => closeScreen());
+    return openScreenLayer(() => closeBottomScreen());
   }, [isOnScreen]);
+
+  // A game started from the library goes back to it, so it needs an entry of its own over the library's
+  useEffect(() => {
+    if (!isOverLibrary) return;
+    return openModalLayer(() => closePlayScreen());
+  }, [isOverLibrary]);
 
   const handleOpenFreePlay = () => {
     songSelectionVersion.current += 1;
@@ -288,6 +309,20 @@ const AppContent: React.FC = () => {
   const handleOpenSearch = () => {
     ensureSoloAudio();
     setIsSearchOpen(true);
+  };
+
+  const handleOpenLibrary = (categoryId?: ExerciseCategoryId) => {
+    songSelectionVersion.current += 1;
+    setRestoreError(null);
+    if (categoryId) setLibraryView((view) => ({ ...view, categoryId }));
+    setIsLibraryOpen(true);
+  };
+
+  const handlePlayExercise = (exercise: Exercise, key: number, pattern?: ExercisePattern) => {
+    songSelectionVersion.current += 1;
+    setRestoreError(null);
+    ensureSoloAudio();
+    setSession(soloSession(exercisePart(exercise, key, pattern)));
   };
 
   const handleOpenAudio = () => {
@@ -340,8 +375,11 @@ const AppContent: React.FC = () => {
     ensureSoloAudio();
     try {
       let part: GamePart;
+      const exercise = findExercisePart(challenge.songId, challenge.partId);
       if (challenge.songId === DEMO_SONG_ID) {
         part = demoPart();
+      } else if (exercise) {
+        part = exercise;
       } else {
         const meta = await getSongMetadata(challenge.songId);
         const trackIndex = meta.tracks.findIndex((track) => track.partId === challenge.partId);
@@ -351,7 +389,7 @@ const AppContent: React.FC = () => {
       if (version !== songSelectionVersion.current) return;
       setPendingChallenge(null);
       setSession(soloSession(part, challenge));
-      if (part.tab.songId !== DEMO_SONG_ID) rememberSong({ songId: part.tab.songId, partId: part.partId, title: part.tab.title });
+      if (part.tab.songId > 0) rememberSong({ songId: part.tab.songId, partId: part.partId, title: part.tab.title });
     } catch (err) {
       if (version === songSelectionVersion.current) {
         setChallengeError(err instanceof Error ? err.message : 'Não foi possível carregar a música do desafio.');
@@ -388,13 +426,13 @@ const AppContent: React.FC = () => {
 
   const navProps = {
     isAudioRunning,
-    onPlay: handleLoadDemo,
+    onExercises: () => handleOpenLibrary(),
     onSearch: handleOpenSearch,
     onAudio: handleOpenAudio,
     onRanking: isRankingOn ? handleOpenRanking : null
   };
 
-  const pageName = onlineSession ? 'Dupla online' : isFreePlayOpen ? 'Play Free' : session ? sessionParts[0].tab.title : legalRoute?.document.title;
+  const pageName = onlineSession ? 'Dupla online' : isFreePlayOpen ? 'Play Free' : session ? sessionParts[0].tab.title : isLibraryOpen ? 'Exercícios' : legalRoute?.document.title;
 
   return (
     <div className="h-dvh w-full overflow-hidden bg-ink-950 font-sans text-ink-100">
@@ -457,6 +495,11 @@ const AppContent: React.FC = () => {
             devPreset={import.meta.env.DEV && devScene && session.key === devSessionKey ? gameDevPreset(devScene, Math.max(...sessionParts.map((part) => part.tab.totalDurationMs))) : null}
             onExit={leaveGame}
             onOpenSearch={() => {
+              if (isExerciseSongId(sessionParts[0].tab.songId)) {
+                setIsLibraryOpen(true);
+                leaveGame();
+                return;
+              }
               setDuoSearchNames(session.mode === 'duo' ? session.names : null);
               setIsSearchOpen(true);
             }}
@@ -467,6 +510,8 @@ const AppContent: React.FC = () => {
             onRankedTabOutdated={session.mode === 'solo' ? () => reloadOutdatedPart(session) : undefined}
           />
         </>
+      ) : isLibraryOpen ? (
+        <ExerciseLibrary view={libraryView} onViewChange={setLibraryView} onPlay={handlePlayExercise} onExit={() => setIsLibraryOpen(false)} />
       ) : legalRoute ? (
         <LegalPage document={legalRoute.document} sectionId={legalRoute.sectionId} />
       ) : (
@@ -520,6 +565,9 @@ const AppContent: React.FC = () => {
                       <Play size={22} className="fill-current" aria-hidden="true" />
                       <span className="text-left"><span className="block text-base font-bold">Tocar agora</span><span className="mt-0.5 block text-xs font-medium">Exercício original · ~20 s</span></span>
                     </button>
+                    <button type="button" onClick={() => handleOpenLibrary()} className="flex min-h-16 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-600 bg-ink-900 px-6 py-3 text-sm font-semibold text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
+                      <Dumbbell size={18} aria-hidden="true" /> Exercícios
+                    </button>
                     <button type="button" onClick={handleOpenSearch} className="flex min-h-16 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-600 bg-ink-900 px-6 py-3 text-sm font-semibold text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
                       <Music size={18} aria-hidden="true" /> Buscar música
                     </button>
@@ -535,6 +583,21 @@ const AppContent: React.FC = () => {
                   <p className="mt-4 flex items-center gap-2 text-xs text-ink-300"><Check size={14} className="text-hit" aria-hidden="true" /> Sem cadastro para tocar. O ranking é opcional.</p>
                 </div>
                 <div className="hidden min-w-0 lg:block"><PracticePreview /></div>
+              </div>
+            </section>
+
+            <section aria-labelledby="exercises-title" className="mx-auto max-w-7xl px-5 pb-10 sm:px-8 lg:px-12 lg:pb-14">
+              <div className="flex items-end justify-between gap-4">
+                <h2 id="exercises-title" className="font-display text-2xl font-bold tracking-tight">Exercícios</h2>
+                <button type="button" onClick={() => handleOpenLibrary()} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg px-2 text-sm font-semibold text-amp-300 transition hover:text-amp-200">Ver todos <ArrowRight size={16} aria-hidden="true" /></button>
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-9">
+                {EXERCISE_CATEGORIES.map((category) => (
+                  <button key={category.id} type="button" onClick={() => handleOpenLibrary(category.id)}
+                    className="flex min-h-20 cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border border-ink-700 bg-ink-900 px-1 py-2 text-xs font-semibold text-ink-100 transition hover:border-amp-500/60 hover:bg-ink-800">
+                    <CategoryIcon id={category.id} size={20} className="text-amp-300" /> {category.title}
+                  </button>
+                ))}
               </div>
             </section>
 

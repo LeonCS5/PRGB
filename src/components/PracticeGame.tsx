@@ -44,6 +44,7 @@ import { useRanking } from '../context/ranking';
 import type { RankedPhase } from '../context/rankedRun';
 import { useRankedRun } from '../context/useRankedRun';
 import { buildCountIn, MetronomeScheduler, SoundFX } from '../services/synthAudio';
+import { isExerciseSongId } from '../services/exerciseIds';
 import {
   accuracyPercent,
   applyJudgement,
@@ -163,8 +164,11 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   const clockTab = useMemo(() => lanes.reduce((longest, lane) =>
     lane.part.tab.totalDurationMs > longest.part.tab.totalDurationMs ? lane : longest).part.tab, [lanes]);
   const mainTab = lanes[0].part.tab;
+  const isExercise = isExerciseSongId(mainTab.songId);
+  const changeLabel = isExercise ? 'Mudar exercício' : 'Mudar música';
   const ranked = useRankedRun({
-    part: isDuo ? null : lanes[0].part,
+    // The server only counts the demo and downloaded songs
+    part: isDuo || isExercise ? null : lanes[0].part,
     start: rankedStart,
     reloadTab: onRankedTabOutdated,
     devSessionId: devPreset?.rankedSessionId
@@ -487,7 +491,15 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
         // culling, so a note that left the screen still pending is missed instead of forgotten.
         if (state === 'pending' && isJudging) {
           state = judgePendingNote(player, note, timeDiff + audioEngine.getLatencyCompensationMs(), latestPitch, noteY);
-          if (state !== 'pending') noteStates.set(note.id, state);
+          if (state !== 'pending') {
+            noteStates.set(note.id, state);
+            // A chord is judged once: the rest of it shows the same result
+            if (note.chord) {
+              for (const peer of lanes[laneIndex].part.tab.notes) {
+                if (peer.chordMember && peer.timeMs === note.timeMs) noteStates.set(peer.id, state);
+              }
+            }
+          }
         }
 
         // Only draw if within screen view
@@ -495,6 +507,13 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
 
         // Draw Note Pill
         if (!noteHeight) continue;
+        if (note.chord) {
+          ctx.font = 'bold 15px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = palette.signal;
+          ctx.fillText(note.chord.label, noteX, layout.top + Math.max(11, layout.topMargin * 0.3));
+        }
         ctx.save();
         ctx.translate(noteX, noteY);
         if (note.grace) ctx.scale(0.75, 0.75);
@@ -795,7 +814,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
             ? <div className="hidden shrink-0 gap-2 sm:flex"><LiveTuner player={0} label="J1" /><LiveTuner player={1} label="J2" /></div>
             : <LiveTuner />}
           {!isOnline && (
-            <button onClick={onOpenSearch} aria-label="Mudar música" className={toolClass}><Search size={17} /><span className="hidden lg:inline">Mudar música</span></button>
+            <button onClick={onOpenSearch} aria-label={changeLabel} className={toolClass}><Search size={17} /><span className="hidden lg:inline">{changeLabel}</span></button>
           )}
         </div>
         {isDuo ? <DuoHud scores={scores} names={names} /> : <SoloHud score={scores[0]} goal={challenge?.score} />}

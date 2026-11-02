@@ -4,6 +4,7 @@ import { accuracyPercent, type ScoreState } from '../services/scoring';
 import type { Challenge } from '../services/challenge';
 import type { GamePart, RankedSubmission, RunSummary } from '../context/gameSession';
 import { useRanking } from '../context/ranking';
+import { isExerciseSongId } from '../services/exerciseIds';
 import { ChallengeSharePanel } from './ChallengeSharePanel';
 
 const formatPoints = (value: number) => value.toLocaleString('pt-BR');
@@ -134,6 +135,7 @@ const SoloResult: React.FC<ResultPanelProps> = ({ titleId, summary, parts, chall
   // A challenge has no speed field, so only full 1× runs can be sent or answered
   const counts = !summary.jumped && !summary.speedChanged;
   const canChallenge = counts && summary.speed === 1;
+  const isExercise = isExerciseSongId(tab.songId);
 
   if (isSharing && canChallenge) {
     return (
@@ -159,7 +161,7 @@ const SoloResult: React.FC<ResultPanelProps> = ({ titleId, summary, parts, chall
         {ranked && <RankedResult submission={ranked} onRetry={() => onRetryRanked?.()} />}
       </div>
       <div className="mt-6">
-        {isConfigured && (
+        {isConfigured && !isExercise && (
           <button type="button" onClick={() => openLeaderboard({ songId: tab.songId, partId, title: tab.title, trackName: tab.trackName })}
             className={secondaryButton + ' mt-0 mb-3 flex items-center justify-center gap-2 font-semibold'}>
             <ListOrdered size={16} aria-hidden="true" /> Ver ranking
@@ -175,7 +177,7 @@ const SoloResult: React.FC<ResultPanelProps> = ({ titleId, summary, parts, chall
           </p>
         )}
         <button type="button" onClick={onPlayAgain} className={primaryButton}>Tocar de novo</button>
-        <button type="button" onClick={onChooseSong} className={secondaryButton}>Escolher outra música</button>
+        <button type="button" onClick={onChooseSong} className={secondaryButton}>{isExercise ? 'Escolher outro exercício' : 'Escolher outra música'}</button>
       </div>
     </>
   );
