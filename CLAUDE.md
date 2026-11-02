@@ -276,7 +276,7 @@ npm run lint
 3. **PRGB Amp Ativo** → Som da guitarra começa a sair pelos fones/caixas em tempo real
 4. **Carregar Música** → Tab é baixada do CDN do acervo e parseada em `NoteEvent[]`
 5. **Jogo (PracticeGame)** → Canvas mostra rails coloridos com notas scrollando. Pitch detection compara nota tocada com nota da tab
-6. **Scoring** → Perfect (±55ms + MIDI match), Good (±130ms + MIDI match), Miss (passou da hit line)
+6. **Scoring** → Perfect (de 70 ms antes a 110 ms depois da linha + MIDI exato), Good (de 150 ms antes a 260 ms depois + até um semitom ou uma oitava), Miss (passou da janela)
 7. **Modais** → Usuário pode ajustar interface de áudio, trocar preset do PRGB Amp, buscar outra música
 
 ---
@@ -292,4 +292,4 @@ npm run lint
 | WaveShaper | Nó Web Audio que aplica distorção não-linear (emulação de válvula) |
 | Acervo | Provedor externo de tablaturas (API não oficial) |
 | Rails | As linhas horizontais coloridas do jogo onde as notas passam |
-| Hit Window | Janela de tolerância temporal para acertar uma nota (±130ms) |
+| Hit Window | Janela de tolerância temporal para acertar uma nota (de 150 ms antes a 260 ms depois da linha) |

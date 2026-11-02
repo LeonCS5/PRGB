@@ -376,12 +376,13 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 - [x] **Jogo e Play Free no celular** — sem rolagem lateral, folha "Mais", seta de voltar e pista com pelo menos 45% da tela (@codex, revisado por @claude)
 - [x] **Bundle sem metadados do deploy** — a leitura dinâmica de `import.meta.env` publicava todas as variáveis `VITE_` do build, inclusive as da Vercel; um teste barra a volta dela (@claude)
 
-### Rodada 10 — exercícios e contagem (em `claude/exercicios`)
+### Rodada 10 — exercícios e contagem (concluída, em `main`)
 - [x] **Contagem antes de tocar** — 5 s em tempo real antes de uma partida desde o início, com botão Pular: as primeiras notas esperam na tela, andam nos 2 s finais e o último compasso tem cliques. Retomar não conta de novo. Na dupla online, a contagem que já existia subiu para 5 s (@claude)
 - [x] **Biblioteca de exercícios** — nove categorias e 1.891 variantes geradas por regras de teoria, em `musicTheory.ts` e `exercises.ts`. Os testes conferem cada variante: notas na escala, casas válidas, compassos completos, id único. Funciona offline. Recorde pessoal e desafio funcionam; ranking, não: o servidor só conhece a demo e as músicas baixadas (@claude)
 - [x] **Acordes pontuados pela tônica** — a detecção é monofônica. Medido com cordas sintetizadas: num acorde batido ela devolve a tônica, em geral uma oitava abaixo, então o jogo julga o acorde uma vez, pela tônica (Perfeito) ou por outra nota dele (Bom), com 80 ms a mais de tolerância. Não separa A de Am, e a tela diz isso. No arpejo, com cordas soando juntas a leitura vira o acorde: outra nota do acorde conta como Bom (@claude; testado tocando com cordas sintetizadas: 100% tocando certo, 15% a 31% tocando errado; não testado com guitarra real)
 - [x] **Teste de latência** — a detecção tem atraso e o jogo não compensava: tocando no tempo exato, 0 de 29 notas viravam Perfeito. O teste mede esse atraso e preenche a compensação que já existia nos ajustes avançados: 12 notas em ritmo fixo, com a velocidade e o desenho do jogo, porque o jogador antecipa em vez de reagir; descarta as 2 primeiras, usa a mediana, tira os toques fora do padrão e pede para repetir se a mão variou demais. O resultado sugere o teste quando dá muito Bom e pouco Perfeito (@claude; testado tocando com cordas sintetizadas: de 0 para 22 a 28 Perfeitos em 29 notas, e sem nenhum erro depois do ajuste; não testado com guitarra real)
 - [x] **Desafio do exercício** — "Desafiar um amigo" nunca funcionou no exercício: o artista "Exercício PRGB" contém um termo reservado do filtro. Agora é "Exercício original" (@claude)
+- [x] **Mais folga para acertar** — a leitura da nota só chega depois da palhetada, então quase toda nota perdida passava do limite do lado do atraso, principalmente sem o teste de latência. As janelas ficaram assimétricas: Perfeito de 70 ms antes a 110 ms depois da linha, Bom de 150 ms antes a 260 ms depois. A nota certa uma oitava fora conta como Bom, e a compensação agora acompanha a velocidade da música (@claude; medido no build de produção com cordas sintetizadas e mãos simuladas: sem o teste e com 60 ms de atraso de interface, a escala foi de 48% a 62% para 90% a 100% de acertos; tocando errado, a escala segue em 34% e os acordes foram de 8% para 15%; não testado com guitarra real)
 
 ### Pendências conhecidas (sem dono)
 - [ ] **Permissão do provedor de tablaturas** — os termos dele proíbem transmitir, reutilizar e baixar o conteúdo sem autorização escrita. É o maior risco legal do projeto; depende de decisão do humano.
@@ -432,7 +433,7 @@ Landing Page → Clica "Tocar" ou "Buscar" → getUserMedia() → PRGB Amp Ativo
 | WaveShaper | Web Audio node para distorção não-linear (emulação de clipping de válvula) |
 | Acervo | Provedor externo de tablaturas (API não oficial) |
 | Rails | Linhas horizontais coloridas onde notas scrollam (cada corda = 1 cor) |
-| Hit Window | Janela de tolerância para acertar nota: ±130ms Good, ±55ms Perfect |
+| Hit Window | Janela de tolerância para acertar nota: Good de 150 ms antes a 260 ms depois da linha, Perfect de 70 ms antes a 110 ms depois |
 | NoteEvent | Estrutura normalizada de uma nota: `{timeMs, string, fret, midiNote, freqHz, ...}` |
 | LEGAL_VERSION | String ISO da data do texto legal aceito; salvo com cada consentimento para detectar atualizações |
 | RankedRun | Sessão de jogo com pontuação enviada ao servidor (requer conta + consentimento) |
