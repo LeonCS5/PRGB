@@ -87,6 +87,7 @@ PRGB/
 │   │   ├── DeleteAccountConfirm.tsx # Confirmação de exclusão de conta de ranking
 │   │   ├── DuoSetupModal.tsx        # Modal de configuração da sessão duo (duas guitarras)
 │   │   ├── ErrorNotice.tsx          # Aviso de erro dispensável com ação (role="alert")
+│   │   ├── ExerciseLibrary.tsx      # Tela de exercícios: categorias, tom, jeito de tocar e cartões
 │   │   ├── FreePlay.tsx             # Play Free: só escuta a guitarra e mostra as notas, sem música nem pontos
 │   │   ├── GameHud.tsx              # HUD do jogo: score, combo, accuracy, indicadores de run ranqueado
 │   │   ├── GameMoreSheet.tsx        # Folha "Mais" do jogo no celular; em telas largas só repassa os controles
@@ -114,7 +115,10 @@ PRGB/
 │   │   ├── neuralAmp.ts             # Validação e nível dos modelos .nam (o motor vem de src/vendor, sob demanda)
 │   │   ├── audioDevices.ts          # Escolha da entrada, nível, saída e teste de retorno (lógica pura)
 │   │   ├── challenge.ts             # Geração e validação de links de desafio (score pessoal codificado em URL)
-│   │   ├── demoSong.ts              # Exercício original offline (pentatônica de Lá menor), sem direitos de terceiros
+│   │   ├── demoSong.ts              # Exercício original offline (pentatônica de Lá menor), sem direitos de terceiros; é o único que vale para o ranking
+│   │   ├── exerciseIds.ts           # Ids dos exercícios (negativos, nunca renumerar: recordes e desafios guardam esses ids)
+│   │   ├── exercises.ts             # Catálogo de exercícios: gerado por regras, vira tablatura e passa pelo mesmo parser
+│   │   ├── musicTheory.ts           # Escalas, posições no braço e formas de acorde (lógica pura)
 │   │   ├── nickname.ts              # Validação, normalização e filtro de apelidos (look-alikes, blocklist, NFKD)
 │   │   ├── noteTrail.ts             # Histórico das notas tocadas no Play Free (lógica pura)
 │   │   ├── records.ts               # Recordes pessoais locais: armazenamento, consulta e exportação (localStorage)
@@ -361,7 +365,7 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 - [x] **Build sem avisos do projeto** — o worklet e o wasm do motor ficam ao lado do módulo, fora do precache, e o React vai num chunk próprio. O aviso `cache-dir` vem do ambiente da Vercel, não do repositório (@claude)
 
 ### Rodada 9 — navegação (concluída, em `main`)
-- [x] **Menu e abas** — Tocar, Músicas, Modos, Áudio e Ranking sempre à mão; o estado do áudio é um botão que abre o painel. Abaixo de 1024 px vira barra de abas (@claude; testado em 320, 390, 768, 1024 e 1440 px)
+- [x] **Menu e abas** — Exercícios, Músicas, Modos, Áudio e Ranking sempre à mão; o estado do áudio é um botão que abre o painel. Abaixo de 1024 px vira barra de abas (@claude; testado em 320, 390, 768, 1024 e 1440 px)
 - [x] **Landing** — duas ações no topo, modos e preparo da guitarra logo abaixo, aviso de armazenamento no fluxo da página, sem cobrir botões (@claude)
 - [x] **Botão Voltar do navegador** — cada camada aberta (jogo, dupla, sala, Play Free e cada modal) tem entrada própria no histórico, criada ao abrir; Voltar fecha a de cima, uma por vez, em vez de sair do site. Nunca crie entrada sem gesto do usuário, porque o Chromium passa a pular todas as entradas do site: nada de entrada em reação ao Voltar, e os painéis de resultado, que abrem sozinhos, ficam fora do histórico. Título da aba por tela (@claude; testado no Edge e no Firefox, sala online só por leitura do código)
 - [x] **Continuar** — quem volta ao site vê a landing com um cartão da última música, em vez de cair direto no jogo. Abrir o site não chama mais o provedor de tablaturas (@claude)
@@ -370,12 +374,20 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 - [x] **Jogo e Play Free no celular** — sem rolagem lateral, folha "Mais", seta de voltar e pista com pelo menos 45% da tela (@codex, revisado por @claude)
 - [x] **Bundle sem metadados do deploy** — a leitura dinâmica de `import.meta.env` publicava todas as variáveis `VITE_` do build, inclusive as da Vercel; um teste barra a volta dela (@claude)
 
+### Rodada 10 — exercícios e contagem (em `claude/exercicios`)
+- [x] **Contagem antes de tocar** — 5 s em tempo real antes de uma partida desde o início, com botão Pular: as primeiras notas esperam na tela, andam nos 2 s finais e o último compasso tem cliques. Retomar não conta de novo. Na dupla online, a contagem que já existia subiu para 5 s (@claude)
+- [x] **Biblioteca de exercícios** — nove categorias e 1.891 variantes geradas por regras de teoria, em `musicTheory.ts` e `exercises.ts`. Os testes conferem cada variante: notas na escala, casas válidas, compassos completos, id único. Funciona offline. Recorde pessoal e desafio funcionam; ranking, não: o servidor só conhece a demo e as músicas baixadas (@claude)
+- [x] **Acordes pontuados pela tônica** — a detecção é monofônica. Medido com cordas sintetizadas: num acorde batido ela devolve a tônica, em geral uma oitava abaixo, então o jogo julga o acorde uma vez, pela tônica (Perfeito) ou por outra nota dele (Bom), com 80 ms a mais de tolerância. Não separa A de Am, e a tela diz isso. No arpejo, com cordas soando juntas a leitura vira o acorde: outra nota do acorde conta como Bom (@claude; testado tocando com cordas sintetizadas: 100% tocando certo, 15% a 31% tocando errado; não testado com guitarra real)
+- [x] **Desafio do exercício** — "Desafiar um amigo" nunca funcionou no exercício: o artista "Exercício PRGB" contém um termo reservado do filtro. Agora é "Exercício original" (@claude)
+
 ### Pendências conhecidas (sem dono)
 - [ ] **Permissão do provedor de tablaturas** — os termos dele proíbem transmitir, reutilizar e baixar o conteúdo sem autorização escrita. É o maior risco legal do projeto; depende de decisão do humano.
 - [ ] **Dupla online com guitarras de verdade** — testada de ponta a ponta no Supabase real com dois navegadores, contas temporárias e microfone sintético (partida, revanche com troca de música, queda e volta, saída do anfitrião, exportação e exclusão de conta) e o ranking com uma partida real aceita pelo servidor, mas nunca por duas pessoas com guitarra. Falta também o caso de sala cheia (`room_full`), que exige uma terceira conta.
 - [ ] **Revisões diferentes da mesma faixa na dupla** — o convidado carrega a revisão atual da tab, sem conferir a anunciada pelo anfitrião. Decisão: não corrigir por ora; é raro e a partida não vale para o ranking.
 - [ ] **Teste com interface de áudio real** — o humano ouviu a guitarra no Firefox com a rota nova, antes das correções finais. Falta validar a versão publicada, a latência, clicks na troca de device, afinador e scoring tocando de verdade, e um arquivo `.nam` real.
 - [ ] **`setCurrentTimeMs` a cada frame** — o `PracticeGame` ainda re-renderiza ~60×/s enquanto toca (posição da música em state). Mover para ref exige mexer no scoring; deixado de fora para não alterar comportamento.
+- [ ] **Perfeito exige antecipar a nota** — a detecção tem atraso e o jogo não compensa. Medido com cordas sintetizadas na escala maior: tocando no tempo exato, 0 de 29 notas viram Perfeito; antecipando 40 a 130 ms, de 21 a 26. Vale para todo o jogo. Corrigir muda a pontuação do ranking, e o atraso real depende da interface: decidir com guitarra real. Depende de decisão do humano.
+- [ ] **Exercícios no ranking** — exigiria semear cada variante no banco. Decisão: por ora, só recorde pessoal e desafio.
 - [ ] **Sem router** — SPA sem rotas: só telas de jogo e modais têm entrada no histórico; se crescer, avaliar react-router.
 
 ### Concluídos

@@ -83,6 +83,7 @@ src/
 │   ├── DeleteAccountConfirm.tsx     # Confirmação de exclusão de conta
 │   ├── DuoSetupModal.tsx            # Configuração de sessão duo (duas guitarras)
 │   ├── ErrorNotice.tsx              # Aviso de erro dispensável com ação
+│   ├── ExerciseLibrary.tsx          # Tela de exercícios: categorias, tom, jeito de tocar e cartões
 │   ├── FreePlay.tsx                 # Play Free: só escuta a guitarra e mostra as notas
 │   ├── GameHud.tsx                  # HUD do jogo: score, combo, accuracy, run ranqueado
 │   ├── GameMoreSheet.tsx            # Folha "Mais" do jogo no celular
@@ -105,6 +106,9 @@ src/
 │   ├── audioEngine.ts               # ⭐ Engine de captura de áudio + detecção de pitch (NSDF/MPM)
 │   ├── challenge.ts                 # Links de desafio (score pessoal codificado em URL)
 │   ├── demoSong.ts                  # Exercício original offline (sem rede, sem direitos de terceiros)
+│   ├── exerciseIds.ts               # Ids dos exercícios (nunca renumerar)
+│   ├── exercises.ts                 # Catálogo de exercícios gerado por regras de teoria
+│   ├── musicTheory.ts               # Escalas, posições no braço e formas de acorde
 │   ├── nickname.ts                  # Validação, normalização e filtro de apelidos
 │   ├── noteTrail.ts                 # Histórico das notas tocadas no Play Free (lógica pura)
 │   ├── records.ts                   # Recordes pessoais locais (localStorage)
