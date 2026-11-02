@@ -641,11 +641,11 @@ describe('starting together', () => {
     const [start] = messagesIn(events);
     const startAtServerMs = start?.type === 'start' ? start.startAtServerMs : 0;
     expect(startAtServerMs).toBeGreaterThan(0);
-    // Both local times point at the same server instant, about 4 s ahead
+    // Both local times point at the same server instant, about 5 s ahead
     expect(hostLocalStart).toBe(startAtServerMs - 1000);
     expect(guest.localStartTimeFor(startAtServerMs)).toBe(startAtServerMs + 500);
     expect(hostLocalStart - before).toBeGreaterThanOrEqual(3990);
-    expect(hostLocalStart - before).toBeLessThanOrEqual(4500);
+    expect(hostLocalStart - before).toBeLessThanOrEqual(5500);
   });
 
   it('is only for the host, and keeps the known offset if the clock cannot be read again', async () => {

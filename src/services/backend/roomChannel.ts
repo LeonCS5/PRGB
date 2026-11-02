@@ -11,7 +11,7 @@ import { getSupabaseClient } from './supabaseClient';
 export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O or 1/I
 export const ROOM_CODE_LENGTH = 6;
 export const ROOM_CAPACITY = 2;
-export const START_LEAD_MS = 4000;
+export const START_LEAD_MS = 5000;
 export const PROGRESS_INTERVAL_MS = 500; // at most 2 progress messages per second
 export const JOIN_TIMEOUT_MS = 5000;
 

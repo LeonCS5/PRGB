@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MetronomeScheduler, SoundFX } from './synthAudio';
+import { MetronomeScheduler, SoundFX, buildCountIn } from './synthAudio';
 import type { BeatMark } from './tabsApi';
 
 interface FakeOscillator {
@@ -132,5 +132,47 @@ describe('MetronomeScheduler', () => {
     expect(live().filter((o) => o.startAt > ctx.currentTime)).toHaveLength(0);
     metronome.update(50);
     expect(ctx.oscillators).toHaveLength(queued);
+  });
+});
+
+describe('buildCountIn', () => {
+  const grid = (beatsPerBar: number, beatMs: number, bars = 2): BeatMark[] =>
+    Array.from({ length: beatsPerBar * bars }, (_, index) => ({ timeMs: index * beatMs, accent: index % beatsPerBar === 0 }));
+
+  it('clicks one bar right before the first beat, with the bar marked', () => {
+    expect(buildCountIn(grid(4, 500), 120)).toEqual([
+      { timeMs: -2000, accent: true },
+      { timeMs: -1500, accent: false },
+      { timeMs: -1000, accent: false },
+      { timeMs: -500, accent: false }
+    ]);
+  });
+
+  it('follows the meter of the song', () => {
+    expect(buildCountIn(grid(3, 400), 150)).toHaveLength(3);
+  });
+
+  it('falls back on the tempo when the song is too short to read the grid', () => {
+    expect(buildCountIn([{ timeMs: 0, accent: true }], 60).map((beat) => beat.timeMs)).toEqual([-4000, -3000, -2000, -1000]);
+    expect(buildCountIn([], 120).map((beat) => beat.timeMs)).toEqual([-2000, -1500, -1000, -500]);
+  });
+
+  it('lands the last click one beat before a song that opens with a pickup', () => {
+    const pickup: BeatMark[] = [{ timeMs: 300, accent: false }, { timeMs: 800, accent: true }, { timeMs: 1300, accent: false }];
+    expect(buildCountIn(pickup, 120).at(-1)?.timeMs).toBe(-200);
+  });
+
+  it('measures the bar between downbeats and keeps the place in it when the song opens with a pickup', () => {
+    // One beat of pickup in 4/4, as the parser writes it
+    const pickup: BeatMark[] = [
+      { timeMs: 0, accent: false },
+      ...Array.from({ length: 8 }, (_, index) => ({ timeMs: 500 + index * 500, accent: index % 4 === 0 }))
+    ];
+    expect(buildCountIn(pickup, 120)).toEqual([
+      { timeMs: -2000, accent: false },
+      { timeMs: -1500, accent: true },
+      { timeMs: -1000, accent: false },
+      { timeMs: -500, accent: false }
+    ]);
   });
 });

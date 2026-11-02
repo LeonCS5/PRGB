@@ -150,6 +150,23 @@ export class SoundFX {
  * instead of fired from React renders. The game loop calls update() with the song position;
  * the scheduler maps song time to audio time and re-anchors on seek, speed change or drift.
  */
+/**
+ * One bar of clicks right before the first beat of a song, so the tempo is in the ear when the notes arrive.
+ * Bars are measured between downbeats, because a pickup makes the first one short, and the clicks keep the
+ * song's place in the bar: before a one-beat pickup, the accent falls on the second click.
+ */
+export function buildCountIn(beatGrid: BeatMark[], bpm: number): BeatMark[] {
+  const firstBeat = beatGrid[0]?.timeMs ?? 0;
+  const beatMs = beatGrid.length > 1 ? beatGrid[1].timeMs - firstBeat : 60000 / bpm;
+  const downbeats = beatGrid.flatMap((beat, index) => (beat.accent ? [index] : []));
+  const firstDownbeat = downbeats[0] ?? 0;
+  const beats = downbeats.length > 1 ? downbeats[1] - downbeats[0] : 4;
+  return Array.from({ length: beats }, (_, index) => {
+    const gridIndex = index - beats;
+    return { timeMs: firstBeat + gridIndex * beatMs, accent: ((gridIndex - firstDownbeat) % beats + beats) % beats === 0 };
+  });
+}
+
 export class MetronomeScheduler {
   private static readonly LOOKAHEAD_SEC = 0.12;
   private static readonly RESYNC_MS = 30;
