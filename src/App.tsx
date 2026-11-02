@@ -20,6 +20,7 @@ import {
   Wifi,
   X,
   MessageSquareWarning,
+  Timer,
   type LucideIcon
 } from 'lucide-react';
 import { getDemoSong, DEMO_SONG_ID } from './services/demoSong';
@@ -44,6 +45,7 @@ import { RoomModal } from './components/RoomModal';
 import { SongSearchModal } from './components/SongSearchModal';
 import { AudioSettingsModal } from './components/AudioSettingsModal';
 import { AmpRack } from './components/AmpRack';
+import { LatencyTest } from './components/LatencyTest';
 import { AudioSessionProvider, useAudioSession, useLatestPitch } from './context/AudioSessionContext';
 import { ModalsProvider, useModals } from './context/ModalsContext';
 import { FeedbackModal } from './components/FeedbackModal';
@@ -185,6 +187,7 @@ const AppContent: React.FC = () => {
     ampEngine,
     isAudioRunning,
     audioError,
+    audioOptions,
     dismissAudioError,
     selectedDeviceId,
     channelMode,
@@ -197,10 +200,12 @@ const AppContent: React.FC = () => {
     isSettingsOpen,
     isAmpRackOpen,
     isFeedbackOpen,
+    isLatencyTestOpen,
     setSearchOpen: setIsSearchOpen,
     setSettingsOpen: setIsSettingsOpen,
     setAmpRackOpen: setIsAmpRackOpen,
-    setFeedbackOpen: setIsFeedbackOpen
+    setFeedbackOpen: setIsFeedbackOpen,
+    setLatencyTestOpen: setIsLatencyTestOpen
   } = useModals();
   const { isConfigured: isRankingOn, hasAccount, openAccount, openLeaderboard } = useRanking();
   const { leaveRoom } = useRoom();
@@ -432,6 +437,7 @@ const AppContent: React.FC = () => {
     onRanking: isRankingOn ? handleOpenRanking : null
   };
 
+  const latencyAdjustMs = Math.round(((audioOptions.inputLatencySamples + audioOptions.outputLatencySamples) / (audioEngine.getEngineInfo()?.sampleRate ?? 48000)) * 1000);
   const pageName = onlineSession ? 'Dupla online' : isFreePlayOpen ? 'Play Free' : session ? sessionParts[0].tab.title : isLibraryOpen ? 'Exercícios' : legalRoute?.document.title;
 
   return (
@@ -621,6 +627,7 @@ const AppContent: React.FC = () => {
                     if (!isAudioRunning) void handleStartAudio();
                     setIsAmpRackOpen(true);
                   }} />
+                  <ActionRow icon={Timer} tone={SIGNAL_TONE} title="Teste de latência" description={latencyAdjustMs > 0 ? `Ajuste salvo: ${latencyAdjustMs} ms` : 'Ajusta a pontuação ao seu equipamento'} onClick={() => setIsLatencyTestOpen(true)} />
                 </div>
                 <div className="mt-3"><LandingPitch /></div>
               </section>
@@ -767,6 +774,8 @@ const AppContent: React.FC = () => {
         onClose={() => setIsAmpRackOpen(false)}
         ampEngine={ampEngine}
       />
+
+      <LatencyTest isOpen={isLatencyTestOpen} onClose={() => setIsLatencyTestOpen(false)} />
 
       <RankingModals />
 

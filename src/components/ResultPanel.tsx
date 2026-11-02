@@ -3,6 +3,8 @@ import { ListOrdered, Loader2, Swords, Trophy } from 'lucide-react';
 import { accuracyPercent, type ScoreState } from '../services/scoring';
 import type { Challenge } from '../services/challenge';
 import type { GamePart, RankedSubmission, RunSummary } from '../context/gameSession';
+import { useAudioSession } from '../context/AudioSessionContext';
+import { useModals } from '../context/ModalsContext';
 import { useRanking } from '../context/ranking';
 import { isExerciseSongId } from '../services/exerciseIds';
 import { ChallengeSharePanel } from './ChallengeSharePanel';
@@ -136,6 +138,10 @@ const SoloResult: React.FC<ResultPanelProps> = ({ titleId, summary, parts, chall
   const counts = !summary.jumped && !summary.speedChanged;
   const canChallenge = counts && summary.speed === 1;
   const isExercise = isExerciseSongId(tab.songId);
+  const { audioEngine } = useAudioSession();
+  const { setLatencyTestOpen } = useModals();
+  // Mostly good and hardly any perfect, with nothing adjusted: the likely cause is the delay of the detection
+  const suggestsLatencyTest = score.good >= 5 && score.perfect * 3 < score.good && audioEngine.getLatencyCompensationMs() === 0;
 
   if (isSharing && canChallenge) {
     return (
@@ -157,6 +163,12 @@ const SoloResult: React.FC<ResultPanelProps> = ({ titleId, summary, parts, chall
       <div className="my-5 grid grid-cols-2 gap-3 font-mono"><div><p className="text-2xl text-hit">{accuracy}%</p><p className="text-xs text-ink-300">Precisão</p></div><div><p className="text-2xl text-signal-300">{score.maxCombo}</p><p className="text-xs text-ink-300">Max combo</p></div></div>
       <JudgementCounts score={score} />
       {challenge && <ChallengeVerdict challenge={challenge} score={score.score} counts={canChallenge} />}
+      {suggestsLatencyTest && (
+        <div className="mt-4 rounded-xl border border-signal-500/30 bg-signal-500/5 px-4 py-3 text-sm text-ink-200">
+          <p>Muitos Bons e poucos Perfeitos? Pode ser o atraso do seu equipamento.</p>
+          <button type="button" onClick={() => setLatencyTestOpen(true)} className="mt-1 min-h-11 cursor-pointer rounded-lg px-2 font-semibold text-signal-300 underline underline-offset-2 hover:text-signal-200">Fazer o teste de latência</button>
+        </div>
+      )}
       <div role="status" aria-live="polite" className={ranked ? 'mt-5 rounded-xl border border-ink-700 bg-ink-850 px-4 py-3' : ''}>
         {ranked && <RankedResult submission={ranked} onRetry={() => onRetryRanked?.()} />}
       </div>
