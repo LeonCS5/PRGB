@@ -490,7 +490,8 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
         // Check if note is inside the active hit window and matches audio engine pitch. Judged before
         // culling, so a note that left the screen still pending is missed instead of forgotten.
         if (state === 'pending' && isJudging) {
-          state = judgePendingNote(player, note, timeDiff + audioEngine.getLatencyCompensationMs(), latestPitch, noteY);
+          // The delay is real time and the position is song time, which runs slower at a lower speed
+          state = judgePendingNote(player, note, timeDiff + audioEngine.getLatencyCompensationMs() * speed, latestPitch, noteY);
           if (state !== 'pending') {
             noteStates.set(note.id, state);
             // A chord is judged once: the rest of it shows the same result
