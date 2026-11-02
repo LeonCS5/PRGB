@@ -87,6 +87,7 @@ src/
 │   ├── FreePlay.tsx                 # Play Free: só escuta a guitarra e mostra as notas
 │   ├── GameHud.tsx                  # HUD do jogo: score, combo, accuracy, run ranqueado
 │   ├── GameMoreSheet.tsx            # Folha "Mais" do jogo no celular
+│   ├── LatencyTest.tsx              # Teste de latência: mede o atraso e salva o ajuste da pontuação
 │   ├── LeaderboardModal.tsx         # Placar online (semanal + all-time)
 │   ├── LegalPage.tsx                # Páginas legais (Privacidade / Termos)
 │   ├── LocalDataControls.tsx / LocalRecords.tsx  # Dados locais e histórico de recordes
@@ -109,6 +110,7 @@ src/
 │   ├── exerciseIds.ts               # Ids dos exercícios (nunca renumerar)
 │   ├── exercises.ts                 # Catálogo de exercícios gerado por regras de teoria
 │   ├── musicTheory.ts               # Escalas, posições no braço e formas de acorde
+│   ├── latencyTest.ts               # Lógica do teste de latência (pura)
 │   ├── nickname.ts                  # Validação, normalização e filtro de apelidos
 │   ├── noteTrail.ts                 # Histórico das notas tocadas no Play Free (lógica pura)
 │   ├── records.ts                   # Recordes pessoais locais (localStorage)

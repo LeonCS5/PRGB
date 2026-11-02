@@ -91,6 +91,7 @@ PRGB/
 │   │   ├── FreePlay.tsx             # Play Free: só escuta a guitarra e mostra as notas, sem música nem pontos
 │   │   ├── GameHud.tsx              # HUD do jogo: score, combo, accuracy, indicadores de run ranqueado
 │   │   ├── GameMoreSheet.tsx        # Folha "Mais" do jogo no celular; em telas largas só repassa os controles
+│   │   ├── LatencyTest.tsx          # Teste de latência: pista, medição ao vivo, resultado e ajuste salvo
 │   │   ├── LeaderboardModal.tsx     # Modal do placar online (semanal + all-time)
 │   │   ├── LegalPage.tsx            # Renderizador das páginas legais (Privacidade / Termos)
 │   │   ├── LocalDataControls.tsx    # Controles de exportar/apagar dados locais e sessão de ranking
@@ -112,6 +113,7 @@ PRGB/
 │   ├── services/                    # Cada service tem um *.test.ts (Vitest) ao lado
 │   │   ├── audioEngine.ts           # Captura, channel routing, pitch (NSDF), corda/casa estimadas, fila start/stop com fade
 │   │   ├── audioOutput.ts           # Saída: AudioContext.setSinkId (Chromium) ou <audio> com setSinkId (Firefox)
+│   │   ├── latencyTest.ts           # Lógica do teste de latência: notas, ataques, mediana, veredito e ajuste (pura)
 │   │   ├── neuralAmp.ts             # Validação e nível dos modelos .nam (o motor vem de src/vendor, sob demanda)
 │   │   ├── audioDevices.ts          # Escolha da entrada, nível, saída e teste de retorno (lógica pura)
 │   │   ├── challenge.ts             # Geração e validação de links de desafio (score pessoal codificado em URL)
@@ -378,6 +380,7 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 - [x] **Contagem antes de tocar** — 5 s em tempo real antes de uma partida desde o início, com botão Pular: as primeiras notas esperam na tela, andam nos 2 s finais e o último compasso tem cliques. Retomar não conta de novo. Na dupla online, a contagem que já existia subiu para 5 s (@claude)
 - [x] **Biblioteca de exercícios** — nove categorias e 1.891 variantes geradas por regras de teoria, em `musicTheory.ts` e `exercises.ts`. Os testes conferem cada variante: notas na escala, casas válidas, compassos completos, id único. Funciona offline. Recorde pessoal e desafio funcionam; ranking, não: o servidor só conhece a demo e as músicas baixadas (@claude)
 - [x] **Acordes pontuados pela tônica** — a detecção é monofônica. Medido com cordas sintetizadas: num acorde batido ela devolve a tônica, em geral uma oitava abaixo, então o jogo julga o acorde uma vez, pela tônica (Perfeito) ou por outra nota dele (Bom), com 80 ms a mais de tolerância. Não separa A de Am, e a tela diz isso. No arpejo, com cordas soando juntas a leitura vira o acorde: outra nota do acorde conta como Bom (@claude; testado tocando com cordas sintetizadas: 100% tocando certo, 15% a 31% tocando errado; não testado com guitarra real)
+- [x] **Teste de latência** — a detecção tem atraso e o jogo não compensava: tocando no tempo exato, 0 de 29 notas viravam Perfeito. O teste mede esse atraso e preenche a compensação que já existia nos ajustes avançados: 12 notas em ritmo fixo, com a velocidade e o desenho do jogo, porque o jogador antecipa em vez de reagir; descarta as 2 primeiras, usa a mediana, tira os toques fora do padrão e pede para repetir se a mão variou demais. O resultado sugere o teste quando dá muito Bom e pouco Perfeito (@claude; testado tocando com cordas sintetizadas: de 0 para 22 a 28 Perfeitos em 29 notas, e sem nenhum erro depois do ajuste; não testado com guitarra real)
 - [x] **Desafio do exercício** — "Desafiar um amigo" nunca funcionou no exercício: o artista "Exercício PRGB" contém um termo reservado do filtro. Agora é "Exercício original" (@claude)
 
 ### Pendências conhecidas (sem dono)
@@ -386,7 +389,7 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 - [ ] **Revisões diferentes da mesma faixa na dupla** — o convidado carrega a revisão atual da tab, sem conferir a anunciada pelo anfitrião. Decisão: não corrigir por ora; é raro e a partida não vale para o ranking.
 - [ ] **Teste com interface de áudio real** — o humano ouviu a guitarra no Firefox com a rota nova, antes das correções finais. Falta validar a versão publicada, a latência, clicks na troca de device, afinador e scoring tocando de verdade, e um arquivo `.nam` real.
 - [ ] **`setCurrentTimeMs` a cada frame** — o `PracticeGame` ainda re-renderiza ~60×/s enquanto toca (posição da música em state). Mover para ref exige mexer no scoring; deixado de fora para não alterar comportamento.
-- [ ] **Perfeito exige antecipar a nota** — a detecção tem atraso e o jogo não compensa. Medido com cordas sintetizadas na escala maior: tocando no tempo exato, 0 de 29 notas viram Perfeito; antecipando 40 a 130 ms, de 21 a 26. Vale para todo o jogo. Corrigir muda a pontuação do ranking, e o atraso real depende da interface: decidir com guitarra real. Depende de decisão do humano.
+- [ ] **Compensação no ranking** — a compensação do teste de latência vale também nas partidas ranqueadas e é escolhida pelo jogador. Ela só centraliza a janela de tempo: não permite pontuar mais do que acertar todas as notas, e o limite do servidor continua valendo.
 - [ ] **Exercícios no ranking** — exigiria semear cada variante no banco. Decisão: por ora, só recorde pessoal e desafio.
 - [ ] **Sem router** — SPA sem rotas: só telas de jogo e modais têm entrada no histórico; se crescer, avaliar react-router.
 
