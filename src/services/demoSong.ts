@@ -52,7 +52,7 @@ const demoMeta: SongMeta = {
   songId: DEMO_SONG_ID,
   revisionId: 0,
   title: 'Pentatônica em Lá menor',
-  artist: 'Exercício PRGB',
+  artist: 'Exercício original', // not the brand name: it is a reserved word, so challenge links would refuse it
   image: '',
   tracks: [{ instrumentId: 30, instrument: 'Guitarra', name: 'Exercício', tuning: STANDARD_TUNING, partId: 0 }]
 };

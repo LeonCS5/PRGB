@@ -636,7 +636,7 @@ describe('server_time and seed data', () => {
     const { rows } = await db.query('select * from public.song_parts where song_id = -1 and part_id = 0');
     expect(rows[0]).toMatchObject({
       title: demo.title,
-      artist: demo.artist,
+      artist: 'Exercício PRGB', // frozen in the migration; the app never reads it, and shows its own text
       track_name: demo.trackName,
       scorable_notes: scorable,
       duration_ms: demo.totalDurationMs,
