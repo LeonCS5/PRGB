@@ -13,6 +13,7 @@ export {
   midiToNoteName,
   soundingMidi,
   type BeatMark,
+  type ChordTarget,
   type NormalizedSongTab,
   type NoteEvent,
   type SongMeta

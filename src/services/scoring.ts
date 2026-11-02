@@ -1,7 +1,7 @@
 // Scoring rules of the practice game, kept free of React/DOM so the canvas, duo mode and the
 // online ranking all judge notes the same way.
 
-import type { NoteEvent } from './tabsApi';
+import type { ChordTarget, NoteEvent } from './tabsApi';
 import type { DetectedPitch } from './audioEngine';
 
 export const PERFECT_WINDOW_MS = 55;
@@ -13,6 +13,9 @@ export const MAX_MULTIPLIER = 4;
 export const MIN_PITCH_VOLUME = 0.02;
 // Notes this close to the note an attack already hit belong to the same chord (or strum)
 export const CHORD_WINDOW_MS = 30;
+// A strum spreads over the strings and its low period takes longer to read: measured up to ~170 ms for a
+// synthesized strum against ~120 ms for one low note. Chords are judged this much later than single notes.
+export const CHORD_READ_DELAY_MS = 80;
 
 export type Judgement = 'perfect' | 'good' | 'miss';
 export type NoteOutcome = Judgement | 'skip'; // 'skip' = dead/grace note, or ghost note not played: no points, no miss
@@ -57,10 +60,11 @@ export function accuracyPercent(state: ScoreState): number {
 }
 
 /**
- * Dead and grace notes are never judged. Ghost notes score when played but can't be missed.
+ * Dead and grace notes are never judged, nor are the notes of a chord besides the one that stands for it.
+ * Ghost notes score when played but can't be missed.
  */
 export function isScorable(note: NoteEvent): boolean {
-  return !note.dead && !note.grace;
+  return !note.dead && !note.grace && !note.chordMember;
 }
 
 export function countScorableNotes(notes: readonly NoteEvent[]): number {
@@ -90,6 +94,27 @@ export function maxPossibleScore(scorableCount: number): number {
 
 export function bendTargetMidi(note: NoteEvent): number {
   return note.midiNote + Math.round(note.bendSemitones ?? 0);
+}
+
+const pitchClassOf = (midi: number): number => ((midi % 12) + 12) % 12;
+
+// Any note of the chord counts, since a real strum may read as another chord tone; the root is the sure sign of it
+function judgeChord(
+  note: NoteEvent,
+  chord: ChordTarget,
+  timeDiffMs: number,
+  pitch: Pick<DetectedPitch, 'midiNote' | 'volume' | 'attackId'> | null,
+  ledger?: AttackLedger
+): NoteOutcome | null {
+  const diff = timeDiffMs + CHORD_READ_DELAY_MS;
+  if (Math.abs(diff) <= HIT_WINDOW_MS) {
+    if (!pitch || pitch.volume <= MIN_PITCH_VOLUME) return null;
+    if (ledger && !canUseAttack(ledger, pitch.attackId, note.timeMs)) return null;
+    const heard = pitchClassOf(pitch.midiNote);
+    if (!chord.toneClasses.includes(heard)) return null;
+    return Math.abs(diff) <= PERFECT_WINDOW_MS && heard === chord.rootClass ? 'perfect' : 'good';
+  }
+  return diff < -HIT_WINDOW_MS ? 'miss' : null;
 }
 
 /**
@@ -136,6 +161,7 @@ export function judgeNote(
   ledger?: AttackLedger
 ): NoteOutcome | null {
   if (!isScorable(note)) return timeDiffMs < -HIT_WINDOW_MS ? 'skip' : null;
+  if (note.chord) return judgeChord(note, note.chord, timeDiffMs, pitch, ledger);
 
   const absDiff = Math.abs(timeDiffMs);
   if (absDiff <= HIT_WINDOW_MS) {
@@ -146,7 +172,7 @@ export function judgeNote(
       Math.abs(pitch.midiNote - note.midiNote),
       Math.abs(pitch.midiNote - bendTargetMidi(note))
     );
-    if (midiDiff > 1) return null;
+    if (midiDiff > 1) return note.acceptClasses?.includes(pitchClassOf(pitch.midiNote)) ? 'good' : null;
     // A semitone off (wrong fret, out of tune) still counts, but is never perfect
     return absDiff <= PERFECT_WINDOW_MS && midiDiff === 0 ? 'perfect' : 'good';
   }
