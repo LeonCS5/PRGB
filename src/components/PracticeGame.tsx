@@ -13,7 +13,8 @@ import {
   Loader2,
   Trophy,
   UserRound,
-  MessageSquareWarning
+  MessageSquareWarning,
+  Repeat
 } from 'lucide-react';
 import { BrandMark } from './BrandMark';
 import { GameMoreSheet } from './GameMoreSheet';
@@ -36,6 +37,7 @@ import {
 } from './practiceLanes';
 import { useModals } from '../context/ModalsContext';
 import type { NoteEvent } from '../services/tabsApi';
+import type { NoteGraphic } from './practiceLanes';
 import type { DetectedPitch, PlayerSlot } from '../services/audioEngine';
 import type { Challenge } from '../services/challenge';
 import { useAudioSession } from '../context/AudioSessionContext';
@@ -174,6 +176,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     devSessionId: devPreset?.rankedSessionId
   });
   const rankedHelpId = useId();
+  const trainingHelpId = useId();
 
   // PRGB Amp State
   const [toneSettings, setToneSettings] = useState<AmpSettings | null>(
@@ -198,6 +201,11 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   const [speed, setSpeed] = useState(1.0);
   const [synthAudioEnabled, setSynthAudioEnabled] = useState(true);
   const [metronomeEnabled, setMetronomeEnabled] = useState(false);
+  // Training mode loops an exercise for as long as the player wants: each lap starts as the last one ends
+  const [isTraining, setIsTraining] = useState(false);
+  const [lap, setLap] = useState(1);
+  const lapRef = useRef(1);
+  const previousLapStatesRef = useRef<Map<string, NoteState>[] | null>(null);
 
   // Scoring: playersRef is read and written by the canvas loop, `scores` mirrors it for the HUD
   const [initialPlayers] = useState<PlayerRun[]>(() => devPreset ? devPreset.scores.map((score) => ({ score, attacks: createAttackLedger() })) : freshPlayers());
@@ -360,14 +368,29 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     setScores(players.map((run) => run.score));
   };
 
+  // The notes left of the lap that ends are missed, and the lap stays on screen as it scrolls away
+  const startNextLap = () => {
+    expirePendingNotes();
+    previousLapStatesRef.current = noteStatesRef.current.map((states) => new Map(states));
+    for (const noteStates of noteStatesRef.current) noteStates.clear();
+    synthPlayedNotesRef.current.clear();
+    lapRef.current += 1;
+    setLap(lapRef.current);
+    // The clock jumps back a whole lap: the clicks start over from the first beat
+    if (metronomeEnabled) metronome.start(clockTab.beatGrid, 0, speed);
+  };
+
   const finishRun = () => {
     if (runFinishedRef.current) return;
     runFinishedRef.current = true;
     // DEV scenes start at the end with made-up scores: their notes were never played
     if (!devPreset) expirePendingNotes();
-    const { jumped, speedChanged } = integrityRef.current;
+    const { speedChanged } = integrityRef.current;
+    const laps = lapRef.current;
+    // Several laps add up to more than one run could score, so they go no further than the result
+    const jumped = integrityRef.current.jumped || laps > 1;
     const finalScores = playersRef.current.slice(0, lanes.length).map((run) => run.score);
-    const summary: RunSummary = { scores: finalScores, speed, jumped, speedChanged, personalBest: null };
+    const summary: RunSummary = { scores: finalScores, speed, jumped: integrityRef.current.jumped, speedChanged, laps, personalBest: null };
 
     // Online runs never touch the personal records or the ranking
     if (online) {
@@ -477,37 +500,10 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
       const noteStates = noteStatesRef.current[laneIndex];
       const latestPitch = getLatestPitch(player);
 
-      for (const { note, path, fret, subtitle, fretX, subtitleX, fretFont, subtitleFont } of laneGraphics[laneIndex]) {
-        const timeDiff = note.timeMs - position;
-        const noteX = HIT_LINE_X + (note.timeMs - shownPosition) * pixelsPerMs;
-
-        // Note Y position based on its string
-        const noteY = stringY(layout, note.string);
+      // Draws one note pill, culled off screen
+      const drawNote = ({ note, path, fret, subtitle, fretX, subtitleX, fretFont, subtitleFont }: NoteGraphic, noteX: number, noteY: number, state: NoteState) => {
         const stringColor = palette.strings[(note.string) - 1] || palette.muted;
-
-        let state = noteStates.get(note.id) || 'pending';
-
-        // Check if note is inside the active hit window and matches audio engine pitch. Judged before
-        // culling, so a note that left the screen still pending is missed instead of forgotten.
-        if (state === 'pending' && isJudging) {
-          // The delay is real time and the position is song time, which runs slower at a lower speed
-          state = judgePendingNote(player, note, timeDiff + audioEngine.getLatencyCompensationMs() * speed, latestPitch, noteY);
-          if (state !== 'pending') {
-            noteStates.set(note.id, state);
-            // A chord is judged once: the rest of it shows the same result
-            if (note.chord) {
-              for (const peer of lanes[laneIndex].part.tab.notes) {
-                if (peer.chordMember && peer.timeMs === note.timeMs) noteStates.set(peer.id, state);
-              }
-            }
-          }
-        }
-
-        // Only draw if within screen view
-        if (noteX < -100 || noteX > width + 100) continue;
-
-        // Draw Note Pill
-        if (!noteHeight) continue;
+        if (noteX < -100 || noteX > width + 100 || !noteHeight) return;
         if (note.chord) {
           ctx.font = 'bold 15px Inter, sans-serif';
           ctx.textAlign = 'center';
@@ -563,6 +559,41 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
         ctx.fillText(subtitle, subtitleX, 0);
 
         ctx.restore();
+      };
+
+      for (const graphic of laneGraphics[laneIndex]) {
+        const { note } = graphic;
+        const timeDiff = note.timeMs - position;
+        const noteX = HIT_LINE_X + (note.timeMs - shownPosition) * pixelsPerMs;
+
+        const noteY = stringY(layout, note.string);
+
+        let state = noteStates.get(note.id) || 'pending';
+
+        // Check if note is inside the active hit window and matches audio engine pitch. Judged before
+        // culling, so a note that left the screen still pending is missed instead of forgotten.
+        if (state === 'pending' && isJudging) {
+          // The delay is real time and the position is song time, which runs slower at a lower speed
+          state = judgePendingNote(player, note, timeDiff + audioEngine.getLatencyCompensationMs() * speed, latestPitch, noteY);
+          if (state !== 'pending') {
+            noteStates.set(note.id, state);
+            // A chord is judged once: the rest of it shows the same result
+            if (note.chord) {
+              for (const peer of lanes[laneIndex].part.tab.notes) {
+                if (peer.chordMember && peer.timeMs === note.timeMs) noteStates.set(peer.id, state);
+              }
+            }
+          }
+        }
+
+        drawNote(graphic, noteX, noteY, state);
+        if (isTraining) {
+          // The laps join up: the next one comes in behind this one, and the last one scrolls away ahead of it
+          const lapWidth = durationMs * pixelsPerMs;
+          drawNote(graphic, noteX + lapWidth, noteY, 'pending');
+          const previous = previousLapStatesRef.current?.[laneIndex].get(note.id);
+          if (previous) drawNote(graphic, noteX - lapWidth, noteY, previous);
+        }
       }
     }
 
@@ -621,7 +652,11 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
       : Math.min(elapsed, MAX_FRAME_GAP_MS) * speed;
     // The guard covers frames that run before the pause at the end is committed
     if ((isPlaying || startsNow) && !runFinishedRef.current) {
-      const next = Math.min(positionRef.current + delta, durationMs);
+      let next = Math.min(positionRef.current + delta, durationMs);
+      if (isTraining && !online && next >= durationMs) {
+        next = Math.min(positionRef.current + delta - durationMs, durationMs - 1);
+        startNextLap();
+      }
       if (!runStartedRef.current && next >= 0) {
         runStartedRef.current = true;
         // Starting after a seek forward skips the beginning: not a full run, and the notes left behind
@@ -709,6 +744,9 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     for (const noteStates of noteStatesRef.current) noteStates.clear();
     synthPlayedNotesRef.current.clear();
     effectsRef.current = { particles: [], texts: [] };
+    lapRef.current = 1;
+    setLap(1);
+    previousLapStatesRef.current = null;
     ranked.controller.clearRun();
     if (play) startPlaying();
     else setIsPlaying(false);
@@ -850,6 +888,11 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
               </span>
             </button>
           )}
+          {isExercise && !isOnline && (
+            <button aria-pressed={isTraining} onClick={() => setIsTraining(!isTraining)} aria-describedby={isTraining ? trainingHelpId : undefined} className={toolClass + (isTraining ? ' border-signal-500! text-signal-300!' : '')}>
+              <Repeat size={16} aria-hidden="true" /><span>Modo treino</span>{isTraining && <span className="font-mono">· volta {lap}</span>}
+            </button>
+          )}
           <label title={lockedHint} className={toolClass + ' max-sm:px-2' + ((isOnline || ranked.isOn) ? ' cursor-not-allowed! opacity-50' : '')}><span className="sr-only">Velocidade</span><select aria-label="Velocidade" value={speed} disabled={isOnline || ranked.isOn} aria-describedby={lockedHelp} onChange={event => changeSpeed(Number(event.target.value))} className="min-h-11 cursor-pointer bg-ink-800 font-mono disabled:cursor-not-allowed sm:min-h-10">{[0.5, 0.75, 1].map(value => <option key={value} value={value}>{value}×</option>)}</select></label>
           <GameMoreSheet>{(close) => <>
             <button aria-label="Metrônomo" aria-pressed={metronomeEnabled} onClick={() => setMetronomeEnabled(!metronomeEnabled)} className={toolClass + (metronomeEnabled ? ' border-amp-400! text-amp-300!' : '')}><Clock size={16} /><span>Metrônomo</span></button>
@@ -861,6 +904,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
             {!isOnline && isRankingOn && <button aria-label="Minha conta do ranking" onClick={() => { close(); openRankingAccount(); }} className={toolClass}><UserRound size={16} /><span className="sm:hidden lg:inline">Minha conta</span></button>}
           </>}</GameMoreSheet>
         </div>
+        {isTraining && <p id={trainingHelpId} className="text-xs leading-5 text-signal-200">O exercício recomeça sozinho. Desligue o modo treino para terminar no fim desta volta. Não conta como recorde.</p>}
         {!isOnline && ranked.isAvailable && (
           <div id={rankedHelpId} role="status" aria-live="polite" className="text-xs leading-5">
             {ranked.notice && <p className={ranked.notice.tone === 'error' ? 'text-miss' : 'text-near'}>{ranked.notice.text}</p>}

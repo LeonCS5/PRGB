@@ -33,10 +33,10 @@ const JudgementCounts: React.FC<{ score: ScoreState }> = ({ score }) => (
 const PersonalBestBanner: React.FC<{ summary: RunSummary; score: number }> = ({ summary, score }) => {
   const outcome = summary.personalBest;
   const speedNote = summary.speed !== 1 ? ` em ${formatSpeed(summary.speed)}` : '';
-  if (summary.jumped || summary.speedChanged) {
+  if (summary.laps > 1 || summary.jumped || summary.speedChanged) {
     return (
       <div className="mt-4 text-xs text-ink-300">
-        <p>{summary.jumped ? 'Jogada com saltos não conta como recorde.' : 'Trocar a velocidade no meio da música não conta como recorde.'}</p>
+        <p>{summary.laps > 1 ? `Modo treino, ${summary.laps} voltas: não conta como recorde.` : summary.jumped ? 'Jogada com saltos não conta como recorde.' : 'Trocar a velocidade no meio da música não conta como recorde.'}</p>
         {outcome?.previous && <p className="mt-1">Seu recorde{speedNote}: <span className="font-mono text-ink-100">{formatPoints(outcome.previous.score)}</span></p>}
       </div>
     );
@@ -135,7 +135,7 @@ const SoloResult: React.FC<ResultPanelProps> = ({ titleId, summary, parts, chall
   const score = summary.scores[0];
   const accuracy = accuracyPercent(score);
   // A challenge has no speed field, so only full 1× runs can be sent or answered
-  const counts = !summary.jumped && !summary.speedChanged;
+  const counts = summary.laps === 1 && !summary.jumped && !summary.speedChanged;
   const canChallenge = counts && summary.speed === 1;
   const isExercise = isExerciseSongId(tab.songId);
   const { audioEngine } = useAudioSession();
@@ -185,7 +185,7 @@ const SoloResult: React.FC<ResultPanelProps> = ({ titleId, summary, parts, chall
           </button>
         ) : (
           <p className="mb-3 text-xs text-ink-300">
-            {counts ? `Desafios valem só na velocidade 1×. Toque em 1× para ${challenge ? 'responder' : 'desafiar um amigo'}.` : summary.jumped ? 'Jogada com saltos não vale para desafio.' : 'Jogada com troca de velocidade não vale para desafio.'}
+            {counts ? `Desafios valem só na velocidade 1×. Toque em 1× para ${challenge ? 'responder' : 'desafiar um amigo'}.` : summary.laps > 1 ? 'O modo treino não vale para desafio.' : summary.jumped ? 'Jogada com saltos não vale para desafio.' : 'Jogada com troca de velocidade não vale para desafio.'}
           </p>
         )}
         <button type="button" onClick={onPlayAgain} className={primaryButton}>Tocar de novo</button>

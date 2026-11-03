@@ -44,6 +44,8 @@ export interface RunSummary {
   // Seeking or changing speed mid-run: the result is shown but counts for no record and no challenge
   jumped: boolean;
   speedChanged: boolean;
+  // Laps of an exercise looped in training mode: more than one counts for no record and no challenge
+  laps: number;
   personalBest: PersonalBestOutcome | null; // solo only
 }
 
