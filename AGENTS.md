@@ -384,7 +384,7 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 - [x] **Desafio do exercício** — "Desafiar um amigo" nunca funcionou no exercício: o artista "Exercício PRGB" contém um termo reservado do filtro. Agora é "Exercício original" (@claude)
 - [x] **Mais folga para acertar** — a leitura da nota só chega depois da palhetada, então quase toda nota perdida passava do limite do lado do atraso, principalmente sem o teste de latência. As janelas ficaram assimétricas: Perfeito de 70 ms antes a 110 ms depois da linha, Bom de 150 ms antes a 260 ms depois. A nota certa uma oitava fora conta como Bom, e a compensação agora acompanha a velocidade da música (@claude; medido no build de produção com cordas sintetizadas e mãos simuladas: sem o teste e com 60 ms de atraso de interface, a escala foi de 48% a 62% para 90% a 100% de acertos; tocando errado, a escala segue em 34% e os acordes foram de 8% para 15%; não testado com guitarra real)
 
-### Rodada 11 — modo treino (em `claude/modo-treino`)
+### Rodada 11 — modo treino (concluída, em `main`)
 - [x] **Modo treino** — nos exercícios, um botão repete o exercício sem parar: a volta seguinte começa onde a anterior termina, sem contagem, e já aparece chegando na pista. Os pontos somam; desligar termina no fim da volta. Mais de uma volta não vale recorde nem desafio (@claude; testado com cordas sintetizadas: 3 voltas seguidas, 87 de 87 notas; não testado com guitarra real)
 
 ### Pendências conhecidas (sem dono)
