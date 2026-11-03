@@ -43,7 +43,8 @@ import { DEFAULT_PLAYER_NAMES, type GamePart, type PersonalBestOutcome, type Ran
 import { useRanking } from '../context/ranking';
 import type { RankedPhase } from '../context/rankedRun';
 import { useRankedRun } from '../context/useRankedRun';
-import { MetronomeScheduler, SoundFX } from '../services/synthAudio';
+import { buildCountIn, MetronomeScheduler, SoundFX } from '../services/synthAudio';
+import { isExerciseSongId } from '../services/exerciseIds';
 import {
   accuracyPercent,
   applyJudgement,
@@ -51,7 +52,7 @@ import {
   createAttackLedger,
   createScoreState,
   judgeNote,
-  HIT_WINDOW_MS,
+  HIT_LATE_MS,
   type AttackLedger,
   type ScoreState
 } from '../services/scoring';
@@ -117,6 +118,13 @@ const synthKey = (laneIndex: number, noteId: string) => `${laneIndex}:${noteId}`
 // past notes nobody could play; a hidden tab pauses instead (visibilitychange)
 const MAX_FRAME_GAP_MS = 100;
 
+// A run from the very start begins this long before the first note, whatever the speed, so the player sees the
+// opening notes coming and hears the tempo
+const LEAD_IN_MS = 5000;
+// During the count the opening notes wait on screen to be read, and only start moving this long before the first one
+const LEAD_IN_MOVING_MS = 2000;
+const LEAD_IN_RIGHT_MARGIN = 60;
+
 const isSamePart = (a: GamePart, b: GamePart) => a.tab.songId === b.tab.songId && a.partId === b.partId;
 
 const RANKED_STATUS: Record<Exclude<RankedPhase, 'off'>, string> = {
@@ -156,8 +164,11 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   const clockTab = useMemo(() => lanes.reduce((longest, lane) =>
     lane.part.tab.totalDurationMs > longest.part.tab.totalDurationMs ? lane : longest).part.tab, [lanes]);
   const mainTab = lanes[0].part.tab;
+  const isExercise = isExerciseSongId(mainTab.songId);
+  const changeLabel = isExercise ? 'Mudar exercício' : 'Mudar música';
   const ranked = useRankedRun({
-    part: isDuo ? null : lanes[0].part,
+    // The server only counts the demo and downloaded songs
+    part: isDuo || isExercise ? null : lanes[0].part,
     start: rankedStart,
     reloadTab: onRankedTabOutdated,
     devSessionId: devPreset?.rankedSessionId
@@ -205,6 +216,8 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   const effectsRef = useRef<HitEffects>({ particles: [], texts: [] });
   const lastFrameTimeRef = useRef<number>(0);
   const [metronome] = useState(() => new MetronomeScheduler());
+  const [countIn] = useState(() => new MetronomeScheduler());
+  const countInBeats = useMemo(() => buildCountIn(clockTab.beatGrid, clockTab.initialBpm), [clockTab]);
   const synthPlayedNotesRef = useRef<Set<string>>(new Set());
 
   const sceneRef = useRef<{
@@ -322,7 +335,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
 
   // Notes jumped over are skipped rather than missed
   const skipNotesBefore = (position: number) => forEachNote((note, noteStates) => {
-    if (note.timeMs - position < -HIT_WINDOW_MS && (noteStates.get(note.id) ?? 'pending') === 'pending') {
+    if (note.timeMs - position < -HIT_LATE_MS && (noteStates.get(note.id) ?? 'pending') === 'pending') {
       noteStates.set(note.id, 'skipped');
     }
   });
@@ -409,6 +422,17 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     return () => metronome.stop();
   }, [isPlaying, metronomeEnabled, speed, clockTab, metronome]);
 
+  const isCountingIn = currentTimeMs < 0;
+  const startCountIn = useEffectEvent(() => {
+    countIn.start(countInBeats, positionRef.current, speed);
+  });
+
+  useEffect(() => {
+    if (!isPlaying || !isCountingIn) return;
+    startCountIn();
+    return () => countIn.stop();
+  }, [isPlaying, isCountingIn, speed, countIn]);
+
   // Synth preview of song notes
   useEffect(() => {
     if (!isPlaying || !synthAudioEnabled) return;
@@ -442,6 +466,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     ctx.font = 'bold 13px Inter, sans-serif';
     const position = positionRef.current;
     const pixelsPerMs = PIXELS_PER_MS * speed;
+    const shownPosition = Math.max(position, -Math.min(LEAD_IN_MOVING_MS * speed, (width - HIT_LINE_X - LEAD_IN_RIGHT_MARGIN) / pixelsPerMs));
     const isJudging = isPlaying && !runFinishedRef.current;
 
     // 3. Process & Draw Notes, lane by lane, each judged by the pitch of its own player
@@ -454,7 +479,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
 
       for (const { note, path, fret, subtitle, fretX, subtitleX, fretFont, subtitleFont } of laneGraphics[laneIndex]) {
         const timeDiff = note.timeMs - position;
-        const noteX = HIT_LINE_X + timeDiff * pixelsPerMs;
+        const noteX = HIT_LINE_X + (note.timeMs - shownPosition) * pixelsPerMs;
 
         // Note Y position based on its string
         const noteY = stringY(layout, note.string);
@@ -465,8 +490,17 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
         // Check if note is inside the active hit window and matches audio engine pitch. Judged before
         // culling, so a note that left the screen still pending is missed instead of forgotten.
         if (state === 'pending' && isJudging) {
-          state = judgePendingNote(player, note, timeDiff + audioEngine.getLatencyCompensationMs(), latestPitch, noteY);
-          if (state !== 'pending') noteStates.set(note.id, state);
+          // The delay is real time and the position is song time, which runs slower at a lower speed
+          state = judgePendingNote(player, note, timeDiff + audioEngine.getLatencyCompensationMs() * speed, latestPitch, noteY);
+          if (state !== 'pending') {
+            noteStates.set(note.id, state);
+            // A chord is judged once: the rest of it shows the same result
+            if (note.chord) {
+              for (const peer of lanes[laneIndex].part.tab.notes) {
+                if (peer.chordMember && peer.timeMs === note.timeMs) noteStates.set(peer.id, state);
+              }
+            }
+          }
         }
 
         // Only draw if within screen view
@@ -474,6 +508,13 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
 
         // Draw Note Pill
         if (!noteHeight) continue;
+        if (note.chord) {
+          ctx.font = 'bold 15px Inter, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = palette.signal;
+          ctx.fillText(note.chord.label, noteX, layout.top + Math.max(11, layout.topMargin * 0.3));
+        }
         ctx.save();
         ctx.translate(noteX, noteY);
         if (note.grace) ctx.scale(0.75, 0.75);
@@ -580,7 +621,8 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
       : Math.min(elapsed, MAX_FRAME_GAP_MS) * speed;
     // The guard covers frames that run before the pause at the end is committed
     if ((isPlaying || startsNow) && !runFinishedRef.current) {
-      if (!runStartedRef.current) {
+      const next = Math.min(positionRef.current + delta, durationMs);
+      if (!runStartedRef.current && next >= 0) {
         runStartedRef.current = true;
         // Starting after a seek forward skips the beginning: not a full run, and the notes left behind
         // are skipped (not missed)
@@ -589,11 +631,11 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
           skipNotesBefore(positionRef.current);
         }
       }
-      const next = Math.min(positionRef.current + delta, durationMs);
       if (online && delta > MAX_FRAME_GAP_MS) skipNotesBefore(next);
       positionRef.current = next;
       setCurrentTimeMs(next);
       if (metronomeEnabled) metronome.update(next);
+      if (next < 0) countIn.update(next);
       if (next >= durationMs) {
         setIsPlaying(false);
         finishRun();
@@ -633,10 +675,25 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   }, []);
 
   const formatTime = (ms: number) => {
-    const totalSec = Math.floor(ms / 1000);
+    const totalSec = Math.floor(Math.max(0, ms) / 1000);
     const mins = Math.floor(totalSec / 60);
     const secs = totalSec % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Only a run from the very start counts in: resuming, or starting after a seek, goes straight on
+  const startPlaying = (rate = speed) => {
+    if (!runStartedRef.current && positionRef.current === 0) {
+      positionRef.current = -LEAD_IN_MS * rate;
+      setCurrentTimeMs(positionRef.current);
+    }
+    setIsPlaying(true);
+  };
+
+  const skipLeadIn = () => {
+    positionRef.current = 0;
+    setCurrentTimeMs(0);
+    setIsPlaying(true);
   };
 
   // A reset zeroes the score, so the run that follows is a new, clean one
@@ -653,13 +710,14 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     synthPlayedNotesRef.current.clear();
     effectsRef.current = { particles: [], texts: [] };
     ranked.controller.clearRun();
-    setIsPlaying(play);
+    if (play) startPlaying();
+    else setIsPlaying(false);
   };
 
   // A ranked run only plays once the server has opened its session
   const startRankedRun = async () => {
     setSpeed(1);
-    if (await ranked.controller.beginRun()) setIsPlaying(true);
+    if (await ranked.controller.beginRun()) startPlaying(1);
   };
 
   const restartRun = () => {
@@ -675,7 +733,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     if (currentTimeMs >= durationMs) restartRun();
     else if (isPlaying) setIsPlaying(false);
     else if (ranked.isOn && !ranked.sessionId) void startRankedRun();
-    else setIsPlaying(true);
+    else startPlaying();
   };
 
   // A ranked run goes from the start at 1×, so turning it on only touches the current run once the account and
@@ -727,7 +785,12 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
 
   const changeSpeed = (value: number) => {
     if (ranked.isOn) return;
-    if (runStartedRef.current) integrityRef.current.speedChanged = true;
+    // An early hit scores while the count still runs, so a run can have begun before the clock reaches zero
+    if (runStartedRef.current || noteStatesRef.current.some((states) => states.size > 0)) integrityRef.current.speedChanged = true;
+    if (positionRef.current < 0) {
+      positionRef.current *= value / speed; // the count stays in real time
+      setCurrentTimeMs(positionRef.current);
+    }
     setSpeed(value);
   };
 
@@ -752,7 +815,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
             ? <div className="hidden shrink-0 gap-2 sm:flex"><LiveTuner player={0} label="J1" /><LiveTuner player={1} label="J2" /></div>
             : <LiveTuner />}
           {!isOnline && (
-            <button onClick={onOpenSearch} aria-label="Mudar música" className={toolClass}><Search size={17} /><span className="hidden lg:inline">Mudar música</span></button>
+            <button onClick={onOpenSearch} aria-label={changeLabel} className={toolClass}><Search size={17} /><span className="hidden lg:inline">{changeLabel}</span></button>
           )}
         </div>
         {isDuo ? <DuoHud scores={scores} names={names} /> : <SoloHud score={scores[0]} goal={challenge?.score} />}
@@ -760,6 +823,12 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
       <main ref={canvasContainerRef} aria-label="Pista de prática de guitarra" className="relative min-h-0 w-full flex-1 overflow-hidden">
         <canvas ref={canvasRef} aria-label={isDuo ? 'Notas das duas partes: jogador 1 em cima, jogador 2 embaixo' : 'Notas da tablatura nas seis cordas'} className="absolute inset-0 block size-full" />
         {/* A duo game also needs the input in duo mode: otherwise player 2 is never heard */}
+        {isCountingIn && (
+          <div className="absolute left-3 top-2 z-10 flex items-center gap-3 rounded-2xl border border-amp-500/40 bg-ink-900/95 py-1.5 pl-4 pr-1.5 shadow-panel">
+            <p role="status" className="flex items-center gap-3 text-sm font-semibold text-ink-200">Prepare-se <span className="w-6 text-center font-display text-3xl font-bold text-amp-300">{Math.ceil(-currentTimeMs / speed / 1000)}</span></p>
+            <button type="button" onClick={skipLeadIn} className="min-h-10 cursor-pointer rounded-xl border border-ink-700 bg-ink-800 px-3 text-xs font-semibold text-ink-200 transition hover:border-ink-500">Pular</button>
+          </div>
+        )}
         {(!isAudioRunning || (isDuo && channelMode !== 'duo')) && <button onClick={() => void startAudio(undefined, isDuo ? 'duo' : undefined)} className="absolute right-3 top-2 min-h-10 cursor-pointer rounded-xl border border-signal-500/30 bg-ink-900/90 px-3 text-xs font-semibold text-signal-300">Conectar guitarra{isDuo ? 's' : ''}</button>}
       </main>
       {online && <div className="shrink-0 px-3 sm:px-6">{online.hud}</div>}
@@ -768,7 +837,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
           <button onClick={togglePlay} disabled={isOnline || ranked.isBusy} aria-busy={ranked.isBusy} aria-label={isPlaying ? 'Pausar' : 'Tocar'} title={lockedHint} className={'flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-amp-400 text-ink-950 transition hover:bg-amp-300 ' + (isOnline ? 'disabled:cursor-not-allowed disabled:opacity-50' : 'disabled:cursor-wait disabled:opacity-70')}>{ranked.isBusy ? <Loader2 size={22} className="animate-spin" /> : isPlaying ? <Pause size={22} /> : <Play size={22} />}</button>
           <button onClick={restartRun} disabled={isOnline || ranked.isBusy} aria-label="Reiniciar música" title={lockedHint} className={toolClass}><RotateCcw size={18} /></button>
           <span className="font-mono text-xs text-ink-300">{formatTime(currentTimeMs)}</span>
-          <input aria-label="Posição da música" type="range" min={0} max={durationMs} value={currentTimeMs} disabled={isOnline || ranked.isOn} title={lockedHint} aria-describedby={lockedHelp}
+          <input aria-label="Posição da música" type="range" min={0} max={durationMs} value={Math.max(0, currentTimeMs)} disabled={isOnline || ranked.isOn} title={lockedHint} aria-describedby={lockedHelp}
             onChange={(event) => seekTo(Number(event.target.value))} className="h-10 min-w-0 flex-1 cursor-pointer accent-amp-400 disabled:cursor-not-allowed disabled:opacity-50" />
           <span className="font-mono text-xs text-ink-300">{formatTime(durationMs)}</span>
         </div>
@@ -799,7 +868,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
           </div>
         )}
       </footer>
-      {runSummary && <ModalFrame titleId="practice-result" onClose={() => resetRun(false)} className={(isDuo ? 'max-w-xl' : 'max-w-md') + ' overflow-y-auto text-center'}>
+      {runSummary && <ModalFrame titleId="practice-result" onClose={() => resetRun(false)} selfOpened className={(isDuo ? 'max-w-xl' : 'max-w-md') + ' overflow-y-auto text-center'}>
         <ResultPanel titleId="practice-result" summary={runSummary} parts={lanes.map((lane) => lane.part)} names={isDuo ? names : null}
           challenge={challenge} initialShareOpen={devPreset?.shareOpen} ranked={ranked.submission} onRetryRanked={ranked.controller.retrySubmission}
           onPlayAgain={restartRun} onChooseSong={() => { resetRun(false); onOpenSearch(); }} />

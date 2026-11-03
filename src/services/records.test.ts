@@ -286,3 +286,20 @@ describe('clearRecords and exportLocalData', () => {
     expect(data).toHaveProperty('exportedAt', expect.stringMatching(/^\d{4}-\d{2}-\d{2}T.+Z$/));
   });
 });
+
+describe('exercises', () => {
+  it('keeps the records of an exercise', () => {
+    vi.stubGlobal('localStorage', memoryStorage());
+    const exercise = run({ songId: -1600, partId: 7, title: 'Escala maior em G', artist: 'Exercício original', trackName: 'Sobe e desce' });
+    expect(recordRun(exercise).isPersonalBest).toBe(true);
+    expect(getPersonalBest(-1600, 7, 1)?.score).toBe(1000);
+    expect(getHistory(1)[0].title).toBe('Escala maior em G');
+  });
+
+  it('still drops other negative ids', () => {
+    const storage = memoryStorage();
+    vi.stubGlobal('localStorage', storage);
+    storage.setItem(STORAGE_KEY, JSON.stringify({ version: 1, history: [run({ songId: -2 }), run({ songId: -999 })], bests: [] }));
+    expect(getHistory(5)).toEqual([]);
+  });
+});

@@ -62,8 +62,8 @@ Motor DSP construído com a Web Audio API, um simulador que não reproduz com ex
 - Camada estática de rails em cache via `OffscreenCanvas` / `Path2D` para máxima performance a 60 FPS.
 - Renderização adaptada à densidade de pixels da tela (`devicePixelRatio`).
 - **Janela de Tolerância de Acerto:**
-  - **Perfect:** ±55ms de tolerância temporal.
-  - **Good:** ±130ms de tolerância temporal.
+  - **Perfect:** de 70 ms antes a 110 ms depois da linha.
+  - **Good:** de 150 ms antes a 260 ms depois da linha.
   - **Miss:** Fora da janela temporal ou nota incorreta.
 - **Suporte a Técnicas Musicais:**
   - *Bends:* Aceita tanto a nota base quanto a nota alvo do bend.

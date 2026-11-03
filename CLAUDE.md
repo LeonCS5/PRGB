@@ -61,6 +61,7 @@ src/
 ├── context/
 │   ├── AudioSessionContext.tsx      # AudioEngine, PRGB Amp, device/canal, erros; pitch via useLatestPitch
 │   ├── gameSession.ts               # Tipos de sessão de jogo (GamePart, SoloSession, DuoSession, RunSummary)
+│   ├── historyLayers.ts             # Uma entrada no histórico por camada aberta: o Voltar fecha a de cima
 │   ├── legalRoute.ts                # Roteamento por hash (#privacidade / #termos) sem router library
 │   ├── localData.ts                 # Exportar/apagar dados locais; flag de sessão de ranking
 │   ├── ModalsContext.tsx            # Estado aberto/fechado dos modais
@@ -82,9 +83,11 @@ src/
 │   ├── DeleteAccountConfirm.tsx     # Confirmação de exclusão de conta
 │   ├── DuoSetupModal.tsx            # Configuração de sessão duo (duas guitarras)
 │   ├── ErrorNotice.tsx              # Aviso de erro dispensável com ação
+│   ├── ExerciseLibrary.tsx          # Tela de exercícios: categorias, tom, jeito de tocar e cartões
 │   ├── FreePlay.tsx                 # Play Free: só escuta a guitarra e mostra as notas
 │   ├── GameHud.tsx                  # HUD do jogo: score, combo, accuracy, run ranqueado
 │   ├── GameMoreSheet.tsx            # Folha "Mais" do jogo no celular
+│   ├── LatencyTest.tsx              # Teste de latência: mede o atraso e salva o ajuste da pontuação
 │   ├── LeaderboardModal.tsx         # Placar online (semanal + all-time)
 │   ├── LegalPage.tsx                # Páginas legais (Privacidade / Termos)
 │   ├── LocalDataControls.tsx / LocalRecords.tsx  # Dados locais e histórico de recordes
@@ -104,6 +107,10 @@ src/
 │   ├── audioEngine.ts               # ⭐ Engine de captura de áudio + detecção de pitch (NSDF/MPM)
 │   ├── challenge.ts                 # Links de desafio (score pessoal codificado em URL)
 │   ├── demoSong.ts                  # Exercício original offline (sem rede, sem direitos de terceiros)
+│   ├── exerciseIds.ts               # Ids dos exercícios (nunca renumerar)
+│   ├── exercises.ts                 # Catálogo de exercícios gerado por regras de teoria
+│   ├── musicTheory.ts               # Escalas, posições no braço e formas de acorde
+│   ├── latencyTest.ts               # Lógica do teste de latência (pura)
 │   ├── nickname.ts                  # Validação, normalização e filtro de apelidos
 │   ├── noteTrail.ts                 # Histórico das notas tocadas no Play Free (lógica pura)
 │   ├── records.ts                   # Recordes pessoais locais (localStorage)
@@ -269,7 +276,7 @@ npm run lint
 3. **PRGB Amp Ativo** → Som da guitarra começa a sair pelos fones/caixas em tempo real
 4. **Carregar Música** → Tab é baixada do CDN do acervo e parseada em `NoteEvent[]`
 5. **Jogo (PracticeGame)** → Canvas mostra rails coloridos com notas scrollando. Pitch detection compara nota tocada com nota da tab
-6. **Scoring** → Perfect (±55ms + MIDI match), Good (±130ms + MIDI match), Miss (passou da hit line)
+6. **Scoring** → Perfect (de 70 ms antes a 110 ms depois da linha + MIDI exato), Good (de 150 ms antes a 260 ms depois + até um semitom ou uma oitava), Miss (passou da janela)
 7. **Modais** → Usuário pode ajustar interface de áudio, trocar preset do PRGB Amp, buscar outra música
 
 ---
@@ -285,4 +292,4 @@ npm run lint
 | WaveShaper | Nó Web Audio que aplica distorção não-linear (emulação de válvula) |
 | Acervo | Provedor externo de tablaturas (API não oficial) |
 | Rails | As linhas horizontais coloridas do jogo onde as notas passam |
-| Hit Window | Janela de tolerância temporal para acertar uma nota (±130ms) |
+| Hit Window | Janela de tolerância temporal para acertar uma nota (de 150 ms antes a 260 ms depois da linha) |

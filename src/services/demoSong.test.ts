@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { decodeChallenge, encodeChallenge } from './challenge';
 import { DEMO_SONG_ID, getDemoSong } from './demoSong';
 
 describe('getDemoSong', () => {
@@ -30,5 +31,13 @@ describe('getDemoSong', () => {
     const other = getDemoSong();
     other.notes[0].durationMs = 1;
     expect(getDemoSong().notes[0].durationMs).not.toBe(1);
+  });
+});
+
+describe('demo challenge', () => {
+  it('fits in a link, whose text filter refuses reserved words', () => {
+    const { songId, title, artist, trackName } = getDemoSong();
+    const link = encodeChallenge({ v: 1, songId, partId: 0, title, artist, trackName, score: 1000, accuracy: 90, nickname: null });
+    expect(decodeChallenge(link)?.songId).toBe(DEMO_SONG_ID);
   });
 });

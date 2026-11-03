@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CHORD_READ_DELAY_MS,
   CHORD_WINDOW_MS,
   GOOD_POINTS,
+  HIT_EARLY_MS,
+  HIT_LATE_MS,
   MAX_MULTIPLIER,
+  PERFECT_EARLY_MS,
+  PERFECT_LATE_MS,
   PERFECT_POINTS,
   accuracyPercent,
   applyJudgement,
@@ -132,19 +137,25 @@ describe('judgeNote', () => {
   const a3 = note();
   const inTune = heard(57);
 
-  it('is perfect within 55 ms and good within 130 ms, early or late', () => {
-    expect([0, 55, -55].map((diff) => judgeNote(a3, diff, inTune))).toEqual(['perfect', 'perfect', 'perfect']);
-    expect([56, -56, 130, -130].map((diff) => judgeNote(a3, diff, inTune))).toEqual(['good', 'good', 'good', 'good']);
+  it('gives more room after the line, since the pitch is only read after the pick', () => {
+    expect([PERFECT_EARLY_MS, PERFECT_LATE_MS, HIT_EARLY_MS, HIT_LATE_MS]).toEqual([70, 110, 150, 260]);
+  });
+
+  it('is perfect near the line and good further out, on both sides', () => {
+    expect([0, PERFECT_EARLY_MS, -PERFECT_LATE_MS].map((diff) => judgeNote(a3, diff, inTune)))
+      .toEqual(['perfect', 'perfect', 'perfect']);
+    expect([PERFECT_EARLY_MS + 1, -PERFECT_LATE_MS - 1, HIT_EARLY_MS, -HIT_LATE_MS].map((diff) => judgeNote(a3, diff, inTune)))
+      .toEqual(['good', 'good', 'good', 'good']);
   });
 
   it('keeps a note pending before its window opens, even with the right pitch', () => {
-    expect(judgeNote(a3, 131, inTune)).toBeNull();
+    expect(judgeNote(a3, HIT_EARLY_MS + 1, inTune)).toBeNull();
     expect(judgeNote(a3, 5000, inTune)).toBeNull();
   });
 
-  it('misses a note more than 130 ms late, even if the pitch matches now', () => {
-    expect(judgeNote(a3, -131, inTune)).toBe('miss');
-    expect(judgeNote(a3, -131, null)).toBe('miss');
+  it('misses a note past the late edge, even if the pitch matches now', () => {
+    expect(judgeNote(a3, -HIT_LATE_MS - 1, inTune)).toBe('miss');
+    expect(judgeNote(a3, -HIT_LATE_MS - 1, null)).toBe('miss');
   });
 
   it('waits inside the window for a loud enough pitch within a semitone', () => {
@@ -153,6 +164,11 @@ describe('judgeNote', () => {
     expect(judgeNote(a3, 0, heard(57, 0.021))).toBe('perfect');
     expect([56, 58].map((midi) => judgeNote(a3, 0, heard(midi)))).toEqual(['good', 'good']);
     expect([55, 59].map((midi) => judgeNote(a3, 0, heard(midi)))).toEqual([null, null]);
+  });
+
+  it('takes the note one octave off as good: a detector can land there on a low string', () => {
+    expect([45, 69].map((midi) => judgeNote(a3, 0, heard(midi)))).toEqual(['good', 'good']);
+    expect([44, 46, 68, 70, 33, 81].map((midi) => judgeNote(a3, 0, heard(midi)))).toEqual([null, null, null, null, null, null]);
   });
 
   it('gives perfect only for the exact note: a semitone off is at most good', () => {
@@ -172,16 +188,16 @@ describe('judgeNote', () => {
     const ghost = note({ ghost: true });
     expect(judgeNote(ghost, 0, inTune)).toBe('perfect');
     expect(judgeNote(ghost, 100, inTune)).toBe('good');
-    expect(judgeNote(ghost, -130, null)).toBeNull();
-    expect(judgeNote(ghost, -131, null)).toBe('skip');
+    expect(judgeNote(ghost, -HIT_LATE_MS, null)).toBeNull();
+    expect(judgeNote(ghost, -HIT_LATE_MS - 1, null)).toBe('skip');
   });
 
   it('never judges dead or grace notes and skips them once they pass', () => {
     for (const extra of [{ dead: true }, { grace: true }]) {
       const unscored = note(extra);
-      expect([500, 0, 55, -130].map((diff) => judgeNote(unscored, diff, inTune))).toEqual([null, null, null, null]);
-      expect(judgeNote(unscored, -131, inTune)).toBe('skip');
-      expect(judgeNote(unscored, -131, null)).toBe('skip');
+      expect([500, 0, 55, -HIT_LATE_MS].map((diff) => judgeNote(unscored, diff, inTune))).toEqual([null, null, null, null]);
+      expect(judgeNote(unscored, -HIT_LATE_MS - 1, inTune)).toBe('skip');
+      expect(judgeNote(unscored, -HIT_LATE_MS - 1, null)).toBe('skip');
     }
   });
 });
@@ -275,8 +291,8 @@ describe('judgeNote with an attack ledger', () => {
     const spent: AttackLedger = { attackId: 2, noteTimeMs: 500 };
     expect(judgeNote(note({ dead: true }), 0, heard(57, 0.5, 2), spent)).toBeNull();
     expect(judgeNote(note({ ghost: true }), 0, heard(57, 0.5, 2), spent)).toBeNull();
-    expect(judgeNote(note({ ghost: true }), -131, heard(57, 0.5, 2), spent)).toBe('skip');
-    expect(judgeNote(note(), -131, heard(57, 0.5, 2), spent)).toBe('miss');
+    expect(judgeNote(note({ ghost: true }), -HIT_LATE_MS - 1, heard(57, 0.5, 2), spent)).toBe('skip');
+    expect(judgeNote(note(), -HIT_LATE_MS - 1, heard(57, 0.5, 2), spent)).toBe('miss');
     expect(judgeNote(note(), 0, heard(57, 0.5, 3), spent)).toBe('perfect');
   });
 });
@@ -333,7 +349,7 @@ describe('maxPossibleScore', () => {
       let state = createScoreState();
       for (const current of notes) {
         // Sweep the song past the note; each note is settled by its first outcome, as in the game
-        for (let diff = 200; diff >= -200; diff -= 10) {
+        for (let diff = 300; diff >= -300; diff -= 10) {
           const outcome = judgeNote(current, diff, heard(55 + Math.floor(random() * 7)));
           if (!outcome) continue;
           if (outcome !== 'skip') state = applyJudgement(state, outcome);
@@ -342,5 +358,83 @@ describe('maxPossibleScore', () => {
       }
       expect(state.score).toBeLessThanOrEqual(maxPossibleScore(countScorableNotes(notes)));
     }
+  });
+});
+
+describe('exercise chords', () => {
+  const am = { label: 'Am', rootClass: 9, toneClasses: [9, 0, 4] };
+  const anchor = note({ midiNote: 45, chord: am });
+  const member = note({ id: 'note-2', midiNote: 52, chordMember: true });
+  const readingDelay = -CHORD_READ_DELAY_MS;
+
+  it('counts the chord once, by its anchor', () => {
+    expect(isScorable(anchor)).toBe(true);
+    expect(isScorable(member)).toBe(false);
+    expect(countScorableNotes([anchor, member, member])).toBe(1);
+  });
+
+  it('takes the root an octave or two down as a perfect chord, as the detector reports it', () => {
+    expect(judgeNote(anchor, readingDelay, heard(33))).toBe('perfect'); // A1
+    expect(judgeNote(anchor, readingDelay, heard(45))).toBe('perfect'); // A2
+  });
+
+  it('takes any other chord note as good', () => {
+    expect(judgeNote(anchor, readingDelay, heard(36))).toBe('good'); // C2
+    expect(judgeNote(anchor, readingDelay, heard(40))).toBe('good'); // E2
+  });
+
+  it('never takes a note outside the chord', () => {
+    expect(judgeNote(anchor, readingDelay, heard(38))).toBeNull(); // D2
+    expect(judgeNote(anchor, readingDelay, heard(46))).toBeNull(); // Bb2: next to the root, but not in the chord
+  });
+
+  it('allows for a strum being read later than a single note', () => {
+    const late = -(HIT_LATE_MS + CHORD_READ_DELAY_MS);
+    expect(judgeNote(anchor, late, heard(33))).toBe('good');
+    expect(judgeNote(anchor, late - 1, heard(33))).toBe('miss');
+    expect(judgeNote(note({ midiNote: 33 }), late, heard(33))).toBe('miss'); // a single note gets no such room
+  });
+
+  it('does not take an early strum too far ahead', () => {
+    expect(judgeNote(anchor, HIT_EARLY_MS - CHORD_READ_DELAY_MS, heard(33))).toBe('good');
+    expect(judgeNote(anchor, HIT_EARLY_MS - CHORD_READ_DELAY_MS + 1, heard(33))).toBeNull();
+  });
+
+  it('needs a new strum: a chord left ringing hits only once', () => {
+    const ledger = consumeAttack(createAttackLedger(), 7, 1000);
+    const next = note({ midiNote: 45, chord: am, timeMs: 1500 });
+    expect(judgeNote(next, readingDelay, heard(33, 0.5, 7), ledger)).toBeNull();
+    expect(judgeNote(next, readingDelay, heard(33, 0.5, 8), ledger)).toBe('perfect');
+  });
+
+  it('needs sound', () => {
+    expect(judgeNote(anchor, readingDelay, null)).toBeNull();
+    expect(judgeNote(anchor, readingDelay, heard(33, 0.001))).toBeNull();
+  });
+
+  it('misses the chord once and skips the rest of it at the end of a run', () => {
+    expect(judgeNote(anchor, -Infinity, null)).toBe('miss');
+    expect(judgeNote(member, -Infinity, null)).toBe('skip');
+  });
+});
+
+describe('arpeggio notes', () => {
+  const arpeggioNote = note({ midiNote: 60, acceptClasses: [0, 4, 7] });
+
+  it('asks for the written note for a perfect', () => {
+    expect(judgeNote(arpeggioNote, 0, heard(60))).toBe('perfect');
+  });
+
+  it('takes another chord note as good: with strings ringing the detector reads the chord', () => {
+    expect(judgeNote(arpeggioNote, 0, heard(36))).toBe('good'); // C2, the root under it
+    expect(judgeNote(arpeggioNote, 0, heard(40))).toBe('good'); // E2
+  });
+
+  it('still refuses a note outside the chord', () => {
+    expect(judgeNote(arpeggioNote, 0, heard(38))).toBeNull();
+  });
+
+  it('leaves every other note as strict as before', () => {
+    expect(judgeNote(note({ midiNote: 60 }), 0, heard(36))).toBeNull();
   });
 });

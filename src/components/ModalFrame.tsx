@@ -1,20 +1,27 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useEffectEvent, useRef } from 'react';
+import { openModalLayer } from '../context/historyLayers';
 
 export interface ModalFrameProps {
   titleId: string;
   onClose: () => void;
   className?: string;
+  selfOpened?: boolean; // opens with no click behind it, so it can't own a history entry (see historyLayers.ts)
   children: React.ReactNode;
 }
 
-export const ModalFrame: React.FC<ModalFrameProps> = ({ titleId, onClose, className = '', children }) => {
+export const ModalFrame: React.FC<ModalFrameProps> = ({ titleId, onClose, className = '', selfOpened = false, children }) => {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const requestClose = useEffectEvent(onClose);
   useEffect(() => {
     const dialog = dialogRef.current;
     dialog?.showModal();
     dialog?.focus();
-    return () => dialog?.close();
-  }, []);
+    const dropLayer = selfOpened ? null : openModalLayer(() => requestClose());
+    return () => {
+      dropLayer?.();
+      dialog?.close();
+    };
+  }, [selfOpened]);
 
   return (
     <dialog ref={dialogRef} aria-labelledby={titleId} tabIndex={-1}

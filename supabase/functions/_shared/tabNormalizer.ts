@@ -18,6 +18,14 @@ export interface SongMeta {
   }[];
 }
 
+// What a strummed chord is judged by. The pitch detector hears one pitch at a time: on a chord it reports the
+// root, usually an octave or two down, so the root is what can be checked, and A and Am read the same.
+export interface ChordTarget {
+  label: string; // shown over the chord, e.g. "Am7"
+  rootClass: number; // pitch class, 0 = C
+  toneClasses: number[]; // pitch classes of every note of the chord
+}
+
 export interface NoteEvent {
   id: string;
   timeMs: number;
@@ -38,6 +46,10 @@ export interface NoteEvent {
   grace?: boolean; // ornamental, takes no time of its own
   harmonic?: string; // 'natural' | 'artificial' | 'pinch' | ...; midiNote is the sounding pitch when known
   bendSemitones?: number; // highest bend target above midiNote
+  // Set only by the exercises bundled with the app, never by a downloaded tab
+  chord?: ChordTarget; // lowest note of a strummed chord: the one note judged, for the whole chord
+  chordMember?: boolean; // any other note of that chord: drawn, never judged
+  acceptClasses?: number[]; // arpeggio note: with strings ringing together the detector reads the chord, not the note
 }
 
 export interface BeatMark {

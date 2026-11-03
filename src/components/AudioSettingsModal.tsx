@@ -2,6 +2,7 @@ import { ModalFrame } from './ModalFrame';
 import React, { useEffect, useState } from 'react';
 import {
   Mic,
+  Timer,
   Volume2,
   VolumeX,
   CheckCircle2,
@@ -11,6 +12,7 @@ import {
 } from 'lucide-react';
 import { AudioEngine, type InputChannelMode } from '../services/audioEngine';
 import { useAudioSession, useLatestPitch } from '../context/AudioSessionContext';
+import { useModals } from '../context/ModalsContext';
 import { ErrorNotice } from './ErrorNotice';
 import { AudioRouteNotice, InputLevelMeter } from './AudioRouting';
 import { AdvancedAudioOptions, AudioRoutePanel, SignalControls } from './AudioRoutePanel';
@@ -39,6 +41,7 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
 }) => {
   const [isConnecting, setIsConnecting] = useState(false);
   const { isAudioRunning, startAudio, audioError, dismissAudioError } = useAudioSession();
+  const { setLatencyTestOpen } = useModals();
   const ampEngine = audioEngine.getAmp();
   const [toneSettings, setToneSettings] = useState<AmpSettings | null>(
     ampEngine ? ampEngine.getSettings() : null
@@ -245,6 +248,14 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
 
               <AudioInputMeter />
               <SignalControls />
+              <div className="flex items-center justify-between gap-3 rounded-2xl border border-ink-700 bg-ink-950 p-4">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-2 font-display text-base font-bold"><Timer size={16} className="shrink-0 text-signal-300" aria-hidden="true" /> Teste de latência</p>
+                  <p className="mt-0.5 text-xs leading-5 text-ink-300">Mede o atraso da sua guitarra até o PRGB e ajusta a pontuação.</p>
+                </div>
+                <button type="button" onClick={() => { onClose(); setLatencyTestOpen(true); }}
+                  className="min-h-11 shrink-0 cursor-pointer rounded-xl border border-ink-600 bg-ink-850 px-4 text-sm font-semibold text-ink-100 transition hover:border-ink-400">Fazer teste</button>
+              </div>
             </div>
           </div>
 
