@@ -11,6 +11,7 @@ export type RankingErrorCode =
   | 'not_configured' // VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY missing
   | 'network'
   | 'unknown'
+  | 'captcha_failed' // Auth refused the anti-robot check: token missing, expired or already used
   // Any call
   | 'not_authenticated'
   | 'invalid_input'
@@ -72,6 +73,7 @@ export function toRankingError(error: unknown): RankingError {
   if (typeof error === 'object' && error !== null) {
     const { message, code, name, status } = error as Record<string, unknown>;
     if (isServerCode(message)) return new RankingError(message, { cause: error });
+    if (code === 'captcha_failed') return new RankingError('captcha_failed', { cause: error });
     // Permission denied (anon calling a player RPC) or a JWT PostgREST refused
     if (code === '42501' || (typeof code === 'string' && /^PGRST30[123]$/.test(code)) || status === 401) {
       return new RankingError('not_authenticated', { cause: error });
@@ -133,6 +135,7 @@ export interface TermsAcceptance {
 
 export interface CreateProfileInput extends TermsAcceptance {
   nickname: string;
+  captchaToken?: string; // for the new account when the stored one turns out to be gone
 }
 
 /**
@@ -352,8 +355,9 @@ export async function getSession(): Promise<RankingSession | null> {
 /**
  * Returns the session, creating an anonymous account when there is none. Call it only after the player
  * accepted the terms and confirmed being 18+: the account is the start of data processing (LGPD).
+ * `captchaToken` (Turnstile) is only sent when an account is created, and is spent by that attempt.
  */
-export async function ensureAnonymousSession(): Promise<RankingSession> {
+export async function ensureAnonymousSession(captchaToken?: string): Promise<RankingSession> {
   const client = await requireClient();
   try {
     const existing = await readSession(client);
@@ -368,11 +372,13 @@ export async function ensureAnonymousSession(): Promise<RankingSession> {
     if (toRankingError(error).code !== 'not_authenticated') throw toRankingError(error);
     await signOutLocally(client);
   }
-  return signInAnonymously(client);
+  return signInAnonymously(client, captchaToken);
 }
 
-async function signInAnonymously(client: SupabaseClient): Promise<RankingSession> {
-  const { data, error } = await client.auth.signInAnonymously();
+async function signInAnonymously(client: SupabaseClient, captchaToken?: string): Promise<RankingSession> {
+  const { data, error } = await (captchaToken
+    ? client.auth.signInAnonymously({ options: { captchaToken } })
+    : client.auth.signInAnonymously());
   if (error || !data.user) throw toRankingError(error);
   return toSession(data.user);
 }
@@ -396,7 +402,8 @@ export async function getMyProfile(): Promise<RankingProfile | null> {
 /**
  * Creates the profile with the consent given right now. If the stored session belongs to an account that no
  * longer exists, it signs in anonymously again and retries once (the player is consenting, so the new
- * account is covered).
+ * account is covered). That sign-in sends `input.captchaToken`; if it was already spent, it fails with
+ * captcha_failed and the caller asks for a new one.
  */
 export async function createProfile(input: CreateProfileInput): Promise<RankingProfile> {
   const client = await requireClient();
@@ -411,7 +418,7 @@ export async function createProfile(input: CreateProfileInput): Promise<RankingP
   } catch (error) {
     if (!(error instanceof RankingError) || error.code !== 'not_authenticated') throw error;
     await signOutLocally(client);
-    await signInAnonymously(client);
+    await signInAnonymously(client, input.captchaToken);
     return create();
   }
 }
