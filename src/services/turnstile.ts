@@ -81,6 +81,8 @@ export interface CaptchaOptions {
   onToken: (token: string) => void;
   onExpire: () => void; // the token is no longer valid; Turnstile fetches a new one by itself
   onError: (code: string) => void;
+  // Aborted when the field unmounts while the script loads: rendering then would put a second widget in the same container
+  signal?: AbortSignal;
 }
 
 export interface CaptchaWidget {
@@ -89,9 +91,10 @@ export interface CaptchaWidget {
 }
 
 /** Renders the widget into `container`; null without a site key, in which case nothing is loaded. */
-export async function renderCaptcha(container: HTMLElement, { siteKey, onToken, onExpire, onError }: CaptchaOptions): Promise<CaptchaWidget | null> {
+export async function renderCaptcha(container: HTMLElement, { siteKey, onToken, onExpire, onError, signal }: CaptchaOptions): Promise<CaptchaWidget | null> {
   if (!siteKey) return null;
   const turnstile = await loadTurnstile();
+  if (signal?.aborted) return null;
   const widgetId = turnstile.render(container, {
     sitekey: siteKey,
     callback: onToken,

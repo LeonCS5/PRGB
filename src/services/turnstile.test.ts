@@ -118,6 +118,21 @@ describe('renderCaptcha', () => {
     expect(turnstile.remove).toHaveBeenCalledWith('widget-1');
   });
 
+  it('renders nothing when the field went away while the script loaded', async () => {
+    // React mounts a field twice in development: the first mount must not leave a widget the second one would lose
+    const { renderCaptcha } = await load();
+    const abort = new AbortController();
+    const gone = renderCaptcha(container, { siteKey: 'site-key', ...handlers, signal: abort.signal });
+    const kept = renderCaptcha(container, { siteKey: 'site-key', ...handlers });
+    abort.abort();
+    const turnstile = fakeTurnstile();
+    fakeWindow.turnstile = turnstile;
+    scripts[0].onload?.();
+    expect(await gone).toBeNull();
+    expect(await kept).not.toBeNull();
+    expect(turnstile.render).toHaveBeenCalledTimes(1);
+  });
+
   it('passes the token, expiry and errors on, marking errors as handled', async () => {
     const { renderCaptcha } = await load();
     const turnstile = fakeTurnstile();

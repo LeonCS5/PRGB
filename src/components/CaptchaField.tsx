@@ -24,8 +24,10 @@ export const CaptchaField: React.FC<CaptchaFieldProps> = ({ siteKey, onToken }) 
     if (!container) return;
     let active = true;
     let widget: CaptchaWidget | null = null;
+    const abort = new AbortController();
     renderCaptcha(container, {
       siteKey,
+      signal: abort.signal,
       onToken: (token) => {
         if (!active) return;
         setStatus('ready');
@@ -52,6 +54,7 @@ export const CaptchaField: React.FC<CaptchaFieldProps> = ({ siteKey, onToken }) 
     });
     return () => {
       active = false;
+      abort.abort();
       widget?.remove();
       widgetRef.current = null;
       reportToken(null);
