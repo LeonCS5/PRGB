@@ -61,11 +61,27 @@ describe('legal documents', () => {
     const retention = sectionText(PRIVACY_POLICY, 'retencao');
     for (const period of ['12 meses', '8 semanas', '7 dias', '180 dias']) expect(retention).toContain(period);
     const sharing = sectionText(PRIVACY_POLICY, 'compartilhamento');
-    for (const party of ['Vercel', 'Supabase', 'Provedor externo de tablaturas']) expect(sharing).toContain(party);
-    expect(sectionText(PRIVACY_POLICY, 'transferencia-internacional')).toContain('Estados Unidos');
+    for (const party of ['Vercel', 'Supabase', 'Cloudflare', 'Provedor externo de tablaturas']) expect(sharing).toContain(party);
+    const transfer = sectionText(PRIVACY_POLICY, 'transferencia-internacional');
+    expect(transfer).toContain('Estados Unidos');
+    expect(transfer).toContain('Cloudflare');
     const legalBases = sectionText(PRIVACY_POLICY, 'bases-legais');
     expect(legalBases).toContain('art. 7º, I)');
     expect(legalBases).toContain('art. 7º, IX)');
+  });
+
+  // The anti-bot check runs only when a ranking account is created; a new provider needs a new LEGAL_VERSION.
+  it('describe the anti-bot check at account creation and the provider behind it', () => {
+    expect(LEGAL_VERSION >= '2026-11-04').toBe(true);
+    const check = sectionText(PRIVACY_POLICY, 'verificacao-anti-robo');
+    for (const fact of ['Cloudflare', 'challenges.cloudflare.com', 'ainda não tem conta', 'Quem só joga', 'endereço IP', 'não recebe nem guarda']) {
+      expect(check).toContain(fact);
+    }
+    expect(sectionText(PRIVACY_POLICY, 'bases-legais')).toMatch(/Legítimo interesse \(art\. 7º, IX\)[^\n]*verificação anti-robô/);
+    expect(sectionText(PRIVACY_POLICY, 'retencao')).toContain('verificação anti-robô');
+    expect(sectionText(PRIVACY_POLICY, 'sala-online')).toContain('verificação anti-robô');
+    expect(sectionText(TERMS_OF_USE, 'ranking-e-sala-online')).toContain('Cloudflare');
+    expect(CONSENT_COPY.rankingSummary.join('\n')).toContain('Cloudflare');
   });
 
   it('name the controller and the channel for data subjects and the ANPD', () => {
