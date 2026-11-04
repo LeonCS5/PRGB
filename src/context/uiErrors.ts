@@ -8,6 +8,7 @@ const RANKING_ERROR_MESSAGES: Record<RankingErrorCode, string> = {
   not_configured: 'O ranking não está disponível neste site.',
   network: 'Sem conexão com o ranking. Verifique sua internet e tente novamente.',
   unknown: 'Não foi possível falar com o ranking agora. Tente novamente em instantes.',
+  captcha_failed: 'A verificação contra robôs não foi aceita ou expirou. Faça a verificação de novo e tente outra vez.',
   not_authenticated: 'Sua sessão do ranking não vale mais. Entre no ranking de novo para continuar.',
   invalid_input: 'O ranking recusou os dados enviados. Recarregue a página e tente novamente.',
   rate_limited: 'Muitas tentativas em pouco tempo. Espere alguns minutos e tente de novo.',

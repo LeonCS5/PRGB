@@ -79,6 +79,7 @@ src/
 │   ├── PracticeGame.tsx             # ⭐ Canvas game principal (rails de notas, scoring, metrônomo)
 │   ├── AudioSettingsModal.tsx       # Modal de configuração de interface de áudio + afinador
 │   ├── BrandMark.tsx                # Logo PRGB
+│   ├── CaptchaField.tsx             # Verificação contra robôs na entrada do ranking
 │   ├── ChallengeCard.tsx / ChallengeSharePanel.tsx  # Desafios entre jogadores
 │   ├── DeleteAccountConfirm.tsx     # Confirmação de exclusão de conta
 │   ├── DuoSetupModal.tsx            # Configuração de sessão duo (duas guitarras)
@@ -116,6 +117,7 @@ src/
 │   ├── records.ts                   # Recordes pessoais locais (localStorage)
 │   ├── scoring.ts                   # Motor de scoring: judgeNote, multiplier, accuracy
 │   ├── tabsApi.ts                   # Client da API de tablaturas: busca, meta, download de tabs, normalização
+│   ├── turnstile.ts                 # CAPTCHA da Cloudflare, carregado sob demanda
 │   ├── synthAudio.ts                # Sintetizador de notas, MetronomeScheduler e efeitos sonoros do jogo
 │   ├── ampEngine.ts               # ⭐ DSP engine: preamp, waveshaper, tone stack, cab sim, reverb
 │   ├── *.test.ts                    # Testes Vitest de cada service

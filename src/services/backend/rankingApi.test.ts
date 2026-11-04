@@ -55,6 +55,7 @@ describe('toRankingError', () => {
     [{ __isAuthError: true, name: 'AuthApiError', status: 403, code: 'user_not_found' }, 'not_authenticated'],
     [{ __isAuthError: true, name: 'AuthApiError', status: 400, code: 'refresh_token_not_found' }, 'not_authenticated'],
     [{ __isAuthError: true, name: 'AuthSessionMissingError', status: 400 }, 'not_authenticated'],
+    [{ __isAuthError: true, name: 'AuthApiError', status: 400, code: 'captcha_failed' }, 'captcha_failed'],
     [{ message: 'something else', code: 'XX000' }, 'unknown'],
     [null, 'unknown'],
     ['boom', 'unknown']
@@ -138,6 +139,35 @@ describe('session and profile', () => {
     await rejectsWith(api.ensureAnonymousSession(), 'rate_limited');
   });
 
+  it('sends the CAPTCHA token only when it creates an account', async () => {
+    useClient(fakeClient({ session: false }));
+    await api.ensureAnonymousSession();
+    expect(client.auth.signInAnonymously).toHaveBeenCalledWith();
+
+    useClient(fakeClient({ session: false }));
+    await api.ensureAnonymousSession('token-1');
+    expect(client.auth.signInAnonymously).toHaveBeenCalledWith({ options: { captchaToken: 'token-1' } });
+
+    // A stored session is kept: no token asked for, none spent
+    useClient(fakeClient());
+    expect(await api.ensureAnonymousSession('token-2')).toEqual({ userId: 'user-1', isAnonymous: true });
+    expect(client.auth.signInAnonymously).not.toHaveBeenCalled();
+  });
+
+  it('sends the CAPTCHA token when replacing a stored session whose account is gone', async () => {
+    client.auth.getUser.mockResolvedValue(
+      { data: { user: null }, error: { __isAuthError: true, name: 'AuthApiError', status: 403, code: 'user_not_found' } });
+    await api.ensureAnonymousSession('token-1');
+    expect(client.auth.signInAnonymously).toHaveBeenCalledWith({ options: { captchaToken: 'token-1' } });
+  });
+
+  it('maps a refused CAPTCHA', async () => {
+    useClient(fakeClient({ session: false }));
+    client.auth.signInAnonymously.mockResolvedValue({ data: { user: null, session: null },
+      error: { __isAuthError: true, name: 'AuthApiError', status: 400, code: 'captcha_failed' } } as never);
+    await rejectsWith(api.ensureAnonymousSession('used-token'), 'captcha_failed');
+  });
+
   it('returns no profile without a session, without calling the server', async () => {
     useClient(fakeClient({ session: false }));
     expect(await api.getMyProfile()).toBeNull();
@@ -165,6 +195,16 @@ describe('session and profile', () => {
     await rejectsWith(api.createProfile({ nickname: 'Ana', ageConfirmed: true, consent: true, consentVersion: 'v1' }),
       'not_authenticated');
     expect(client.rpc).toHaveBeenCalledTimes(2);
+  });
+
+  it('sends the CAPTCHA token on the new account, never to the profile RPC', async () => {
+    const gone: RpcResult = { data: null, error: { message: 'not_authenticated', code: 'P0001' }, status: 400 };
+    client.rpc.mockResolvedValueOnce(gone).mockResolvedValueOnce({ data: PROFILE, error: null, status: 200 });
+    await api.createProfile({ nickname: 'Ana', ageConfirmed: true, consent: true, consentVersion: 'v1', captchaToken: 'token-1' });
+    expect(client.auth.signInAnonymously).toHaveBeenCalledWith({ options: { captchaToken: 'token-1' } });
+    expect(client.rpc).toHaveBeenLastCalledWith('create_profile', {
+      p_nickname: 'Ana', p_age_confirmed: true, p_consent: true, p_consent_version: 'v1'
+    });
   });
 
   it('records a new acceptance of the terms', async () => {

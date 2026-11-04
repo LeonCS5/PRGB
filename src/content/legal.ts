@@ -37,7 +37,7 @@ export interface ConsentCopy {
   clearLocalLabel: string;
 }
 
-export const LEGAL_VERSION: string = '2026-11-01';
+export const LEGAL_VERSION: string = '2026-11-04';
 
 export const LEGAL_CONTACT: LegalContact = {
   controller: 'Leonam Candido',
@@ -65,6 +65,7 @@ export const PRIVACY_POLICY: LegalDocument = {
     'O som da guitarra ou do microfone é processado no seu aparelho e nunca é gravado nem enviado.',
     'Ranking e sala online são opcionais, só para maiores de 18 anos, e dependem do seu consentimento.',
     'No ranking, a conta é anônima: guardamos o apelido que você escolher (público), um ID aleatório e suas pontuações, sem e-mail, senha, nome real ou telefone.',
+    'Ao criar a conta do ranking, uma verificação anti-robô da Cloudflare recebe dados técnicos do seu navegador. Quem só joga, sem ranking, nunca carrega nada da Cloudflare.',
     'Você pode baixar seus dados, trocar o apelido ou excluir a conta quando quiser, direto no app.',
     'A caixa “Reportar problema” não pede nome nem e-mail: guardamos só a categoria, a tela e o texto, por 180 dias.',
     'Como em todo site, a hospedagem registra dados técnicos de acesso, como o endereço IP.',
@@ -92,6 +93,7 @@ export const PRIVACY_POLICY: LegalDocument = {
         'Registros técnicos de acesso: como qualquer site, a hospedagem (Vercel) registra dados técnicos de cada visita, como endereço IP, data e hora, endereço da página e informações do navegador (user agent). Quando você abre o ranking ou usa a sala online, o Supabase registra dados técnicos parecidos das conexões. Se você tiver conta no ranking, o sistema de login do Supabase também guarda, junto da conta, dados das sessões de acesso (como endereço IP e navegador); eles são apagados quando a conta é excluída.',
         'Busca de músicas: o termo pesquisado e a música que você abre são repassados ao provedor externo de tablaturas.',
         'Ranking (opcional, para maiores de 18 anos): apelido, ID aleatório da conta, pontuações e datas, detalhados em “Ranking: o que guardamos”.',
+        'Verificação anti-robô (só ao criar a conta do ranking): dados técnicos do navegador e da conexão, recebidos e tratados pela Cloudflare, e não pelo PRGB, detalhados em “Verificação anti-robô”.',
         'Sala online em dupla (opcional, para maiores de 18 anos): apelido e placar ao vivo, repassados ao seu parceiro sem serem gravados, e o registro temporário da sua vaga na sala (código da sala, ID pseudônimo e horário de entrada).',
         'Relatos de problemas: se você usar a caixa “Reportar problema”, guardamos a categoria, a tela em que você estava e o texto que escreveu. Esse registro não tem nome, e-mail, conta nem endereço IP. Como em qualquer pedido, o envio passa pelos registros técnicos de acesso do Supabase, que incluem o endereço IP e seguem os prazos do fornecedor. Evite escrever dados pessoais no texto.',
         'Contato por e-mail: se você escrever para nós, recebemos seu endereço de e-mail e o que você contar na mensagem.'
@@ -142,11 +144,22 @@ export const PRIVACY_POLICY: LegalDocument = {
       ]
     },
     {
+      id: 'verificacao-anti-robo',
+      title: 'Verificação anti-robô',
+      paragraphs: [
+        'Para impedir que robôs criem contas automaticamente, quem entra no ranking e ainda não tem conta passa por uma verificação anti-robô (CAPTCHA) da Cloudflare antes de a conta anônima ser criada. A sala online usa a mesma conta do ranking, então quem entra numa sala sem ter conta passa pela mesma verificação. Quem só joga, sem ranking, nunca carrega nada da Cloudflare.',
+        'A verificação é carregada de challenges.cloudflare.com. Para fazê-la, a Cloudflare recebe dados técnicos do navegador e da conexão, como endereço IP, informações do navegador e sinais de interação com a página, e os trata conforme a política de privacidade dela.',
+        'O PRGB não recebe nem guarda esses dados. Recebe só o resultado da verificação, um código de uso único, que é enviado ao Supabase para liberar a criação da conta e não é guardado pelo PRGB.',
+        'Se não quiser passar pela verificação, você continua usando todo o PRGB, só sem ranking e sala online.'
+      ]
+    },
+    {
       id: 'sala-online',
       title: 'Sala online em dupla',
       paragraphs: [
         'A sala online é opcional e só para maiores de 18 anos. Durante a partida, seu parceiro vê seu apelido e, ao vivo, seus pontos, seu combo e sua precisão, e você vê os dele.',
         'Essas informações e os comandos da partida passam pelo serviço de tempo real do Supabase só para chegar ao outro jogador e não são gravados. O som da sua guitarra nunca é transmitido.',
+        'A sala online usa a mesma conta do ranking: se você ainda não tem conta, ela é criada como no ranking, com a verificação anti-robô.',
         'Para que só você e seu parceiro consigam entrar na sala, guardamos a sua vaga: o código da sala, o ID pseudônimo da conta e o horário de entrada. Esse registro é apagado quando a sala acaba ou, no máximo, em 6 horas. Para limitar abusos, guardamos também, por cerca de 1 hora, os horários em que você criou salas, sem os códigos.'
       ]
     },
@@ -161,6 +174,7 @@ export const PRIVACY_POLICY: LegalDocument = {
         'buscar as tablaturas no provedor externo;',
         'mostrar o ranking, guardar suas pontuações e calcular sua posição;',
         'conferir automaticamente se as pontuações são possíveis e evitar trapaças e abusos;',
+        'impedir que robôs criem contas no ranking automaticamente;',
         'ligar você ao seu parceiro na sala online;',
         'ler os relatos de problemas e corrigir o que não funciona;',
         'registrar seu consentimento e atender aos seus pedidos como titular dos dados;',
@@ -175,7 +189,7 @@ export const PRIVACY_POLICY: LegalDocument = {
       ],
       items: [
         `Consentimento (art. 7º, I): para criar a conta do ranking, publicar seu apelido e suas pontuações e usar a sala online. Você pode revogá-lo quando quiser, sem custo, excluindo a conta com o botão “${DELETE_LABEL}” ou deixando de usar a sala. Sem consentimento, você continua usando o PRGB normalmente, só sem esses recursos.`,
-        'Legítimo interesse (art. 7º, IX): para os registros técnicos de acesso, a segurança do site, a prevenção de fraudes no ranking e a leitura dos relatos de problemas, sempre com o mínimo de dados necessário.',
+        'Legítimo interesse (art. 7º, IX): para os registros técnicos de acesso, a segurança do site, a prevenção de fraudes no ranking, a verificação anti-robô feita pela Cloudflare ao criar a conta e a leitura dos relatos de problemas, sempre com o mínimo de dados necessário.',
         'Execução de contrato (art. 7º, V): para entregar o site e os recursos que você usa, conforme os Termos de Uso.',
         'Cumprimento de obrigação legal (art. 7º, II): quando a lei ou uma autoridade competente exigir que guardemos ou forneçamos dados.'
       ]
@@ -185,12 +199,13 @@ export const PRIVACY_POLICY: LegalDocument = {
       title: 'Com quem compartilhamos',
       paragraphs: [
         'Não vendemos nem alugamos dados pessoais. O site não usa serviços de terceiros para estatísticas, publicidade ou fontes: até as fontes são servidas pelo próprio PRGB. Links externos, como o de doação e o do GitHub, levam a sites com regras e políticas de privacidade próprias.',
-        'Compartilhamos dados só com quem está listado abaixo. O Supabase atua como operador: trata os dados do ranking e os relatos em nosso nome, sob um adendo de tratamento de dados. A Vercel hospeda o site e trata os registros de acesso pelos termos e pela política de privacidade dela.',
+        'Compartilhamos dados só com quem está listado abaixo. O Supabase atua como operador: trata os dados do ranking e os relatos em nosso nome, sob um adendo de tratamento de dados. A Vercel hospeda o site e trata os registros de acesso pelos termos e pela política de privacidade dela. A Cloudflare faz a verificação anti-robô e trata os dados dessa verificação pela política de privacidade dela.',
         'O Supabase lista seus suboperadores em supabase.com/legal/customer-resources/subprocessor-list, e a Vercel, em security.vercel.com.'
       ],
       items: [
         'Vercel (Vercel Inc., Estados Unidos): hospeda o site, entrega os arquivos por uma rede global de servidores e repassa ao provedor de tablaturas os pedidos de busca e de música. Trata os registros técnicos de acesso.',
         'Supabase (Supabase Pte. Ltd., Singapura): guarda os dados do ranking e os relatos de problemas em servidores na região de São Paulo e transmite as mensagens da sala online. Para conferir pontuações, consulta no provedor de tablaturas dados públicos das faixas, como o número de notas e a duração, sem enviar dados seus.',
+        'Cloudflare (Cloudflare, Inc., Estados Unidos): faz a verificação anti-robô quando você cria a conta do ranking, carregada de challenges.cloudflare.com só nesse momento. Recebe dados técnicos do navegador e da conexão, como endereço IP, informações do navegador e sinais de interação com a página, e os trata conforme a política de privacidade dela. O PRGB recebe só o resultado da verificação e não o guarda.',
         'Provedor externo de tablaturas: serviço de terceiro que fornece o acervo de músicas. Recebe, repassados pela Vercel, o termo que você busca e os códigos da música e da faixa que você abre. Esses pedidos podem levar dados técnicos, como endereço IP e tipo de navegador, que ele trata conforme a política de privacidade dele. Ele nunca recebe dados da sua conta do ranking. Você pode pedir o nome desse provedor pelo e-mail desta Política.',
         'Outros jogadores: veem seu apelido e suas pontuações no ranking e, na sala online, seu placar ao vivo.',
         'Autoridades: só quando a lei ou uma ordem judicial exigir.'
@@ -200,8 +215,8 @@ export const PRIVACY_POLICY: LegalDocument = {
       id: 'transferencia-internacional',
       title: 'Transferência internacional',
       paragraphs: [
-        'A Vercel é uma empresa dos Estados Unidos e entrega o site por servidores espalhados pelo mundo. O Supabase tem sede em Singapura e guarda o banco de dados do ranking na região de São Paulo, mas pode tratar dados fora do Brasil, por exemplo em suporte e em registros técnicos. Por isso, pode haver transferência internacional de dados.',
-        'Essas transferências acontecem para entregar o site e os recursos que você pede (art. 33, IX, combinado com o art. 7º, V, da LGPD) e, no ranking e na sala online, com o seu consentimento, pedido antes de você entrar (art. 33, VIII).'
+        'A Vercel é uma empresa dos Estados Unidos e entrega o site por servidores espalhados pelo mundo. O Supabase tem sede em Singapura e guarda o banco de dados do ranking na região de São Paulo, mas pode tratar dados fora do Brasil, por exemplo em suporte e em registros técnicos. A Cloudflare, também dos Estados Unidos, trata fora do Brasil os dados da verificação anti-robô feita ao criar a conta. Por isso, pode haver transferência internacional de dados.',
+        'Essas transferências acontecem para entregar o site e os recursos que você pede (art. 33, IX, combinado com o art. 7º, V, da LGPD) e, no ranking e na sala online, inclusive na verificação anti-robô, com o seu consentimento, pedido antes de você entrar (art. 33, VIII).'
       ]
     },
     {
@@ -230,6 +245,7 @@ export const PRIVACY_POLICY: LegalDocument = {
         'registros técnicos das partidas ranqueadas: 7 dias;',
         'sala online: mensagens e placar ao vivo não são gravados; o registro da vaga na sala é apagado em até 6 horas, e os horários de criação de salas, em cerca de 1 hora;',
         'registros técnicos de acesso da Vercel e do Supabase: pelos prazos definidos por esses fornecedores;',
+        'verificação anti-robô: o PRGB não guarda os dados nem o resultado; a Cloudflare os trata pelos prazos definidos por ela;',
         'cópias de segurança automáticas do banco, quando o Supabase as mantém: descartadas no ciclo do fornecedor, em poucos dias; nunca as usamos para recuperar dados que você excluiu;',
         'relatos de problemas: 180 dias;',
         'e-mails de contato: pelo tempo necessário para atender ao seu pedido;',
@@ -266,6 +282,7 @@ export const PRIVACY_POLICY: LegalDocument = {
         'o áudio nunca sai do seu aparelho;',
         'a comunicação com o site e com o Supabase é criptografada (HTTPS);',
         'o app não lê as tabelas do banco diretamente: tudo passa por funções que só devolvem os dados da sua própria conta ou o ranking público, que mostra apelido e números, nunca o ID da conta;',
+        'a criação de contas no ranking passa por uma verificação anti-robô;',
         'o servidor confere as pontuações e limita a quantidade de envios para dificultar abusos.'
       ]
     },
@@ -387,6 +404,7 @@ export const TERMS_OF_USE: LegalDocument = {
       title: 'Ranking e sala online',
       paragraphs: [
         'Para entrar no ranking, você confirma que tem 18 anos ou mais e aceita publicar seu apelido e suas pontuações. A conta é anônima e fica ligada ao navegador em que foi criada: se você limpar os dados do site, pode perder o acesso a ela.',
+        `Antes de a conta ser criada, você passa por uma verificação anti-robô feita pela Cloudflare, descrita na ${PRIVACY_TITLE}. A sala online usa a mesma conta. Sem a verificação, você continua usando o PRGB, só sem ranking e sala online.`,
         'As pontuações são calculadas no seu navegador e conferidas pelo servidor, que recusa resultados impossíveis para a música. Só valem para o ranking partidas na velocidade normal (1×).',
         'Cada apelido é único no ranking, e apelidos com termos proibidos são recusados automaticamente. Posições no ranking não dão direito a prêmios e podem mudar ou ser corrigidas a qualquer momento.',
         'Na sala online, seu parceiro vê seu apelido e seu placar ao vivo. Jogue com respeito.'
@@ -480,7 +498,7 @@ export const CONSENT_COPY: ConsentCopy = {
   ageLabel: 'Confirmo que tenho 18 anos ou mais.',
   rankingLabel: `Quero entrar no ranking: aceito que meu apelido e minhas pontuações fiquem públicos, conforme a ${PRIVACY_TITLE} e os ${TERMS_TITLE}.`,
   rankingSummary: [
-    'Criamos uma conta anônima, sem e-mail, senha, nome real ou telefone. Ela fica só neste navegador: se você limpar os dados do site, perde o acesso.',
+    'Criamos uma conta anônima, sem e-mail, senha, nome real ou telefone. Ela fica só neste navegador: se você limpar os dados do site, perde o acesso. Antes de criá-la, uma verificação anti-robô da Cloudflare, empresa dos Estados Unidos, recebe dados técnicos do seu navegador, que o PRGB não guarda.',
     'Guardamos seu apelido, suas pontuações ranqueadas e as datas do aceite e do último acesso no Supabase, nosso fornecedor, com servidores em São Paulo. Ele tem sede fora do Brasil, então esses dados podem ser tratados no exterior.',
     'Qualquer pessoa vê seu apelido e suas pontuações no ranking; o ID da conta nunca aparece.',
     'Sem uso por 12 meses, a conta é apagada automaticamente. O ranking semanal guarda 8 semanas.',

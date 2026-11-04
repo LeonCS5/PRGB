@@ -1,5 +1,6 @@
 import React, { useId, useState } from 'react';
 import { Loader2, ShieldCheck, Trophy, X } from 'lucide-react';
+import { CaptchaField } from './CaptchaField';
 import { ModalFrame } from './ModalFrame';
 import { checkboxInput, checkboxRow, closeButton, primaryButton, secondaryButton, textInput } from './rankingStyles';
 import { CONSENT_COPY, LEGAL_VERSION } from '../content/legal';
@@ -8,8 +9,14 @@ import { useRanking, type RankingEntryMode } from '../context/ranking';
 import { getRankingErrorMessage } from '../context/uiErrors';
 import { toRankingError } from '../services/backend/rankingApi';
 import { NICKNAME_ERROR_MESSAGES, validateNickname } from '../services/nickname';
+import { canShowCaptcha, getTurnstileSiteKey } from '../services/turnstile';
 
 const TITLE_ID = 'ranking-entry-title';
+const CAPTCHA_SITE_KEY = getTurnstileSiteKey();
+
+// "a, b e c"
+const joinSteps = (steps: string[]): string =>
+  steps.length < 2 ? steps.join('') : `${steps.slice(0, -1).join(', ')} e ${steps[steps.length - 1]}`;
 
 export interface RankingEntryModalProps {
   mode: RankingEntryMode;
@@ -24,9 +31,26 @@ export const RankingEntryModal: React.FC<RankingEntryModalProps> = ({ mode }) =>
   const [hasConsented, setHasConsented] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Only creating an account asks for the CAPTCHA: none when a session is stored, unless Auth asks for it
+  const [needsCaptcha, setNeedsCaptcha] = useState(() => isCreating && CAPTCHA_SITE_KEY !== null && !api.hasStoredSession());
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaRound, setCaptchaRound] = useState(0);
+  const captchaRequired = isCreating && CAPTCHA_SITE_KEY !== null && needsCaptcha;
+  // The widget mounts only after both boxes are ticked; unticking one unmounts it and drops its token
+  const showCaptcha = canShowCaptcha({ createsAccount: captchaRequired, siteKey: CAPTCHA_SITE_KEY, ageConfirmed: isAdult, consent: hasConsented });
   const checkedNickname = validateNickname(nickname);
   const nicknameError = isCreating && nickname.trim() && !checkedNickname.ok ? NICKNAME_ERROR_MESSAGES[checkedNickname.error] : null;
-  const canSend = isAdult && hasConsented && (!isCreating || checkedNickname.ok);
+  const canSend = isAdult && hasConsented && (!isCreating || checkedNickname.ok) && (!captchaRequired || captchaToken !== null);
+  const missingSteps = [
+    ...(isCreating ? ['escolha um apelido válido'] : []),
+    'marque as duas caixas',
+    ...(captchaRequired ? ['conclua a verificação contra robôs'] : [])
+  ];
+
+  const setBox = (setChecked: (checked: boolean) => void, checked: boolean) => {
+    setChecked(checked);
+    if (!checked) setCaptchaToken(null);
+  };
 
   // Stays open while a request runs, so an account is never created behind a closed window
   const cancel = () => {
@@ -37,6 +61,7 @@ export const RankingEntryModal: React.FC<RankingEntryModalProps> = ({ mode }) =>
     event.preventDefault();
     if (!canSend || isSending) return;
     const acceptance = { ageConfirmed: isAdult, consent: hasConsented, consentVersion: LEGAL_VERSION };
+    const token = captchaRequired && captchaToken ? captchaToken : undefined;
     setIsSending(true);
     setError(null);
     try {
@@ -46,13 +71,22 @@ export const RankingEntryModal: React.FC<RankingEntryModalProps> = ({ mode }) =>
       }
       if (!checkedNickname.ok) return;
       // Only here, after the choices above: the account is the start of data processing (LGPD)
-      await api.ensureAnonymousSession();
-      finishEntry(await api.createProfile({ ...acceptance, nickname: checkedNickname.value }));
+      await api.ensureAnonymousSession(token);
+      finishEntry(await api.createProfile({ ...acceptance, nickname: checkedNickname.value, captchaToken: token }));
     } catch (err) {
-      const existing = toRankingError(err).code === 'profile_exists' ? await api.getMyProfile().catch(() => null) : null;
+      const code = toRankingError(err).code;
+      const existing = code === 'profile_exists' ? await api.getMyProfile().catch(() => null) : null;
       if (existing) {
         finishEntry(existing);
         return;
+      }
+      if (isCreating && CAPTCHA_SITE_KEY !== null) {
+        // A token is single use: whatever failed, the next account creation needs a new one
+        setNeedsCaptcha(code === 'captcha_failed' || !api.hasStoredSession());
+        if (token) {
+          setCaptchaToken(null);
+          setCaptchaRound((round) => round + 1);
+        }
       }
       setError(getRankingErrorMessage(err));
       setIsSending(false);
@@ -92,11 +126,11 @@ export const RankingEntryModal: React.FC<RankingEntryModalProps> = ({ mode }) =>
         )}
 
         <label className={checkboxRow}>
-          <input type="checkbox" checked={isAdult} onChange={(event) => setIsAdult(event.target.checked)} className={checkboxInput} />
+          <input type="checkbox" checked={isAdult} onChange={(event) => setBox(setIsAdult, event.target.checked)} className={checkboxInput} />
           <span>{CONSENT_COPY.ageLabel}</span>
         </label>
         <label className={checkboxRow}>
-          <input type="checkbox" checked={hasConsented} onChange={(event) => setHasConsented(event.target.checked)} className={checkboxInput} />
+          <input type="checkbox" checked={hasConsented} onChange={(event) => setBox(setHasConsented, event.target.checked)} className={checkboxInput} />
           <span>
             {splitLegalLabel(CONSENT_COPY.rankingLabel).map(({ text, href }) => href
               // A new tab keeps what was typed here and the song in the game
@@ -104,6 +138,8 @@ export const RankingEntryModal: React.FC<RankingEntryModalProps> = ({ mode }) =>
               : text)}
           </span>
         </label>
+
+        {showCaptcha && CAPTCHA_SITE_KEY !== null && <CaptchaField key={captchaRound} siteKey={CAPTCHA_SITE_KEY} onToken={setCaptchaToken} />}
 
         {!isCreating && (
           <p className="text-xs leading-5 text-ink-300">Sem aceitar, você continua tocando normalmente, só fora do ranking. Você ainda pode baixar seus dados ou excluir a conta em “Minha conta do ranking”.</p>
@@ -117,7 +153,7 @@ export const RankingEntryModal: React.FC<RankingEntryModalProps> = ({ mode }) =>
             {isCreating ? 'Entrar no ranking' : 'Aceitar e continuar'}
           </button>
         </div>
-        {!canSend && <p className="text-right text-xs text-ink-300">Para continuar, {isCreating ? 'escolha um apelido válido e ' : ''}marque as duas caixas.</p>}
+        {!canSend && <p className="text-right text-xs text-ink-300">Para continuar, {joinSteps(missingSteps)}.</p>}
       </form>
     </ModalFrame>
   );
