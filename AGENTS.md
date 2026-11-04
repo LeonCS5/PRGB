@@ -82,6 +82,7 @@ PRGB/
 │   │   ├── StorageNotice.tsx        # Aviso da primeira visita (informa, não pede consentimento)
 │   │   ├── AudioRouting.tsx         # Medidor de entrada em dB e avisos de rota (microfone do PC, retorno da saída)
 │   │   ├── BrandMark.tsx            # Logo PRGB (palheta) + wordmark
+│   │   ├── CaptchaField.tsx         # Verificação contra robôs na entrada do ranking, só depois das caixas de consentimento
 │   │   ├── ChallengeCard.tsx        # Card de desafio (melhor score pessoal de um amigo)
 │   │   ├── ChallengeSharePanel.tsx  # Painel para compartilhar/aceitar desafio via link
 │   │   ├── DeleteAccountConfirm.tsx # Confirmação de exclusão de conta de ranking
@@ -126,6 +127,7 @@ PRGB/
 │   │   ├── records.ts               # Recordes pessoais locais: armazenamento, consulta e exportação (localStorage)
 │   │   ├── scoring.ts               # Motor de scoring: judgeNote, acumulação de estado, multiplier, accuracy
 │   │   ├── tabsApi.ts               # API client + normalizer (cordas 0-indexed no JSON bruto, ties, grace, técnicas, beatGrid)
+│   │   ├── turnstile.ts             # CAPTCHA da Cloudflare: carrega o script sob demanda e só com consentimento (lógica testável)
 │   │   ├── synthAudio.ts            # SFX + MetronomeScheduler (cliques agendados no relógio do AudioContext)
 │   │   ├── ampEngine.ts           # DSP chain: preamp→waveshaper→EQ→cab→reverb→output
 │   │   └── backend/
@@ -188,6 +190,7 @@ PRGB/
    - `VITE_SUPABASE_URL` — URL pública do projeto Supabase (prefixo `VITE_` é seguro; nunca expor a `service_role key`)
    - `VITE_SUPABASE_ANON_KEY` — chave pública `anon` do Supabase (prefixo `VITE_` é seguro; nunca a `service_role key`)
 3. Opcional: `VITE_SUPPORT_URL` com o link de apoio (Ko-fi, Pix, GitHub Sponsors...).
+   - Opcional: `VITE_TURNSTILE_SITE_KEY`, a chave pública do CAPTCHA da Cloudflare na entrada do ranking. Sem ela, a conta é criada sem verificação. Só ligue o CAPTCHA no Supabase (Authentication › Attack Protection, com a chave secreta) depois que o deploy publicado tiver essa variável; antes disso, toda criação de conta falha.
 4. Na Edge Function `register-part`, configurar `ALLOWED_ORIGINS` para incluir a URL de produção (`https://prgb.vercel.app`) e os ambientes de preview/local.
 5. `/api/tabs/*`, `/cdn/tabs/*` e `/cdn2/tabs/*` são reescritos para o provedor de tablaturas pela própria plataforma Vercel (sem backend nosso). Funciona em produção. O CDN reserva não tem todas as tablaturas e responde 403 para as que faltam; o app só o tenta se o principal falhar.
 6. **Para conferir produção, compare o conteúdo ou o hash do bundle com o log do build.** O último rewrite devolve a página do app com status 200 para quase qualquer caminho, então o status sozinho não prova nada.
@@ -386,6 +389,9 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 
 ### Rodada 11 — modo treino (concluída, em `main`)
 - [x] **Modo treino** — nos exercícios, um botão repete o exercício sem parar: a volta seguinte começa onde a anterior termina, sem contagem, e já aparece chegando na pista. Os pontos somam; desligar termina no fim da volta. Mais de uma volta não vale recorde nem desafio (@claude; testado com cordas sintetizadas: 3 voltas seguidas, 87 de 87 notas; não testado com guitarra real)
+
+### Rodada 12 — CAPTCHA na entrada do ranking (em `claude/captcha`)
+- [x] **Verificação contra robôs** — a conta anônima nascia sem nenhuma checagem. Com `VITE_TURNSTILE_SITE_KEY`, a entrada do ranking mostra o CAPTCHA da Cloudflare depois das caixas de 18+ e consentimento, e o token vai junto na criação da conta; reaceite e sessão já salva não pedem. Sem a chave, nada muda. Política e Termos descrevem a Cloudflare; `LEGAL_VERSION` foi para 2026-11-04 e quem já tem conta reaceita (@claude, dividido em dois subagentes; testado com a chave de teste da Cloudflare, sem criar conta; o CAPTCHA ainda não está ligado no Supabase)
 
 ### Pendências conhecidas (sem dono)
 - [ ] **Permissão do provedor de tablaturas** — os termos dele proíbem transmitir, reutilizar e baixar o conteúdo sem autorização escrita. É o maior risco legal do projeto; depende de decisão do humano.
