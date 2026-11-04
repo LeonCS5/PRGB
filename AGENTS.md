@@ -390,8 +390,8 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 ### Rodada 11 — modo treino (concluída, em `main`)
 - [x] **Modo treino** — nos exercícios, um botão repete o exercício sem parar: a volta seguinte começa onde a anterior termina, sem contagem, e já aparece chegando na pista. Os pontos somam; desligar termina no fim da volta. Mais de uma volta não vale recorde nem desafio (@claude; testado com cordas sintetizadas: 3 voltas seguidas, 87 de 87 notas; não testado com guitarra real)
 
-### Rodada 12 — CAPTCHA na entrada do ranking (em `claude/captcha`)
-- [x] **Verificação contra robôs** — a conta anônima nascia sem nenhuma checagem. Com `VITE_TURNSTILE_SITE_KEY`, a entrada do ranking mostra o CAPTCHA da Cloudflare depois das caixas de 18+ e consentimento, e o token vai junto na criação da conta; reaceite e sessão já salva não pedem. Sem a chave, nada muda. Política e Termos descrevem a Cloudflare; `LEGAL_VERSION` foi para 2026-11-04 e quem já tem conta reaceita (@claude, dividido em dois subagentes; testado com a chave de teste da Cloudflare, sem criar conta; o CAPTCHA ainda não está ligado no Supabase)
+### Rodada 12 — CAPTCHA na entrada do ranking (concluída, em `main`)
+- [x] **Verificação contra robôs** — a conta anônima nascia sem nenhuma checagem. Com `VITE_TURNSTILE_SITE_KEY`, a entrada do ranking mostra o CAPTCHA da Cloudflare depois das caixas de 18+ e consentimento, e o token vai junto na criação da conta; reaceite e sessão já salva não pedem. Sem a chave, nada muda. Política e Termos descrevem a Cloudflare; `LEGAL_VERSION` foi para 2026-11-04 e quem já tem conta reaceita (@claude, dividido em dois subagentes; widget `PRGB` criado na conta Cloudflare do humano para prgb.vercel.app e localhost; testado com a chave de teste, sem criar conta; com a chave real, o navegador automatizado recebe "Confirme que é humano", como esperado)
 
 ### Pendências conhecidas (sem dono)
 - [ ] **Permissão do provedor de tablaturas** — os termos dele proíbem transmitir, reutilizar e baixar o conteúdo sem autorização escrita. É o maior risco legal do projeto; depende de decisão do humano.
