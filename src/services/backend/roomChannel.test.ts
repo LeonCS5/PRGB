@@ -487,6 +487,14 @@ describe('entering a room', () => {
     silent.silent = true;
     await expect(player(silent).createRoom()).rejects.toMatchObject({ code: 'network' });
   });
+
+  it('reports realtime_busy when Realtime refuses the channel over a limit', async () => {
+    for (const reason of ['TooManyChannels: too many channels', 'ConnectionRateLimitReached', 'too_many_joins']) {
+      const hub = new FakeHub();
+      hub.refuseJoin = reason;
+      await expect(player(hub).createRoom()).rejects.toMatchObject({ code: 'realtime_busy' });
+    }
+  });
 });
 
 describe('messages', () => {
