@@ -1,6 +1,7 @@
 {
   "name": "prgb",
   "private": true,
+  "engines": { "node": ">=22" },
   "version": "0.0.0",
   "type": "module",
   "scripts": {
