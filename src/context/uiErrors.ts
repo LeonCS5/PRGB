@@ -2,7 +2,7 @@ import { LEGAL_CONTACT } from '../content/legal';
 import { toRankingError, type RankingErrorCode } from '../services/backend/rankingApi';
 import { RoomError, type RoomErrorCode } from '../services/backend/roomChannel';
 import { NICKNAME_ERROR_MESSAGES } from '../services/nickname';
-import { TabsApi, type NormalizedSongTab, type SongMeta } from '../services/tabsApi';
+import { TabsApi, TabsFormatError, type NormalizedSongTab, type SongMeta } from '../services/tabsApi';
 
 const RANKING_ERROR_MESSAGES: Record<RankingErrorCode, string> = {
   not_configured: 'O ranking não está disponível neste site.',
@@ -46,6 +46,7 @@ const ROOM_ERROR_MESSAGES: Record<RoomErrorCode, string> = {
   invalid_code: 'Código inválido. Use os 6 caracteres exatos do código da sala.',
   invalid_message: 'Mensagem inválida. Recarregue a página e tente novamente.',
   room_closed: 'A sala foi encerrada. Crie ou entre em uma nova sala.',
+  realtime_busy: 'As salas online estão lotadas agora. Tente de novo em alguns minutos.',
 };
 
 export const getRoomErrorMessage = (error: unknown): string => {
@@ -71,11 +72,19 @@ export const getAudioErrorMessage = (error: unknown): string => {
   }
 };
 
+const TABS_FORMAT_MESSAGE = 'O acervo de tablaturas respondeu em um formato inesperado. Tente de novo mais tarde.';
+
+export const getSearchErrorMessage = (error: unknown): string =>
+  error instanceof TabsFormatError
+    ? TABS_FORMAT_MESSAGE
+    : 'Não foi possível buscar músicas. Verifique sua conexão e tente novamente.';
+
 export const getSongMetadata = async (songId: number): Promise<SongMeta> => {
   let meta: SongMeta;
   try {
     meta = await TabsApi.getSongMeta(songId);
-  } catch {
+  } catch (error) {
+    if (error instanceof TabsFormatError) throw new Error(TABS_FORMAT_MESSAGE);
     throw new Error('Não foi possível obter os dados da música. Verifique sua conexão e tente novamente.');
   }
   if (!Array.isArray(meta.tracks) || meta.tracks.length === 0) {
@@ -90,7 +99,8 @@ export const loadSongTrack = async (meta: SongMeta, trackIndex: number): Promise
   let rawTab: unknown;
   try {
     rawTab = await TabsApi.getTrackTabJson(meta.songId, meta.revisionId, meta.image, track.partId);
-  } catch {
+  } catch (error) {
+    if (error instanceof TabsFormatError) throw new Error(TABS_FORMAT_MESSAGE);
     throw new Error('Não foi possível baixar a tablatura. Verifique sua conexão e tente novamente.');
   }
   if (!rawTab || typeof rawTab !== 'object' || !('measures' in rawTab) || !Array.isArray(rawTab.measures)) {

@@ -32,7 +32,8 @@ export type RoomErrorCode =
   | 'room_not_found' // nobody hosting this code
   | 'invalid_code'
   | 'invalid_message' // malformed outgoing message, or one this role can't send
-  | 'room_closed'; // send() after leave()
+  | 'room_closed' // send() after leave()
+  | 'realtime_busy'; // Realtime refused the channel over a connection, channel or join limit
 
 export class RoomError extends Error {
   readonly code: RoomErrorCode;
@@ -324,8 +325,10 @@ class Room {
             if (status === 'SUBSCRIBED') {
               void this.#onSubscribed();
             } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-              const refused = /unauthori[sz]ed|permission|forbidden|jwt|token.*expired/i.test(error?.message ?? '');
-              this.#onConnectionLost(new RoomError(refused ? 'not_authenticated' : 'network', { cause: error }));
+              const message = error?.message ?? '';
+              const refused = /unauthori[sz]ed|permission|forbidden|jwt|token.*expired/i.test(message);
+              const busy = REALTIME_LIMIT_PATTERN.test(message);
+              this.#onConnectionLost(new RoomError(refused ? 'not_authenticated' : busy ? 'realtime_busy' : 'network', { cause: error }));
             } else if (status === 'CLOSED') {
               this.#onConnectionLost(new RoomError('network'));
               void this.close(false, true).catch(() => undefined);
@@ -522,6 +525,10 @@ interface RoomAdmission {
 const RPC_CODES: ReadonlySet<string> = new Set<RoomErrorCode>([
   'not_authenticated', 'profile_required', 'rate_limited', 'invalid_code', 'room_not_found', 'room_full'
 ]);
+
+// Realtime's documented limit errors (TooManyChannels, TooManyConnections, TooManyJoins, *RateLimitReached).
+// Matched by text because realtime-js only forwards the server's reason inside the error message.
+const REALTIME_LIMIT_PATTERN = /too_?many_?(channels|connections|joins)|(connection|channel|clientjoin)_?rate_?limit_?reached/i;
 
 function toRoomError(cause: unknown): RoomError {
   if (cause instanceof RoomError) return cause;
