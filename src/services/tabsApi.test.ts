@@ -219,6 +219,14 @@ describe('TabsApi network hardening', () => {
     vi.unstubAllGlobals();
   });
 
+  it('does not blame the format when the body is cut off in transit', async () => {
+    const body = { ok: true, status: 200, json: () => Promise.reject(new DOMException('The operation was aborted', 'AbortError')) };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(body));
+    const failure = await TabsApi.searchSongs('x').catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(DOMException);
+    expect(failure).not.toBeInstanceOf(TabsFormatError);
+  });
+
   it('gives up on a provider that never answers', async () => {
     TabsApi.searchTimeoutMs = 20;
     vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {

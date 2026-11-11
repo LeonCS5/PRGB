@@ -110,6 +110,17 @@ export class TabsApi {
     }
   }
 
+  // Only a body that is not JSON means a wrong format; a body cut off by a timeout or a dropped connection
+  // keeps its own error, so the screen blames the connection and not the catalog
+  private static async readJson(response: Response, reason: string): Promise<unknown> {
+    try {
+      return await response.json();
+    } catch (error) {
+      if (error instanceof SyntaxError) throw new TabsFormatError(reason);
+      throw error;
+    }
+  }
+
   /**
    * Search the catalog of songs
    */
@@ -117,9 +128,7 @@ export class TabsApi {
     const url = `${this.API_BASE}/songs?pattern=${encodeURIComponent(query)}`;
     const response = await this.fetchGet(url, this.searchTimeoutMs, signal);
     if (!response.ok) throw new Error(`Search failed: ${response.status}`);
-    const data: unknown = await response.json().catch(() => {
-      throw new TabsFormatError('search is not JSON');
-    });
+    const data = await this.readJson(response, 'search is not JSON');
     if (!Array.isArray(data)) throw new TabsFormatError('search is not a list');
     const songs = data.map(parseSearchItem).filter((song): song is TabSearchResult => song !== null);
     if (data.length > 0 && songs.length === 0) throw new TabsFormatError('no valid search item');
@@ -134,9 +143,7 @@ export class TabsApi {
     const url = `${this.API_BASE}/meta/${songId}`;
     const response = await this.fetchGet(url, this.metaTimeoutMs, signal);
     if (!response.ok) throw new Error(`Meta fetch failed: ${response.status}`);
-    const data: unknown = await response.json().catch(() => {
-      throw new TabsFormatError('meta is not JSON');
-    });
+    const data = await this.readJson(response, 'meta is not JSON');
     assertSongMeta(data);
     return normalizeSongMeta(data);
   }
