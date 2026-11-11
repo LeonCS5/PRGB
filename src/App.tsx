@@ -29,6 +29,7 @@ import { ChallengeCard } from './components/ChallengeCard';
 import { LocalRecords } from './components/LocalRecords';
 import { DuoSetupModal } from './components/DuoSetupModal';
 import { LegalPage } from './components/LegalPage';
+import { NotFound } from './components/NotFound';
 import { readHash, resolveLegalRoute, subscribeToHash } from './context/legalRoute';
 import { consumeLocalDataCleared } from './context/localData';
 import { gameDevPreset, readDevScene } from './components/devScenes';
@@ -794,6 +795,8 @@ const AppContent: React.FC = () => {
 
 export const App: React.FC = () => {
   const [rankingDev] = useState(() => import.meta.env.DEV ? rankingDevSetup(readDevScene()) : null);
+  if (window.location.pathname !== '/' && window.location.pathname !== '/index.html') return <NotFound />;
+
   return (
     <AudioSessionProvider>
       <ModalsProvider>
