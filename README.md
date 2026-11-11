@@ -172,7 +172,7 @@ npm run dev
 ## ⚙️ Configuração e Deploy
 
 - **Variáveis de ambiente** (o `.env.example` explica cada uma): `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` ligam o ranking e a dupla online; `VITE_TURNSTILE_SITE_KEY` ativa a verificação contra robôs na criação de conta; `VITE_SUPPORT_URL` define o link de apoio. Só variáveis `VITE_` chegam ao navegador: nunca coloque uma chave secreta com esse prefixo.
-- **Deploy:** o push na `main` publica na [Vercel](https://vercel.com). O CI do GitHub roda lint, build, testes e `npm audit` a cada push e pull request.
+- **Deploy:** o push na `main` publica na [Vercel](https://vercel.com). O CI do GitHub roda lint, build, testes e `npm audit` a cada push na `main` e em cada pull request.
 - **Banco:** as migrations ficam em `supabase/migrations/` e os testes delas em `supabase/db-tests/`.
 - **Operação** (inventário de serviços, plano de incidente, backup, rotação de chaves): [docs/operacao.md](docs/operacao.md).
 - **Histórico de mudanças:** [CHANGELOG.md](CHANGELOG.md).

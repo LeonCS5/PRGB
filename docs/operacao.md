@@ -35,7 +35,7 @@ Hoje uma única pessoa é dona de tudo. Isso é um ponto único de falha (seçã
 
 ## 4. Deploy e reversão
 
-- **Site:** push na `main` publica na Vercel em cerca de 1 minuto. O CI do GitHub roda lint, build, testes e `npm audit` a cada push e pull request.
+- **Site:** push na `main` publica na Vercel em cerca de 1 minuto. O CI do GitHub roda lint, build, testes e `npm audit` a cada push na `main` e em cada pull request.
 - **Conferir o deploy:** compare o nome do bundle `assets/index-*.js` do site com o log do build (`vercel inspect <url> --logs`). O status 200 sozinho não prova nada: o último rewrite devolve a página para quase qualquer caminho.
 - **Reverter:** Vercel › Deployments › escolher um deploy anterior › Promote to Production. A Vercel guarda os 10 últimos por 30 dias.
 - **Banco:** as migrations de `supabase/migrations/` foram aplicadas à mão pelo SQL Editor, e o histórico remoto não bate com os arquivos (faltam `room_realtime` e `feedback`, e as versões têm números diferentes). Antes de qualquer `supabase db push`, alinhe o histórico com `supabase migration repair --status applied <versão>` para cada migration já aplicada. Sem isso, o `db push` tentaria reaplicar tudo.
@@ -47,7 +47,7 @@ O plano Free do Supabase **não** faz backup baixável. O procedimento é manual
 
 1. Semanalmente, rode `scripts/backup-db.sh` (veja o cabeçalho do script). Ele gera `schema-*.sql` e `data-*.sql` numa pasta **fora** do repositório e apaga as cópias com mais de 30 dias.
 2. As cópias contêm apelidos e pontuações (dado pessoal): guarde-as criptografadas e nunca no repositório. Prazo de 30 dias, coerente com a Política.
-3. Restaurar: crie um projeto Supabase novo, aplique as migrations em ordem e carregue o `data-*.sql`. As contas anônimas vivem no schema `auth`, que este backup não cobre: depois de restaurar, os jogadores precisam criar conta de novo (o ranking antigo só volta se o schema `auth` também for restaurado, o que exige o plano Pro).
+3. Restaurar: crie um projeto Supabase novo, aplique as migrations em ordem e carregue o `data-*.sql`. **A cobertura do schema `auth` (as contas anônimas) não foi verificada:** a documentação do Supabase indica que o dump de dados pode incluir `auth.users`, e é preciso ensaiar a restauração para saber se os UUIDs voltam e se o ranking reencontra os jogadores. Enquanto isso não for ensaiado, trate a cópia como contendo dados pessoais além dos apelidos e não conte com ela para devolver as contas.
 4. Metas (não ensaiadas): perder no máximo 7 dias de dados; voltar em algumas horas. **Pendente:** ensaiar uma restauração num projeto descartável.
 
 ## 6. Plano de incidente
@@ -71,7 +71,7 @@ Modelo de aviso curto: "Em [data], identificamos [o que ocorreu]. Foram afetados
 
 - **Chave pública do Supabase (`anon`):** criar a chave nova no painel › atualizar `VITE_SUPABASE_ANON_KEY` na Vercel › publicar › revogar a antiga. O bundle de produção ainda usa a chave no formato antigo (JWT). O Supabase anunciou o fim das chaves legadas para o fim de 2026 **(a confirmar na documentação)**: migrar para a chave publicável antes disso e revisar o uso da service role em `supabase/functions/register-part/index.ts`.
 - **Segredo do Turnstile:** Cloudflare › Turnstile › `PRGB` › Rotate secret, colar o novo em Supabase › Authentication › Attack Protection e testar criando uma conta pelo site.
-- **Sessões:** trocar as chaves de assinatura do JWT no Supabase derruba todas as sessões (os jogadores perdem a conta anônima).
+- **Sessões e chaves de assinatura do JWT:** rotacionar uma chave não encerra sessões, porque a chave anterior segue válida até ser revogada. Para invalidar tokens já emitidos é preciso **revogar** a chave antiga (Authentication › JWT Signing Keys) ou excluir as contas afetadas. O efeito sobre contas anônimas não foi testado: teste com uma conta descartável antes de depender disso num incidente, e leia a documentação de signing keys do Supabase.
 
 ## 8. Continuidade e acesso de emergência
 

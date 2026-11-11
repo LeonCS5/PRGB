@@ -31,7 +31,7 @@ npm run lint       # Linter (oxlint, NÃO eslint)
 npm test           # Testes (Vitest) dos services
 ```
 
-**Requisitos:** Node 20+, navegador moderno com Web Audio API.
+**Requisitos:** Node 22+, navegador moderno com Web Audio API.
 
 ---
 
@@ -410,14 +410,14 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 ### Rodada 13 — endurecimento, a partir de uma auditoria de checklist (em `claude/endurecimento`)
 - [x] **Auditoria** — 456 itens em 28 áreas, divididos entre quatro subagentes e o Codex, só leitura. Segurança de dados, RLS, autorização, SQL e LGPD estão em ordem; as falhas ficavam em operação e defesas de borda (@claude, @codex)
 - [x] **Lint da `main`** — o merge do CAPTCHA entrou com erro de lint em `CaptchaField.tsx`, porque só os avisos foram contados e não o código de saída; corrigido, e o CI agora barra isso (@claude)
-- [x] **CI e Dependabot** — `.github/workflows/ci.yml` roda lint, build, testes e `npm audit --omit=dev` a cada push e pull request; Dependabot semanal para npm e mensal para as actions (@claude; do YAML só a estrutura foi conferida, a primeira execução real é no GitHub)
+- [x] **CI e Dependabot** — `.github/workflows/ci.yml` roda lint, build, testes e `npm audit --omit=dev` a cada push na `main` e em cada pull request; Dependabot semanal para npm e mensal para as actions (@claude; do YAML só a estrutura foi conferida, a primeira execução real é no GitHub)
 - [x] **Tela de recuperação** — `ErrorBoundary` em vez de página branca; nada sai do navegador (@claude; provado no Edge com um erro forçado)
 - [x] **Cabeçalhos de segurança** — CSP, nosniff, anti-framing, Referrer-Policy e Permissions-Policy; rewrites do acervo restritos; `security.txt`, `robots.txt`, `sitemap.xml` e metadados (@claude; CSP provada no Edge com zero violações nos fluxos principais, incluindo um `.nam` sintético e o Turnstile; os rewrites foram conferidos com `@vercel/routing-utils`; não testado: Firefox, `.nam` real e o rewrite real na Vercel)
 - [x] **Rede do acervo** — timeouts (12 s busca e meta, 20 s tab), uma retentativa em erro de rede ou 5xx, validação das respostas com mensagem própria para formato inesperado, e erro distinto para salas lotadas do Realtime (@claude; os nomes dos sinais do Realtime vêm da documentação, não de teste no servidor)
 - [x] **Limites de abuso no banco** — `rpc_quota` por jogador e hora (`create_profile` 5, `update_nickname` 10, `join_room` 30, `export_my_data` 10), mesmo texto de relato no máximo 3 vezes por hora, histórico do pg_cron apagado em 30 dias. Só chamadas bem-sucedidas contam (@claude; testado em PGlite; **migration ainda não aplicada em produção**)
 - [x] **Acessibilidade e 404** — rótulo visível na busca, aviso de carregamento do modelo neural, alvos de 44 px e página não encontrada para caminhos fora da raiz (@codex, revisado por @claude)
 - [x] **Operação** — `docs/operacao.md` (inventário, MFA, plano de incidente, backup, rotação de chaves), `scripts/backup-db.sh`, README e CHANGELOG atualizados (@claude; o script de backup não foi testado)
-- [ ] **Aplicar a migration de limites** — `20261110120000_abuse_limits.sql` reescreve quatro RPCs em produção; aplicar uma por vez no SQL Editor e conferir o job do cron (@claude, depende do humano)
+- [ ] **Aplicar a migration de limites** — `20261110120000_abuse_limits.sql` reescreve cinco RPCs em produção (as quatro com limite e `submit_feedback`); aplicar uma por vez no SQL Editor e conferir o job do cron (@claude, depende do humano)
 - [ ] **Chave pública do Supabase no formato antigo** — o bundle usa a chave `anon` legada (JWT); o fornecedor anunciou o fim das chaves legadas para o fim de 2026 (a confirmar). Migrar para a chave publicável e rever o uso da service role no `register-part` (@claude)
 - [ ] **Backup restaurável** — o plano gratuito não tem backup; ensaiar o `scripts/backup-db.sh` e uma restauração num projeto descartável (@claude/humano)
 - [ ] **Monitoramento externo** — sem monitor de queda nem alerta; criar um monitor gratuito para o site (humano)
