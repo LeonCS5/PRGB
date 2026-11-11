@@ -303,6 +303,9 @@ begin
     raise exception 'invalid_input';
   end if;
 
+  -- Two reports landing together would both read the same counts and both insert: one lock for the whole box
+  perform pg_catalog.pg_advisory_xact_lock(726003, 1);
+
   -- With no account to count by, the limit is for everybody: a flood fills it, not the database. The app
   -- offers the contact e-mail when a report can't be sent.
   if (
