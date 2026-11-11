@@ -38,10 +38,10 @@ const FileRow: React.FC<FileRowProps> = ({ label, accept, loaded, disabled, onLo
           event.target.value = '';
           if (file) onLoad(file);
         }}
-        className="w-40 min-w-0 cursor-pointer text-[11px] text-ink-300 file:mr-2 file:cursor-pointer file:rounded-lg file:border-0 file:bg-ink-700 file:px-2 file:py-1.5 file:text-xs file:font-semibold file:text-ink-100 disabled:cursor-not-allowed disabled:opacity-50" />
+        className="min-h-11 w-40 min-w-11 cursor-pointer text-[11px] text-ink-300 file:mr-2 file:min-h-11 file:min-w-11 file:cursor-pointer file:rounded-lg file:border-0 file:bg-ink-700 file:px-2 file:py-1.5 file:text-xs file:font-semibold file:text-ink-100 disabled:cursor-not-allowed disabled:opacity-50" />
       {loaded && (
-        <button type="button" onClick={onClear} aria-label={`Remover ${label}`}
-          className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-lg text-ink-300 transition hover:bg-ink-800 hover:text-ink-100">
+        <button type="button" onClick={onClear} disabled={disabled} aria-label={`Remover ${label}`}
+          className="flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg text-ink-300 transition hover:bg-ink-800 hover:text-ink-100 disabled:cursor-not-allowed disabled:opacity-50">
           <X size={16} aria-hidden="true" />
         </button>
       )}
@@ -83,7 +83,10 @@ export const NeuralAmpSection: React.FC = () => {
       <p className="mt-1 text-xs leading-5 text-ink-300">
         Carregue um modelo .nam e, se quiser, um gabinete em .wav. Os arquivos ficam só neste navegador e somem ao fechar a página. Com um modelo carregado, o ganho vem dele: tom, reverb e volume continuam valendo. Modelos grandes podem pesar no computador.
       </p>
-      <div className="mt-3 space-y-2">
+      <p role="status" aria-live="polite" className="mt-2 text-xs leading-5 text-signal-300">
+        {isBusy ? 'Carregando o modelo…' : ''}
+      </p>
+      <div aria-busy={isBusy} className="mt-3 space-y-2">
         <FileRow label="Modelo .nam" accept=".nam" loaded={names.model} disabled={isBusy || !ampEngine}
           onLoad={(file) => void loadModel(file)}
           onClear={() => void run(async () => { await audioEngine.clearNeuralModel(); setWarning(null); })} />
