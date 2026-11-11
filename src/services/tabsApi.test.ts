@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { normalizeTab } from '../../supabase/functions/_shared/tabNormalizer.ts';
 import { rawDemo } from './demoSong';
-import { TabsApi, isSongRemoved, midiToNoteName, soundingMidi, type SongMeta } from './tabsApi';
+import { TabsApi, TabsFormatError, isSongRemoved, midiToNoteName, soundingMidi, type SongMeta } from './tabsApi';
 
 const STANDARD = [64, 59, 55, 50, 45, 40];
 
@@ -187,10 +187,10 @@ describe('shared tab normalizer (also used by the register-part Edge Function)',
   });
 
   it('only ever calls same-origin proxies, even when they fail', async () => {
-    const fetchMock = vi.fn(async (_url: string) => new Response('nope', { status: 502 }));
+    const fetchMock = vi.fn(async (_url: string) => new Response('nope', { status: 404 }));
     vi.stubGlobal('fetch', fetchMock);
-    await expect(TabsApi.searchSongs('metallica')).rejects.toThrow('Search failed: 502');
-    await expect(TabsApi.getSongMeta(7)).rejects.toThrow('Meta fetch failed: 502');
+    await expect(TabsApi.searchSongs('metallica')).rejects.toThrow('Search failed: 404');
+    await expect(TabsApi.getSongMeta(7)).rejects.toThrow('Meta fetch failed: 404');
     await expect(TabsApi.getTrackTabJson(7, 99, 'img', 0)).rejects.toThrow('Failed to load track tab');
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
       '/api/tabs/songs?pattern=metallica',
@@ -205,6 +205,93 @@ describe('shared tab normalizer (also used by the register-part Edge Function)',
       url.startsWith('/cdn2/') ? new Response('{"measures":[]}') : new Response('nope', { status: 404 })
     ));
     await expect(TabsApi.getTrackTabJson(7, 99, 'img', 0)).resolves.toEqual({ measures: [] });
+  });
+});
+
+describe('TabsApi network hardening', () => {
+  const song = { songId: 1, artistId: 2, artist: 'A', title: 'T', hasPlayer: true, tracks: [], defaultTrack: 0 };
+  const goodMeta = { songId: 7, revisionId: 3, title: 'T', artist: 'A', image: 'img', tracks: [{ name: 'Lead', partId: 0 }] };
+  const defaults = { search: TabsApi.searchTimeoutMs, delay: TabsApi.retryDelayMs };
+
+  afterEach(() => {
+    TabsApi.searchTimeoutMs = defaults.search;
+    TabsApi.retryDelayMs = defaults.delay;
+    vi.unstubAllGlobals();
+  });
+
+  it('does not blame the format when the body is cut off in transit', async () => {
+    const body = { ok: true, status: 200, json: () => Promise.reject(new DOMException('The operation was aborted', 'AbortError')) };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(body));
+    const failure = await TabsApi.searchSongs('x').catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(DOMException);
+    expect(failure).not.toBeInstanceOf(TabsFormatError);
+  });
+
+  it('gives up on a provider that never answers', async () => {
+    TabsApi.searchTimeoutMs = 20;
+    vi.stubGlobal('fetch', vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+    })));
+    await expect(TabsApi.searchSongs('x')).rejects.toBeDefined();
+    expect(fetch).toHaveBeenCalledTimes(1); // a timeout is not retried
+  });
+
+  it('retries once on 5xx and on network errors, never on 4xx', async () => {
+    TabsApi.retryDelayMs = 0;
+    const flaky = vi.fn()
+      .mockResolvedValueOnce(new Response('x', { status: 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([song])));
+    vi.stubGlobal('fetch', flaky);
+    await expect(TabsApi.searchSongs('x')).resolves.toHaveLength(1);
+    expect(flaky).toHaveBeenCalledTimes(2);
+
+    const offline = vi.fn()
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce(new Response(JSON.stringify([song])));
+    vi.stubGlobal('fetch', offline);
+    await expect(TabsApi.searchSongs('x')).resolves.toHaveLength(1);
+
+    const missing = vi.fn(async () => new Response('no', { status: 404 }));
+    vi.stubGlobal('fetch', missing);
+    await expect(TabsApi.searchSongs('x')).rejects.toThrow('Search failed: 404');
+    expect(missing).toHaveBeenCalledTimes(1);
+
+    const down = vi.fn(async () => new Response('no', { status: 500 }));
+    vi.stubGlobal('fetch', down);
+    await expect(TabsApi.searchSongs('x')).rejects.toThrow('Search failed: 500');
+    expect(down).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry when the caller cancels', async () => {
+    TabsApi.retryDelayMs = 0;
+    const controller = new AbortController();
+    const fetchMock = vi.fn(async () => {
+      controller.abort();
+      throw new DOMException('Aborted', 'AbortError');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(TabsApi.searchSongs('x', controller.signal)).rejects.toBeDefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops invalid search items but fails when the whole list is invalid', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([song, null, { songId: 'x' }, { ...song, tracks: 'no' }]))));
+    await expect(TabsApi.searchSongs('x')).resolves.toEqual([song]);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([null, { songId: 'x' }]))));
+    await expect(TabsApi.searchSongs('x')).rejects.toBeInstanceOf(TabsFormatError);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{"error":"x"}')));
+    await expect(TabsApi.searchSongs('x')).rejects.toBeInstanceOf(TabsFormatError);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('[]')));
+    await expect(TabsApi.searchSongs('x')).resolves.toEqual([]);
+  });
+
+  it('rejects a meta response without the fields the app reads', async () => {
+    for (const bad of [null, [], { songId: 7 }, { ...goodMeta, tracks: undefined }, { ...goodMeta, revisionId: undefined }, { ...goodMeta, tracks: [1] }]) {
+      vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(bad))));
+      await expect(TabsApi.getSongMeta(7)).rejects.toBeInstanceOf(TabsFormatError);
+    }
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(goodMeta))));
+    await expect(TabsApi.getSongMeta(7)).resolves.toMatchObject({ songId: 7, revisionId: 3 });
   });
 });
 

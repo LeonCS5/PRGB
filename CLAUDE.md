@@ -265,7 +265,7 @@ npm run lint
 ```
 
 ### Requisitos
-- Node.js 20+
+- Node.js 22+
 - Navegador com suporte a Web Audio API (Chrome/Edge/Firefox)
 - Interface de áudio USB (para funcionalidade completa de guitarra)
 

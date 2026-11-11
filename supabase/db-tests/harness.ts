@@ -70,6 +70,7 @@ export const CREATE_PG_CRON = 'create extension if not exists pg_cron with schem
 const CRON_STUB = `
 create schema cron;
 create table cron.job (jobname text primary key, schedule text not null, command text not null);
+create table cron.job_run_details (runid bigint generated always as identity primary key, jobid bigint, status text, start_time timestamptz, end_time timestamptz);
 create function cron.schedule(job_name text, schedule text, command text) returns bigint language sql as $$
   insert into cron.job values (job_name, schedule, command)
   on conflict (jobname) do update set schedule = excluded.schedule, command = excluded.command;

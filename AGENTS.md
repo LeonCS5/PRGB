@@ -31,7 +31,7 @@ npm run lint       # Linter (oxlint, NÃO eslint)
 npm test           # Testes (Vitest) dos services
 ```
 
-**Requisitos:** Node 20+, navegador moderno com Web Audio API.
+**Requisitos:** Node 22+, navegador moderno com Web Audio API.
 
 ---
 
@@ -82,6 +82,8 @@ PRGB/
 │   │   ├── StorageNotice.tsx        # Aviso da primeira visita (informa, não pede consentimento)
 │   │   ├── AudioRouting.tsx         # Medidor de entrada em dB e avisos de rota (microfone do PC, retorno da saída)
 │   │   ├── BrandMark.tsx            # Logo PRGB (palheta) + wordmark
+│   │   ├── ErrorBoundary.tsx        # Tela de recuperação quando uma tela quebra (em vez de página branca)
+│   │   ├── NotFound.tsx             # Página não encontrada para qualquer caminho fora da raiz
 │   │   ├── CaptchaField.tsx         # Verificação contra robôs na entrada do ranking, só depois das caixas de consentimento
 │   │   ├── ChallengeCard.tsx        # Card de desafio (melhor score pessoal de um amigo)
 │   │   ├── ChallengeSharePanel.tsx  # Painel para compartilhar/aceitar desafio via link
@@ -127,6 +129,7 @@ PRGB/
 │   │   ├── records.ts               # Recordes pessoais locais: armazenamento, consulta e exportação (localStorage)
 │   │   ├── scoring.ts               # Motor de scoring: judgeNote, acumulação de estado, multiplier, accuracy
 │   │   ├── tabsApi.ts               # API client + normalizer (cordas 0-indexed no JSON bruto, ties, grace, técnicas, beatGrid)
+│   │   ├── vercelRewrites.test.ts   # Confere que os caminhos do acervo casam com os rewrites do vercel.json e os de fora não
 │   │   ├── turnstile.ts             # CAPTCHA da Cloudflare: carrega o script sob demanda e só com consentimento (lógica testável)
 │   │   ├── synthAudio.ts            # SFX + MetronomeScheduler (cliques agendados no relógio do AudioContext)
 │   │   ├── ampEngine.ts           # DSP chain: preamp→waveshaper→EQ→cab→reverb→output
@@ -144,7 +147,8 @@ PRGB/
 │   │   ├── 20261029120000_reaccept_terms.sql # RPC de reaceitação de termos versionados
 │   │   ├── 20261029120100_room_realtime.sql  # Tabelas e policies para salas online (Realtime)
 │   │   ├── 20261030120000_room_data_export.sql # Exportação de dados de sala (LGPD)
-│   │   └── 20261030150000_feedback.sql       # Relatos da caixa "Reportar problema" (RPC, limite, retenção de 180 dias)
+│   │   ├── 20261030150000_feedback.sql       # Relatos da caixa "Reportar problema" (RPC, limite, retenção de 180 dias)
+│   │   └── 20261110120000_abuse_limits.sql   # Limites por hora (create_profile 5, update_nickname 10, join_room 30, export_my_data 10), texto repetido nos relatos, limpeza do histórico do pg_cron
 │   ├── functions/
 │   │   ├── _shared/
 │   │   │   ├── scoreLimits.ts       # countScorableNotes / maxPossibleScore (shared entre Edge Function e app)
@@ -159,7 +163,16 @@ PRGB/
 │       ├── feedback.test.ts         # Testes da caixa de relatos: acesso, limite por hora e retenção
 │       └── roomRealtime.test.ts     # Testes de integração das policies e RPCs das salas online
 │
+├── docs/
+│   └── operacao.md                  # Operação: inventário, plano de incidente, backup, rotação de chaves
+├── scripts/
+│   └── backup-db.sh                 # Backup local do banco (o plano gratuito não tem backup)
+├── .github/                         # CI (lint, build, testes, npm audit) e Dependabot
+├── CHANGELOG.md                     # Resumo das rodadas
+│
 └── public/
+    ├── .well-known/security.txt     # Contato de segurança (renovar o Expires antes de 2027-11-10)
+    ├── robots.txt, sitemap.xml      # Descoberta
     ├── favicon.svg                  # Logo (palheta laranja com onda de sinal)
     ├── fonts/                       # Fontes locais (Inter, Space Grotesk, JetBrains Mono — woff2)
     ├── icons/                       # Ícones PNG do app (192, 512, maskable)
@@ -193,7 +206,8 @@ PRGB/
    - Opcional: `VITE_TURNSTILE_SITE_KEY`, a chave pública do CAPTCHA da Cloudflare na entrada do ranking. Sem ela, a conta é criada sem verificação. Só ligue o CAPTCHA no Supabase (Authentication › Attack Protection, com a chave secreta) depois que o deploy publicado tiver essa variável; antes disso, toda criação de conta falha.
 4. Na Edge Function `register-part`, configurar `ALLOWED_ORIGINS` para incluir a URL de produção (`https://prgb.vercel.app`) e os ambientes de preview/local.
 5. `/api/tabs/*`, `/cdn/tabs/*` e `/cdn2/tabs/*` são reescritos para o provedor de tablaturas pela própria plataforma Vercel (sem backend nosso). Funciona em produção. O CDN reserva não tem todas as tablaturas e responde 403 para as que faltam; o app só o tenta se o principal falhar.
-6. **Para conferir produção, compare o conteúdo ou o hash do bundle com o log do build.** O último rewrite devolve a página do app com status 200 para quase qualquer caminho, então o status sozinho não prova nada.
+6. **Cabeçalhos de segurança e entrega estática (`vercel.json`).** Todas as rotas saem com CSP, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin` e `Permissions-Policy` (só `microphone=(self)`). A CSP não tem `unsafe-inline` nem `unsafe-eval` em script; `'wasm-unsafe-eval'` é do motor neural e `style-src-attr 'unsafe-inline'` é só para os `style=""` calculados. Terceiros liberados: `https://challenges.cloudflare.com` (Turnstile) e o host exato do Supabase (`https://` e `wss://`). Novo serviço externo, fonte, worker, `blob:` ou script inline exige mudar a CSP **e** provar no navegador (servir o `dist` com esses cabeçalhos; zero violações no console e nos eventos `securitypolicyviolation`: landing, jogo com microfone, painel de áudio, motor neural, entrada do ranking com Turnstile). Os rewrites do acervo casam só com os caminhos que o `tabsApi` monta (`songs`, `meta/<id>`, `<songId>/<revisionId>/<image>/<partId>.json`): mudou o caminho no `tabsApi`? Atualize o `vercel.json` junto. A instalação usa `npm ci` e `engines.node >= 22`. Operação, incidente e backup: `docs/operacao.md`.
+7. **Para conferir produção, compare o conteúdo ou o hash do bundle com o log do build.** O último rewrite devolve a página do app com status 200 para quase qualquer caminho, então o status sozinho não prova nada.
 
 ---
 
@@ -352,7 +366,7 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 ### Rodada 5 — dupla online (concluída, em `main`)
 - [x] **Serviço das salas** — `src/services/backend/roomChannel.ts`, migrations `room_realtime` e `room_data_export`; testado no Supabase real por script, com duas contas: vagas, canal privado, presença, mensagens e saída do anfitrião (@codex, @claude)
 - [x] **Interface da dupla online** — `RoomModal`, `RoomProvider`, `room.ts` (estado puro, com testes), `OnlinePracticeGame`, `OnlineHud`, `OnlineResultPanel`: lobby, escolha de faixa, início no mesmo relógio, placar da equipe e revanche. Partida online nunca vale para o ranking (@bob, revisada e corrigida por @claude; testada no Supabase real com dois navegadores e microfone sintético)
-- [ ] **Alinhar histórico de migrations** — a migration `room_realtime` foi aplicada manualmente pelo SQL Editor fora do histórico do CLI Supabase; precisa reconciliar antes do próximo `supabase db push` (@claude)
+- [ ] **Alinhar histórico de migrations** — as migrations `room_realtime` e `feedback` foram aplicadas manualmente pelo SQL Editor fora do histórico do CLI Supabase (o remoto tem 4 entradas contra 7 arquivos); precisa reconciliar com `supabase migration repair` antes do próximo `supabase db push` (@claude)
 
 ### Rodada 6 — Play Free (concluída, em `main`)
 - [x] **Play Free** — modo livre, sem música nem pontuação: mostra nota, frequência, afinação, corda, casa, nível e clareza, e o histórico nas seis cordas; serve também para testar a entrada de áudio (@bob, revisado e corrigido por @claude; testado no navegador com microfone sintético, não com guitarra)
@@ -392,6 +406,25 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 
 ### Rodada 12 — CAPTCHA na entrada do ranking (concluída, em `main`)
 - [x] **Verificação contra robôs** — a conta anônima nascia sem nenhuma checagem. Com `VITE_TURNSTILE_SITE_KEY`, a entrada do ranking mostra o CAPTCHA da Cloudflare depois das caixas de 18+ e consentimento, e o token vai junto na criação da conta; reaceite e sessão já salva não pedem. Sem a chave, nada muda. Política e Termos descrevem a Cloudflare; `LEGAL_VERSION` foi para 2026-11-04 e quem já tem conta reaceita (@claude, dividido em dois subagentes; widget `PRGB` criado na conta Cloudflare do humano para prgb.vercel.app e localhost; testado com a chave de teste, sem criar conta; com a chave real, o navegador automatizado recebe "Confirme que é humano", como esperado)
+
+### Rodada 13 — endurecimento, a partir de uma auditoria de checklist (em `claude/endurecimento`)
+- [x] **Auditoria** — 456 itens em 28 áreas, divididos entre quatro subagentes e o Codex, só leitura. Segurança de dados, RLS, autorização, SQL e LGPD estão em ordem; as falhas ficavam em operação e defesas de borda (@claude, @codex)
+- [x] **Lint da `main`** — o merge do CAPTCHA entrou com erro de lint em `CaptchaField.tsx`, porque só os avisos foram contados e não o código de saída; corrigido, e o CI agora barra isso (@claude)
+- [x] **CI e Dependabot** — `.github/workflows/ci.yml` roda lint, build, testes e `npm audit --omit=dev` a cada push na `main` e em cada pull request; Dependabot semanal para npm e mensal para as actions (@claude; do YAML só a estrutura foi conferida, a primeira execução real é no GitHub)
+- [x] **Tela de recuperação** — `ErrorBoundary` em vez de página branca; nada sai do navegador (@claude; provado no Edge com um erro forçado)
+- [x] **Cabeçalhos de segurança** — CSP, nosniff, anti-framing, Referrer-Policy e Permissions-Policy; rewrites do acervo restritos; `security.txt`, `robots.txt`, `sitemap.xml` e metadados (@claude; CSP provada no Edge com zero violações nos fluxos principais, incluindo um `.nam` sintético e o Turnstile; os rewrites foram conferidos com `@vercel/routing-utils`; não testado: Firefox, `.nam` real e o rewrite real na Vercel)
+- [x] **Rede do acervo** — timeouts (12 s busca e meta, 20 s tab), uma retentativa em erro de rede ou 5xx, validação das respostas com mensagem própria para formato inesperado, e erro distinto para salas lotadas do Realtime (@claude; os nomes dos sinais do Realtime vêm da documentação, não de teste no servidor)
+- [x] **Limites de abuso no banco** — `rpc_quota` por jogador e hora (`create_profile` 5, `update_nickname` 10, `join_room` 30, `export_my_data` 10), mesmo texto de relato no máximo 3 vezes por hora, histórico do pg_cron apagado em 30 dias. Só chamadas bem-sucedidas contam (@claude; testado em PGlite; **migration ainda não aplicada em produção**)
+- [x] **Acessibilidade e 404** — rótulo visível na busca, aviso de carregamento do modelo neural, alvos de 44 px e página não encontrada para caminhos fora da raiz (@codex, revisado por @claude)
+- [x] **Operação** — `docs/operacao.md` (inventário, MFA, plano de incidente, backup, rotação de chaves), `scripts/backup-db.sh`, README e CHANGELOG atualizados (@claude; o script de backup não foi testado)
+- [ ] **Aplicar a migration de limites** — `20261110120000_abuse_limits.sql` reescreve cinco RPCs em produção (as quatro com limite e `submit_feedback`); aplicar uma por vez no SQL Editor e conferir o job do cron (@claude, depende do humano)
+- [ ] **Chave pública do Supabase no formato antigo** — o bundle usa a chave `anon` legada (JWT); o fornecedor anunciou o fim das chaves legadas para o fim de 2026 (a confirmar). Migrar para a chave publicável e rever o uso da service role no `register-part` (@claude)
+- [ ] **Backup restaurável** — o plano gratuito não tem backup; ensaiar o `scripts/backup-db.sh` e uma restauração num projeto descartável (@claude/humano)
+- [ ] **Monitoramento externo** — sem monitor de queda nem alerta; criar um monitor gratuito para o site (humano)
+- [ ] **Relatos sem anti-robô** — um robô que varia o texto ainda esgota os 60 relatos por hora; só CAPTCHA validado numa Edge Function ou limite por IP resolve, e ambos mexem na Política (decisão do humano)
+- [ ] **Ambientes separados** — previews e `.env.local` usam o projeto Supabase de produção; criar um segundo projeto gratuito (humano)
+- [ ] **Testes de ponta a ponta no repositório** — os scripts de navegador ficam fora dele; trazer um e2e (por exemplo Playwright) contra um Supabase local (@claude)
+- [ ] **Safari e celulares reais** — nunca testados (humano)
 
 ### Pendências conhecidas (sem dono)
 - [ ] **Permissão do provedor de tablaturas** — os termos dele proíbem transmitir, reutilizar e baixar o conteúdo sem autorização escrita. É o maior risco legal do projeto; depende de decisão do humano.

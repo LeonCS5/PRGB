@@ -1,7 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LEGAL_CONTACT } from '../content/legal';
 import { RankingError } from '../services/backend/rankingApi';
 import { NICKNAME_ERROR_MESSAGES } from '../services/nickname';
+import { RoomError } from '../services/backend/roomChannel';
+import { TabsApi } from '../services/tabsApi';
+import { getRoomErrorMessage, getSearchErrorMessage, getSongMetadata } from './uiErrors';
 import { getRankingErrorMessage } from './uiErrors';
 
 describe('getRankingErrorMessage', () => {
@@ -21,5 +24,24 @@ describe('getRankingErrorMessage', () => {
 
   it('says how to ask for a review of a refused score (LGPD art. 20)', () => {
     expect(getRankingErrorMessage(new RankingError('score_implausible'))).toContain(LEGAL_CONTACT.email);
+  });
+});
+
+describe('tab provider and room messages', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('says the format was unexpected, not that the connection failed', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('{"oops":true}')));
+    await expect(getSongMetadata(7)).rejects.toThrow('formato inesperado');
+    await expect(TabsApi.searchSongs('x').catch(getSearchErrorMessage)).resolves.toContain('formato inesperado');
+  });
+
+  it('keeps the connection message for network failures', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 404 })));
+    await expect(getSongMetadata(7)).rejects.toThrow('Verifique sua conexão');
+  });
+
+  it('explains a full Realtime service', () => {
+    expect(getRoomErrorMessage(new RoomError('realtime_busy'))).toContain('lotadas');
   });
 });

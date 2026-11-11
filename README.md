@@ -125,7 +125,7 @@ Guitarra → Interface USB → getUserMedia (RAW 48kHz, sem filtros do SO)
 ## 🚀 Começando
 
 ### Pré-requisitos
-- **Node.js:** versão 20 ou superior.
+- **Node.js:** versão 22 ou superior (a Vercel publica com a 24).
 - **Interface de Áudio USB:** Conectada ao computador com a guitarra plugada na entrada de instrumento (*Hi-Z / Inst*).
 - **Navegador Moderno:** Chrome, Edge, Brave, Opera ou Firefox com suporte nativo à Web Audio API.
 - **Fones de Ouvido:** Recomendado para evitar feedback sonoro (*microfonia*).
@@ -143,12 +143,17 @@ cd PRGB
 npm install
 ```
 
-3. Inicie o servidor de desenvolvimento:
+3. (Opcional) Configure o ranking e a dupla online. Sem isto o jogo funciona normalmente, sem conta e sem ranking:
+```bash
+cp .env.example .env.local   # preencha VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY
+```
+
+4. Inicie o servidor de desenvolvimento:
 ```bash
 npm run dev
 ```
 
-4. Acesse no navegador: [http://localhost:5173](http://localhost:5173)
+5. Acesse no navegador: [http://localhost:5173](http://localhost:5173)
 
 ---
 
@@ -159,53 +164,36 @@ npm run dev
 | `npm run dev` | Inicia o servidor Vite local com proxies da API de tablaturas |
 | `npm run build` | Valida a tipagem TypeScript (`tsc -b`) e gera o bundle de produção em `dist/` |
 | `npm run lint` | Executa o linter ultrarrápido [oxlint](https://oxc.rs) |
-| `npm run test` | Executa a suíte de 30 testes unitários automatizados com [Vitest](https://vitest.dev) |
+| `npm run test` | Executa os testes com [Vitest](https://vitest.dev): serviços, estado das telas e as migrations do banco, rodadas num Postgres isolado (PGlite) |
 | `npm run preview` | Executa um servidor local para inspecionar a build de produção |
+
+---
+
+## ⚙️ Configuração e Deploy
+
+- **Variáveis de ambiente** (o `.env.example` explica cada uma): `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` ligam o ranking e a dupla online; `VITE_TURNSTILE_SITE_KEY` ativa a verificação contra robôs na criação de conta; `VITE_SUPPORT_URL` define o link de apoio. Só variáveis `VITE_` chegam ao navegador: nunca coloque uma chave secreta com esse prefixo.
+- **Deploy:** o push na `main` publica na [Vercel](https://vercel.com). O CI do GitHub roda lint, build, testes e `npm audit` a cada push na `main` e em cada pull request.
+- **Banco:** as migrations ficam em `supabase/migrations/` e os testes delas em `supabase/db-tests/`.
+- **Operação** (inventário de serviços, plano de incidente, backup, rotação de chaves): [docs/operacao.md](docs/operacao.md).
+- **Histórico de mudanças:** [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
 ## 📂 Estrutura do Projeto
 
+O mapa completo, arquivo por arquivo, fica em [AGENTS.md](AGENTS.md). Em resumo:
+
 ```
 PRGB/
-├── index.html                       # Shell HTML da aplicação com PWA links
-├── vite.config.ts                   # Configuração do Vite e proxy reverso da API de tablaturas
-├── package.json                     # Scripts e dependências
-├── tsconfig.app.json                # Configuração TypeScript (Strict mode)
-├── .oxlintrc.json                   # Configuração do linter oxlint
-│
 ├── src/
-│   ├── main.tsx                     # Ponto de entrada React (StrictMode)
-│   ├── App.tsx                      # Componente raiz, landing page e coordenação global
-│   ├── index.css                    # Tailwind CSS 4 + reset global
-│   │
-│   ├── context/
-│   │   ├── AudioSessionContext.tsx  # Estado global de áudio, PRGB Amp e store isolado de pitch
-│   │   ├── ModalsContext.tsx        # Controle de visibilidade dos modais
-│   │   ├── preferences.ts           # Persistência versionada no localStorage (prgb:prefs:v1)
-│   │   └── uiErrors.ts              # Catálogo de mensagens de erro pt-BR e helpers
-│   │
-│   ├── components/
-│   │   ├── PracticeGame.tsx         # Canvas 2D: rails em cache, notas, animação 60FPS e scoring
-│   │   ├── SongSearchModal.tsx      # Modal de pesquisa de músicas e seleção de faixas
-│   │   ├── AudioSettingsModal.tsx   # Modal de escolha de interface, canal, VU meter e afinador
-│   │   ├── AmpRack.tsx      # Interface gráfica do PRGB Amp e presets
-│   │   └── ErrorNotice.tsx          # Alerta de erro acessível (role="alert") com ações
-│   │
-│   └── services/
-│       ├── audioEngine.ts           # Captura USB raw, roteamento de canal e pitch NSDF/MPM
-│       ├── audioEngine.test.ts      # Testes unitários do AudioEngine
-│       ├── ampEngine.ts           # Cadeia DSP do simulador de amplificador e cab sim
-│       ├── tabsApi.ts               # Cliente da API de tablaturas e normalizador de tablaturas
-│       ├── tabsApi.test.ts          # Testes unitários do parser de tablaturas
-│       ├── synthAudio.ts            # MetronomeScheduler no relógio Web Audio, SFX e synth
-│       └── synthAudio.test.ts       # Testes unitários do agendamento de metrônomo
-│
-└── public/
-    ├── favicon.svg                  # Ícone vetorial da aplicação
-    ├── icons.svg                    # Sprites vetoriais
-    ├── manifest.webmanifest         # Manifesto PWA
-    └── sw.js                        # Service Worker para cache offline do app shell
+│   ├── components/   # Telas e componentes (jogo em canvas, modais, ranking, exercícios)
+│   ├── context/      # Estado global: áudio, modais, ranking, salas, preferências
+│   ├── services/     # Áudio, pitch, pontuação, exercícios, acervo, backend (cada um com seu teste)
+│   └── content/      # Política de Privacidade e Termos (LGPD)
+├── supabase/         # Migrations, Edge Function e testes de banco
+├── docs/             # Operação: incidentes, backup, chaves
+├── scripts/          # Rotinas locais (backup do banco)
+└── public/           # Fontes, ícones, manifesto PWA e service worker
 ```
 
 ---
@@ -224,6 +212,7 @@ PRGB/
 - **100% Local:** Seu áudio é processado inteiramente na memória do seu navegador.
 - **Sem Gravação:** Nenhum áudio é gravado ou transmitido para a rede.
 - **Sem Rastreamento:** Sem anúncios, sem cookies e sem cadastro para tocar.
+- **Ranking opcional:** só para maiores de 18 anos, com consentimento, conta anônima (sem e-mail nem senha) e uma verificação contra robôs da Cloudflare antes de criar a conta. Detalhes na Política de Privacidade do site.
 
 ---
 

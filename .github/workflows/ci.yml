@@ -1,0 +1,32 @@
+name: CI
+
+# Same checks the project asks for before any merge (AGENTS.md): lint, build and tests, plus an audit of
+# what ships to the browser. It runs on every push and pull request, so a red main shows up at once.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - run: npm test
+      # Only what reaches the browser; a dev-only advisory should not block a release
+      - run: npm audit --omit=dev --audit-level=high

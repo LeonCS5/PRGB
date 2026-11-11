@@ -63,7 +63,8 @@ export const CaptchaField: React.FC<CaptchaFieldProps> = ({ siteKey, onToken }) 
 
   const retry = () => {
     setStatus('loading');
-    reportToken(null);
+    // The prop, not the effect event: effect events can only be called from effects
+    onToken(null);
     // A rendered widget asks for a new challenge; a script that never loaded is tried again
     if (widgetRef.current) widgetRef.current.reset();
     else setAttempt((value) => value + 1);

@@ -28,3 +28,9 @@ dist-ssr
 
 # Agent worktrees created by Claude Code
 .claude/worktrees/
+
+# Checklist de referência, só de uso local
+checklist-software.md
+
+# Cópias do banco: têm dados pessoais e nunca vão para o repositório
+backups/

@@ -1,10 +1,10 @@
 import { ModalFrame } from './ModalFrame';
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useId, useMemo, useRef, useState } from 'react';
 import { Search, Music, Disc, ListOrdered, Loader2, X, ChevronRight, Trophy, User, Users } from 'lucide-react';
 import { TabsApi, type TabSearchResult, type SongMeta, type NormalizedSongTab } from '../services/tabsApi';
 import type { SavedSong } from '../context/preferences';
 import { ErrorNotice } from './ErrorNotice';
-import { getSongMetadata, loadSongTrack } from '../context/uiErrors';
+import { getSearchErrorMessage, getSongMetadata, loadSongTrack } from '../context/uiErrors';
 import { getPersonalBest } from '../services/records';
 import type { GamePart } from '../context/gameSession';
 import { useRanking } from '../context/ranking';
@@ -31,6 +31,7 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
   onSelectDuo
 }) => {
   const { isConfigured: isRankingOn, openLeaderboard } = useRanking();
+  const searchId = useId();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<TabSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -70,9 +71,9 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
       if (data.length === 0) {
         setError('Nenhuma música encontrada com esse nome no acervo.');
       }
-    } catch {
+    } catch (err) {
       setResults([]);
-      setError('Não foi possível buscar músicas. Verifique sua conexão e tente novamente.');
+      setError(getSearchErrorMessage(err));
       setRetry(() => () => void handleSearch(undefined, searchQuery));
     } finally {
       setIsSearching(false);
@@ -189,23 +190,26 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
         )}
 
         {/* Search Bar */}
-        <form onSubmit={handleSearch} className="relative mb-4">
-          <input
-            type="text"
-            aria-label="Nome da música ou banda"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Digite o nome de uma música ou banda"
-            className="w-full rounded-xl border border-ink-700 bg-ink-800/90 pl-11 pr-24 py-3 text-sm text-ink-100 placeholder-ink-400 focus:border-amp-500 focus:outline-none focus:ring-1 focus:ring-amp-500"
-          />
-          <Search className="absolute left-3.5 top-3.5 text-ink-300" size={18} />
-          <button
-            type="submit"
-            disabled={isSearching || isLoadingTab}
-            className="min-h-10 absolute right-2 top-1 rounded-lg bg-gradient-to-r from-amp-500 to-amp-500 px-4 py-1.5 text-xs font-bold text-ink-950 shadow-md hover:from-amp-400 hover:to-amp-400 transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
-          >
-            {isSearching ? <Loader2 size={14} className="animate-spin" /> : 'Buscar'}
-          </button>
+        <form onSubmit={handleSearch} className="mb-4">
+          <label htmlFor={searchId} className="mb-2 block text-xs font-semibold text-ink-200">Nome da música ou banda</label>
+          <div className="relative">
+            <input
+              id={searchId}
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Digite o nome de uma música ou banda"
+              className="w-full rounded-xl border border-ink-700 bg-ink-800/90 pl-11 pr-24 py-3 text-sm text-ink-100 placeholder-ink-400 focus:border-amp-500 focus:outline-none focus:ring-1 focus:ring-amp-500"
+            />
+            <Search className="absolute left-3.5 top-3.5 text-ink-300" size={18} />
+            <button
+              type="submit"
+              disabled={isSearching || isLoadingTab}
+              className="min-h-10 absolute right-2 top-1 rounded-lg bg-gradient-to-r from-amp-500 to-amp-500 px-4 py-1.5 text-xs font-bold text-ink-950 shadow-md hover:from-amp-400 hover:to-amp-400 transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+            >
+              {isSearching ? <Loader2 size={14} className="animate-spin" /> : 'Buscar'}
+            </button>
+          </div>
         </form>
 
         {error && (
