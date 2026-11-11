@@ -4,7 +4,7 @@ import { Search, Music, Disc, ListOrdered, Loader2, X, ChevronRight, Trophy, Use
 import { TabsApi, type TabSearchResult, type SongMeta, type NormalizedSongTab } from '../services/tabsApi';
 import type { SavedSong } from '../context/preferences';
 import { ErrorNotice } from './ErrorNotice';
-import { getSongMetadata, loadSongTrack } from '../context/uiErrors';
+import { getSearchErrorMessage, getSongMetadata, loadSongTrack } from '../context/uiErrors';
 import { getPersonalBest } from '../services/records';
 import type { GamePart } from '../context/gameSession';
 import { useRanking } from '../context/ranking';
@@ -71,9 +71,9 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
       if (data.length === 0) {
         setError('Nenhuma música encontrada com esse nome no acervo.');
       }
-    } catch {
+    } catch (err) {
       setResults([]);
-      setError('Não foi possível buscar músicas. Verifique sua conexão e tente novamente.');
+      setError(getSearchErrorMessage(err));
       setRetry(() => () => void handleSearch(undefined, searchQuery));
     } finally {
       setIsSearching(false);
