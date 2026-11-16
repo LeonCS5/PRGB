@@ -63,6 +63,7 @@ export const PRIVACY_POLICY: LegalDocument = {
   summary: [
     'Para tocar, você não precisa de conta: preferências, recordes e histórico ficam só no seu navegador.',
     'O som da guitarra ou do microfone é processado no seu aparelho e nunca é gravado nem enviado.',
+    'As tablaturas do acervo externo são de terceiros: o PRGB não as licencia nem as hospeda, e esse recurso é experimental. O ranking não usa o acervo externo.',
     'Ranking e sala online são opcionais, só para maiores de 18 anos, e dependem do seu consentimento.',
     'No ranking, a conta é anônima: guardamos o apelido que você escolher (público), um ID aleatório e suas pontuações, sem e-mail, senha, nome real ou telefone.',
     'Ao criar a conta do ranking, uma verificação anti-robô da Cloudflare recebe dados técnicos do seu navegador. Quem só joga, sem ranking, nunca carrega nada da Cloudflare.',
@@ -114,6 +115,16 @@ export const PRIVACY_POLICY: LegalDocument = {
         'o apelido local, se você escolher um;',
         'a marca de que você já viu o aviso da primeira visita;',
         'se você entrar no ranking, a chave de sessão que mantém sua conta conectada neste navegador.'
+      ]
+    },
+    {
+      id: 'acervo-externo',
+      title: 'Acervo externo de tablaturas',
+      paragraphs: [
+        'As tablaturas das músicas que você busca vêm de um acervo externo, de terceiros. O PRGB não as licencia nem as hospeda: elas passam pelo seu navegador, a partir do provedor externo, só quando você busca ou abre uma música, e não ficam guardadas em servidor nosso.',
+        'É um recurso experimental. Ele pode mudar, ficar indisponível ou ser retirado a qualquer momento, sem aviso. O ranking não usa o acervo externo: só vale para ele o conteúdo do próprio PRGB.',
+        'Do acervo, o PRGB guarda no banco do ranking apenas o título, o artista, o nome da faixa e as contagens de notas das músicas que já foram registradas para o ranking, conforme descrito em “Ranking: o que guardamos”. O que o provedor externo recebe na busca está em “Com quem compartilhamos”.',
+        `Se você é titular de direitos e quer a retirada de um conteúdo, peça pelo e-mail ${email}. A resposta segue o mesmo prazo de 15 dias dos demais pedidos.`
       ]
     },
     {
@@ -325,7 +336,7 @@ export const TERMS_OF_USE: LegalDocument = {
   updatedAt: LEGAL_VERSION,
   summary: [
     'O PRGB é gratuito e oferecido no estado em que se encontra, sem garantia de que estará sempre disponível.',
-    'As tablaturas vêm de um provedor externo, que não tem relação com o PRGB; as músicas pertencem aos seus titulares.',
+    'As tablaturas vêm de um acervo externo, de terceiros, que não tem relação com o PRGB; o PRGB não as licencia nem as hospeda e esse recurso é experimental. As músicas pertencem aos seus titulares.',
     'Ranking e sala online são só para maiores de 18 anos.',
     'Não vale apelido ofensivo ou que imite outra pessoa ou a equipe, nem trapaça ou envio automatizado.',
     'Podemos remover apelidos e pontuações e encerrar contas que violem estas regras.',
@@ -365,6 +376,7 @@ export const TERMS_OF_USE: LegalDocument = {
       paragraphs: [
         'As tablaturas e os dados das músicas vêm de um provedor externo e são buscados quando você os pede. O PRGB não é afiliado, patrocinado nem endossado por esse provedor, por artistas ou por gravadoras.',
         'Músicas, tablaturas, nomes de artistas e marcas pertencem aos seus titulares. Não garantimos que esse conteúdo esteja correto, completo ou disponível, e ele pode deixar de aparecer se o provedor mudar ou bloquear o acesso.',
+        'Esse acervo externo é um recurso experimental: o PRGB não licencia nem hospeda essas tablaturas, que passam pelo navegador de quem busca. Ele pode mudar, ficar indisponível ou ser retirado a qualquer momento, sem aviso. O ranking não usa o acervo externo, só o conteúdo do próprio PRGB.',
         'O PRGB exibe esse conteúdo para você praticar. Copiar, baixar em massa ou redistribuir tablaturas pode violar os direitos dos titulares.'
       ]
     },
@@ -372,8 +384,8 @@ export const TERMS_OF_USE: LegalDocument = {
       id: 'direitos-autorais',
       title: 'Direitos autorais e pedidos de remoção',
       paragraphs: [
-        'O PRGB não guarda tablaturas em servidor próprio: elas vêm do provedor externo quando você as abre. Guardamos só números sobre cada faixa, como a quantidade de notas e a duração, para conferir pontuações.',
-        `Se você é titular de direitos, ou representa quem é, e acha que algo no PRGB viola esses direitos, escreva para ${email} dizendo quem você é, qual é a obra, onde ela aparece no PRGB e por que o uso é indevido. Analisamos cada pedido e, se ele proceder, tiramos o conteúdo do alcance do PRGB o quanto antes.`,
+        'O PRGB não guarda tablaturas em servidor próprio: elas vêm do provedor externo quando você as abre. Guardamos dados básicos da faixa, como título, artista, quantidade de notas e duração, para conferir pontuações.',
+        `Se você é titular de direitos, ou representa quem é, e acha que algo no PRGB viola esses direitos, escreva para ${email} dizendo quem você é, qual é a obra, onde ela aparece no PRGB e por que o uso é indevido. Analisamos cada pedido e, se ele proceder, tiramos o conteúdo do alcance do PRGB o quanto antes. Respondemos em até 15 dias, o mesmo prazo dos demais pedidos.`,
         'Quem discordar de uma remoção pode pedir revisão pelo mesmo e-mail.'
       ]
     },

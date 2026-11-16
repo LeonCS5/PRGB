@@ -84,6 +84,28 @@ describe('legal documents', () => {
     expect(CONSENT_COPY.rankingSummary.join('\n')).toContain('Cloudflare');
   });
 
+  // The external catalog is third-party and experimental; the legal texts must say so (round of the provider's written answer).
+  it('say the external catalog is third-party, unlicensed, experimental and outside the ranking, with a takedown channel', () => {
+    expect(LEGAL_VERSION).toBe('2026-11-04');
+    const policy = sectionText(PRIVACY_POLICY, 'acervo-externo');
+    for (const fact of ['de terceiros', 'não as licencia nem as hospeda', 'experimental', 'a qualquer momento, sem aviso',
+      'O ranking não usa o acervo externo', 'titular de direitos', LEGAL_CONTACT.email, '15 dias']) {
+      expect(policy).toContain(fact);
+    }
+    const terms = sectionText(TERMS_OF_USE, 'conteudo-de-terceiros');
+    for (const fact of ['experimental', 'não licencia nem hospeda', 'O ranking não usa o acervo externo']) expect(terms).toContain(fact);
+    const takedown = sectionText(TERMS_OF_USE, 'direitos-autorais');
+    expect(takedown).toContain(LEGAL_CONTACT.email);
+    expect(takedown).toContain('15 dias');
+    expect(PRIVACY_POLICY.summary.join('\n')).toContain('experimental');
+    expect(TERMS_OF_USE.summary.join('\n')).toContain('experimental');
+  });
+
+  it('never name the external provider', () => {
+    // The name stays out of the UI: it is given only on request by e-mail.
+    expect(sectionText(PRIVACY_POLICY, 'compartilhamento')).toContain('Você pode pedir o nome desse provedor');
+  });
+
   it('name the controller and the channel for data subjects and the ANPD', () => {
     expect(LEGAL_CONTACT.controller.trim()).not.toBe('');
     expect(LEGAL_CONTACT.email).toMatch(/^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/);
