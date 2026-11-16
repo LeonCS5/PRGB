@@ -25,6 +25,8 @@ import {
   type LucideIcon
 } from 'lucide-react';
 import { getDemoSong, DEMO_SONG_ID } from './services/demoSong';
+import { isRepertoireSongId } from './services/songIds';
+import { findSongInfo, findSongPart } from './services/songs';
 import { ErrorNotice } from './components/ErrorNotice';
 import { ChallengeCard } from './components/ChallengeCard';
 import { LocalRecords } from './components/LocalRecords';
@@ -122,6 +124,7 @@ const demoPart = (): GamePart => ({ tab: getDemoSong(), partId: 0, revisionId: n
 const readValidChallenge = (): Challenge | null => {
   const challenge = readChallengeFromSearch(window.location.search);
   if (challenge && isExerciseSongId(challenge.songId)) return findExercisePart(challenge.songId, challenge.partId) ? challenge : null;
+  if (challenge && isRepertoireSongId(challenge.songId)) return challenge.partId === 0 && findSongInfo(challenge.songId) ? challenge : null;
   return challenge && challenge.songId === DEMO_SONG_ID && challenge.partId !== 0 ? null : challenge;
 };
 
@@ -394,6 +397,10 @@ const AppContent: React.FC = () => {
         part = demoPart();
       } else if (exercise) {
         part = exercise;
+      } else if (isRepertoireSongId(challenge.songId)) {
+        const song = await findSongPart(challenge.songId, challenge.partId);
+        if (!song) throw new Error('Esta peça não está mais disponível. Escolha outra.');
+        part = song;
       } else {
         const meta = await getSongMetadata(challenge.songId);
         const trackIndex = meta.tracks.findIndex((track) => track.partId === challenge.partId);

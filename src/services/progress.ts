@@ -8,6 +8,8 @@
 
 import { ACHIEVEMENTS, evaluateAchievements, type AchievementEvent, type AchievementRun } from './achievements';
 import { parseExerciseSongId, isExerciseSongId } from './exerciseIds';
+import { isRepertoireSongId } from './songIds';
+import { DEMO_SONG_ID } from './demoSong';
 import { accuracyPercent, type ScoreState } from './scoring';
 
 export const PROGRESS_STORAGE_KEY = 'prgb:progress:v1';
@@ -122,7 +124,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isIntIn = (value: unknown, min: number, max: number): value is number =>
   typeof value === 'number' && Number.isSafeInteger(value) && value >= min && value <= max;
 
-const isOwnSongId = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value <= 0;
+const isOwnSongId = (value: unknown): value is number =>
+  typeof value === 'number' && (value === DEMO_SONG_ID || isExerciseSongId(value) || isRepertoireSongId(value));
 
 const clampNumber = (value: number, min: number, max: number): number =>
   Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : min;
@@ -278,7 +281,7 @@ export function recordRun(progress: Progress, run: FinishedRun, now: number): { 
   const totals: ProgressTotals = {
     runs: Math.min(MAX_COUNT, progress.totals.runs + 1),
     practiceMs: Math.min(MAX_TOTAL_MS, progress.totals.practiceMs + playedMs),
-    trainingLaps: ownContent && valid ? Math.min(MAX_COUNT, progress.totals.trainingLaps + laps) : progress.totals.trainingLaps,
+    trainingLaps: ownContent && valid ? Math.min(MAX_COUNT, progress.totals.trainingLaps + (laps > 1 ? laps : 0)) : progress.totals.trainingLaps,
     archivedStars
   };
   const next: Progress = { ...progress, totals, contents, weeks: addPracticeTime(progress.weeks, now, playedMs) };

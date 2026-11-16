@@ -493,3 +493,25 @@ describe('calm mode', () => {
     expect(play(calm, {}).report.newAchievements).toContain('primeira-palhetada');
   });
 });
+
+describe('review fixes', () => {
+  it('normal runs do not count as training laps', () => {
+    let progress = createProgress();
+    for (let i = 0; i < 10; i++) progress = play(progress, { laps: 1 }, at(2026, 11, 16 + (i % 3))).progress;
+    expect(progress.totals.trainingLaps).toBe(0);
+    expect(progress.achievements['dez-voltas']).toBeUndefined();
+  });
+
+  it('training runs with several laps still count', () => {
+    const progress = play(createProgress(), { laps: 4 }).progress;
+    expect(progress.totals.trainingLaps).toBe(4);
+  });
+
+  it('drops stored contents whose ids are not own content', () => {
+    const good = `${PENTATONIC}:0`;
+    const entry = { bestAccuracy: 90, bestCombo: 10, stars: 3, plays: 1, lastPlayedAt: 1 };
+    const raw = { version: 1, ...JSON.parse(JSON.stringify(createProgress())), contents: { [good]: entry, '0:0': entry, '-42:0': entry } };
+    const loaded = parseProgress(raw);
+    expect(Object.keys(loaded.contents)).toEqual([good]);
+  });
+});

@@ -7,6 +7,7 @@ import { useAudioSession } from '../context/AudioSessionContext';
 import { useModals } from '../context/ModalsContext';
 import { useRanking } from '../context/ranking';
 import { isExerciseSongId } from '../services/exerciseIds';
+import { isRankableSongId } from '../services/rankable';
 import { ChallengeSharePanel } from './ChallengeSharePanel';
 
 const formatPoints = (value: number) => value.toLocaleString('pt-BR');
@@ -174,7 +175,7 @@ const SoloResult: React.FC<ResultPanelProps> = ({ titleId, summary, parts, chall
         {ranked && <RankedResult submission={ranked} onRetry={() => onRetryRanked?.()} />}
       </div>
       <div className="mt-6">
-        {isConfigured && !isExercise && (
+        {isConfigured && isRankableSongId(tab.songId) && (
           <button type="button" onClick={() => openLeaderboard({ songId: tab.songId, partId, title: tab.title, trackName: tab.trackName })}
             className={secondaryButton + ' mt-0 mb-3 flex items-center justify-center gap-2 font-semibold'}>
             <ListOrdered size={16} aria-hidden="true" /> Ver ranking
