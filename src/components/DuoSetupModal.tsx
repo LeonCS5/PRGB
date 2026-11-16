@@ -1,3 +1,4 @@
+import { isAcervoEnabled } from '../services/acervoFlag';
 import React, { useEffect, useId, useRef, useState } from 'react';
 import { AlertTriangle, ArrowLeft, Cable, Check, Music, Play, Users, X } from 'lucide-react';
 import { ModalFrame } from './ModalFrame';
@@ -202,13 +203,13 @@ const SongStep: React.FC<{ onBack: () => void; onSearch: () => void; onDemo: () 
   <>
     <StepHeading step={3} label="MÚSICA" title="Escolham a música" />
     <p className="mt-3 text-sm leading-6 text-ink-300">
-      Na busca, escolham a parte de cada um: a mesma parte, para competir, ou partes diferentes, como base e solo. Faixas de baixo também funcionam.
+      {isAcervoEnabled() ? 'Na busca, escolham a parte de cada um: a mesma parte, para competir, ou partes diferentes, como base e solo. Faixas de baixo também funcionam.' : 'Os dois tocam o exercício do PRGB, cada um com sua guitarra.'}
     </p>
     <div className="mt-5 grid gap-3 sm:grid-cols-2">
-      <button type="button" onClick={onSearch} className="flex min-h-24 cursor-pointer items-center gap-3 rounded-xl border border-amp-500/40 bg-amp-500/10 p-4 text-left transition hover:bg-amp-500/15">
+      {isAcervoEnabled() && <button type="button" onClick={onSearch} className="flex min-h-24 cursor-pointer items-center gap-3 rounded-xl border border-amp-500/40 bg-amp-500/10 p-4 text-left transition hover:bg-amp-500/15">
         <Music size={22} className="shrink-0 text-amp-300" aria-hidden="true" />
         <span><span className="block font-bold text-ink-100">Buscar música</span><span className="mt-1 block text-xs text-ink-300">Acervo de músicas, uma parte para cada jogador</span></span>
-      </button>
+      </button>}
       <button type="button" onClick={onDemo} className="flex min-h-24 cursor-pointer items-center gap-3 rounded-xl border border-signal-500/30 bg-signal-500/5 p-4 text-left transition hover:bg-signal-500/10">
         <Play size={22} className="shrink-0 text-signal-300" aria-hidden="true" />
         <span><span className="block font-bold text-ink-100">Exercício demo</span><span className="mt-1 block text-xs text-ink-300">Os dois tocam a pentatônica, sem internet</span></span>

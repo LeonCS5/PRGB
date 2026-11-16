@@ -158,6 +158,7 @@ const SoloResult: React.FC<ResultPanelProps> = ({ titleId, summary, parts, chall
       <p className="font-mono text-xs tracking-widest text-amp-300">MAIS UM RIFF NO CAMINHO</p>
       <h2 id={titleId} className="mt-3 font-display text-3xl font-bold">Prática concluída</h2>
       <p className="mt-2 text-sm text-ink-300">{tab.title} · {tab.trackName}{summary.speed !== 1 ? ` · ${formatSpeed(summary.speed)}` : ''}</p>
+      {tab.songId > 0 && <p className="mt-2 text-sm text-near">Música do acervo experimental: não vale para o ranking.</p>}
       <div aria-live="polite"><PersonalBestBanner summary={summary} score={score.score} /></div>
       <p className="mt-6 font-mono text-5xl font-bold text-amp-300">{formatPoints(score.score)}</p><p className="mt-2 text-xs text-ink-300">PONTOS</p>
       <div className="my-5 grid grid-cols-2 gap-3 font-mono"><div><p className="text-2xl text-hit">{accuracy}%</p><p className="text-xs text-ink-300">Precisão</p></div><div><p className="text-2xl text-signal-300">{score.maxCombo}</p><p className="text-xs text-ink-300">Max combo</p></div></div>
@@ -206,6 +207,7 @@ const DuoResult: React.FC<ResultPanelProps & { names: [string, string] }> = ({ t
       <p className="font-mono text-xs tracking-widest text-amp-300">DUPLA NO MESMO COMPUTADOR</p>
       <h2 id={titleId} className="mt-3 font-display text-3xl font-bold">Fim da música</h2>
       <p className="mt-2 text-sm text-ink-300">{parts[0].tab.title}</p>
+      {parts[0].tab.songId > 0 && <p className="mt-2 text-sm text-near">Música do acervo experimental: não vale para o ranking.</p>}
       <p className="mt-6 font-mono text-5xl font-bold text-amp-300">{formatPoints(team)}</p><p className="mt-2 text-xs text-ink-300">PLACAR DA EQUIPE</p>
       <p className="mt-4 flex items-center justify-center gap-2 font-display text-lg font-bold text-ink-100">
         <Trophy size={18} className="text-amp-300" aria-hidden="true" /> {leader ? `${leader} fez mais pontos!` : 'Empate!'}
