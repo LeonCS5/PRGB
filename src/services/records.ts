@@ -2,11 +2,12 @@
 // Storage can be blocked, full or tampered with, so every read is validated and nothing here throws.
 
 import { isExerciseSongId } from './exerciseIds';
+import { isRepertoireSongId } from './songIds';
 
 export type RunMode = 'solo' | 'duo-local' | 'duo-online';
 
 export interface RunResult {
-  songId: number; // -1 = offline demo; see exerciseIds.ts for the exercises
+  songId: number; // -1 = offline demo; see exerciseIds.ts for the exercises and songIds.ts for the repertoire
   partId: number;
   title: string;
   artist: string;
@@ -55,7 +56,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isCount = (value: unknown): value is number =>
   typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 
-const isSongId = (value: unknown): value is number => isCount(value) ? value >= 1 : value === -1 || isExerciseSongId(value);
+const isSongId = (value: unknown): value is number => isCount(value) ? value >= 1 : value === -1 || isExerciseSongId(value) || isRepertoireSongId(value);
 
 const isAccuracy = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100;

@@ -3,11 +3,12 @@
 // between friends; only the online ranking needs scores checked by the server.
 
 import { isExerciseSongId } from './exerciseIds';
+import { isRepertoireSongId } from './songIds';
 import { containsBlockedTerm, validateNickname } from './nickname';
 
 export interface Challenge {
   v: 1;
-  songId: number; // -1 = offline demo; see exerciseIds.ts for the exercises
+  songId: number; // -1 = offline demo; see exerciseIds.ts for the exercises and songIds.ts for the repertoire
   partId: number;
   title: string;
   artist: string;
@@ -38,7 +39,7 @@ const LINK = /https?:|www\.|@|\b[a-z0-9-]+\.(?:com|net|org|br|io|app|xyz|me|link
 const isInteger = (value: unknown, min: number, max: number): value is number =>
   typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max;
 
-const isSongId = (value: unknown): value is number => value === -1 || isExerciseSongId(value) || isInteger(value, 1, Number.MAX_SAFE_INTEGER);
+const isSongId = (value: unknown): value is number => value === -1 || isExerciseSongId(value) || isRepertoireSongId(value) || isInteger(value, 1, Number.MAX_SAFE_INTEGER);
 
 const isPartId = (value: unknown): value is number => isInteger(value, 0, Number.MAX_SAFE_INTEGER);
 
