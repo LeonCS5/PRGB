@@ -1,3 +1,6 @@
+import { isAcervoEnabled } from '../services/acervoFlag';
+import { DEMO_SONG_ID, getDemoSong } from '../services/demoSong';
+import { EXERCISE_CATEGORIES, exercisePart, findExercisePart } from '../services/exercises';
 // Dupla online: criar ou entrar em sala, escolher música e faixa, ficar pronto e iniciar juntos.
 // O apelido vem do perfil: a sala exige conta, e ele já passou pela moderação.
 
@@ -20,6 +23,9 @@ export interface RoomModalProps {
   onClose: () => void;
   onStartGame: (part: GamePart, partnerName: string, startAtMs: number) => void;
 }
+
+const localPart = (songId: number, partId: number): GamePart | null =>
+  songId === DEMO_SONG_ID && partId === 0 ? { tab: getDemoSong(), partId: 0, revisionId: null } : findExercisePart(songId, partId);
 
 const ROLE_LABEL: Record<'host' | 'guest', string> = { host: 'Anfitrião', guest: 'Convidado' };
 
@@ -152,15 +158,22 @@ export const RoomModal: React.FC<RoomModalProps> = ({ isOpen, onClose, onStartGa
 
   const songId = state.song?.songId ?? null;
   const { myPartId, phase, localStartTimeMs } = state;
-  const myPart = loadedPart && loadedPart.tab.songId === songId && loadedPart.partId === myPartId ? loadedPart : null;
-  const hasSelection = songId !== null && myPartId !== null;
+  const myPart = (isAcervoEnabled() || (songId !== null && songId <= 0)) && loadedPart && loadedPart.tab.songId === songId && loadedPart.partId === myPartId ? loadedPart : null;
+  const isSongAllowed = songId !== null && (songId <= 0 || isAcervoEnabled());
+  const hasSelection = isSongAllowed && myPartId !== null;
 
   // The tab comes down before "Estou pronto": fetching it after the start could eat the whole countdown
   useEffect(() => {
-    if (songId === null || myPartId === null || myPart) return;
+    if (songId === null || myPartId === null || myPart || !isSongAllowed) return;
     let cancelled = false;
     const load = async () => {
       try {
+        if (songId <= 0) {
+          const part = localPart(songId, myPartId);
+          if (!part) throw new Error('Este exercício não está disponível.');
+          if (!cancelled) setLoadedPart(part);
+          return;
+        }
         const meta = await getSongMetadata(songId);
         const trackIndex = meta.tracks.findIndex((track) => track.partId === myPartId);
         const tab = await loadSongTrack(meta, trackIndex);
@@ -171,7 +184,7 @@ export const RoomModal: React.FC<RoomModalProps> = ({ isOpen, onClose, onStartGa
     };
     void load();
     return () => { cancelled = true; };
-  }, [songId, myPartId, myPart, loadAttempt]);
+  }, [songId, myPartId, myPart, loadAttempt, isSongAllowed]);
 
   const partnerName = state.peer?.nickname || 'Parceiro';
   useEffect(() => {
@@ -182,6 +195,13 @@ export const RoomModal: React.FC<RoomModalProps> = ({ isOpen, onClose, onStartGa
   }, [phase, myPart, localStartTimeMs, partnerName, onStartGame]);
 
   if (!isOpen) return null;
+
+  const selectLocalPart = (part: GamePart) => {
+    setLoadedPart(part);
+    setPartError(null);
+    controller.selectSong({ songId: part.tab.songId, partId: part.partId,
+      title: part.tab.title, artist: part.tab.artist, trackName: part.tab.trackName });
+  };
 
   const enter = async (open: (nickname: string) => Promise<void>) => {
     setIsBusy(true);
@@ -292,7 +312,7 @@ export const RoomModal: React.FC<RoomModalProps> = ({ isOpen, onClose, onStartGa
             <p className="text-xs font-semibold text-ink-300">Música selecionada</p>
             <p className="mt-1 font-bold text-ink-100">{state.song.title}</p>
             <p className="text-xs text-ink-300">{state.song.artist}</p>
-            {isHost && (
+            {isHost && isAcervoEnabled() && (
               <button type="button" onClick={() => setIsSearchOpen(true)} className="mt-3 cursor-pointer text-xs text-amp-300 underline hover:text-amp-200">
                 Mudar música
               </button>
@@ -301,13 +321,44 @@ export const RoomModal: React.FC<RoomModalProps> = ({ isOpen, onClose, onStartGa
         ) : isHost ? (
           <div className="mt-5">
             <p className="mb-2 text-sm text-ink-300">Você é o anfitrião: escolha a música que os dois vão tocar.</p>
-            <button type="button" onClick={() => setIsSearchOpen(true)} className={primaryButton + ' w-full'}>Escolher música</button>
+            {isAcervoEnabled() && <button type="button" onClick={() => setIsSearchOpen(true)} className={primaryButton + ' w-full'}>Escolher música</button>}
           </div>
         ) : (
           <p className="mt-5 text-sm text-ink-300">Aguardando o anfitrião escolher a música…</p>
         )}
 
-        {state.song && !isHost && (
+        {isHost && (
+          <div className="mt-4">
+            <label htmlFor={titleId + '-exercise'} className="mb-1.5 block text-sm font-semibold text-ink-200">Exercícios do PRGB</label>
+            <select id={titleId + '-exercise'} value="" className="min-h-11 w-full rounded-xl border border-ink-700 bg-ink-800 px-3 text-sm text-ink-100"
+              onChange={(event) => {
+                if (event.target.value === 'demo') {
+                  selectLocalPart({ tab: getDemoSong(), partId: 0, revisionId: null });
+                } else {
+                  const exercise = EXERCISE_CATEGORIES.flatMap((category) => category.groups.flatMap((group) => group.exercises)).find((item) => String(item.code) === event.target.value);
+                  if (exercise) selectLocalPart(exercisePart(exercise, 9));
+                }
+              }}>
+              <option value="" disabled>Escolha um exercício…</option>
+              <option value="demo">Exercício demo</option>
+              {EXERCISE_CATEGORIES.map((category) => (
+                <optgroup key={category.id} label={category.title}>
+                  {category.groups.flatMap((group) => group.exercises).map((exercise) => (
+                    <option key={exercise.code} value={exercise.code}>{exercise.title}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
+        )}
+        {state.song && !isSongAllowed && <p className="mt-4 text-sm text-near">O acervo está desativado. O anfitrião precisa escolher um exercício do PRGB.</p>}
+        {state.song && !isHost && songId !== null && songId <= 0 && (
+          <button type="button" className={secondaryButton + ' mt-4 w-full'}
+            onClick={() => { setPartError(null); controller.selectPart(state.song!.partId, state.song!.trackName); }}>
+            Tocar a mesma faixa do anfitrião
+          </button>
+        )}
+        {state.song && !isHost && isSongAllowed && songId !== null && songId > 0 && (
           <PartSelector key={state.song.songId} songId={state.song.songId} currentPartId={myPartId}
             onSelect={(partId, trackName) => { setPartError(null); controller.selectPart(partId, trackName); }} />
         )}
@@ -329,7 +380,7 @@ export const RoomModal: React.FC<RoomModalProps> = ({ isOpen, onClose, onStartGa
                 {readyBlocker ?? (state.myReady ? <><Check size={16} aria-hidden="true" /> Pronto! Clique para cancelar</> : 'Estou pronto')}
               </button>
             )}
-            {canStart(state) && (
+            {myPart && canStart(state) && (
               <button type="button" disabled={isBusy} aria-busy={isBusy}
                 onClick={() => {
                   setIsBusy(true);
@@ -352,7 +403,7 @@ export const RoomModal: React.FC<RoomModalProps> = ({ isOpen, onClose, onStartGa
     return (
       <>
         {lobby}
-        <SongSearchModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)}
+        <SongSearchModal isOpen={isAcervoEnabled() && isSearchOpen} onClose={() => setIsSearchOpen(false)}
           onSelectSong={(tab, song, revisionId) => {
             setLoadedPart({ tab, partId: song.partId, revisionId });
             setPartError(null);

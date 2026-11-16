@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useMemo, useState } from 'react';
+import { isAcervoEnabled } from '../services/acervoFlag';
+import React, { useCallback, createContext, useContext, useMemo, useState } from 'react';
 
 export interface ModalsValue {
   isSearchOpen: boolean;
@@ -16,7 +17,8 @@ export interface ModalsValue {
 const ModalsContext = createContext<ModalsValue | null>(null);
 
 export const ModalsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [isSearchOpen, setSearchOpen] = useState(false);
+  const [isSearchOpen, setSearchState] = useState(false);
+  const setSearchOpen = useCallback((open: boolean) => setSearchState(open && isAcervoEnabled()), []);
   const [isSettingsOpen, setSettingsOpen] = useState(false);
   const [isAmpRackOpen, setAmpRackOpen] = useState(false);
   const [isFeedbackOpen, setFeedbackOpen] = useState(false);
@@ -24,7 +26,7 @@ export const ModalsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const value = useMemo(
     () => ({ isSearchOpen, isSettingsOpen, isAmpRackOpen, isFeedbackOpen, isLatencyTestOpen, setSearchOpen, setSettingsOpen, setAmpRackOpen, setFeedbackOpen, setLatencyTestOpen }),
-    [isSearchOpen, isSettingsOpen, isAmpRackOpen, isFeedbackOpen, isLatencyTestOpen]
+    [isSearchOpen, isSettingsOpen, isAmpRackOpen, isFeedbackOpen, isLatencyTestOpen, setSearchOpen]
   );
 
   return <ModalsContext.Provider value={value}>{children}</ModalsContext.Provider>;

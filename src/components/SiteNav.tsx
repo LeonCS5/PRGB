@@ -1,3 +1,4 @@
+import { isAcervoEnabled } from '../services/acervoFlag';
 import React from 'react';
 import { Dumbbell, LayoutGrid, Music, PlugZap, Sliders, Trophy, type LucideIcon } from 'lucide-react';
 
@@ -18,7 +19,7 @@ interface NavItem {
 
 const navItems = ({ onExercises, onSearch, onRanking }: SiteNavProps): NavItem[] => [
   { label: 'Exercícios', icon: Dumbbell, onSelect: onExercises },
-  { label: 'Músicas', icon: Music, onSelect: onSearch },
+  ...(isAcervoEnabled() ? [{ label: 'Músicas', icon: Music, onSelect: onSearch }] : []),
   { label: 'Modos', icon: LayoutGrid },
   ...(onRanking ? [{ label: 'Ranking', icon: Trophy, onSelect: onRanking }] : [])
 ];
@@ -56,7 +57,7 @@ export const TabBar: React.FC<SiteNavProps> = (props) => {
     : { label: 'Conectar', ariaLabel: 'Conectar áudio', icon: PlugZap, onSelect: props.onAudio };
   return (
     <nav aria-label="Principal" className="fixed inset-x-0 bottom-0 z-40 flex border-t border-ink-700 bg-ink-950/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
-      {[...items.slice(0, 3), audio, ...items.slice(3)].map((item) => (
+      {[...items.filter((item) => item.label !== 'Ranking'), audio, ...items.filter((item) => item.label === 'Ranking')].map((item) => (
         <NavEntry key={item.label} item={item} iconSize={20}
           className="flex min-h-14 min-w-0 flex-1 cursor-pointer flex-col items-center justify-center gap-0.5 text-[11px] font-semibold text-ink-200 transition hover:text-amp-300" />
       ))}

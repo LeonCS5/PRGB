@@ -1,3 +1,4 @@
+import { isAcervoEnabled } from './services/acervoFlag';
 import React, { useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   Music,
@@ -313,6 +314,7 @@ const AppContent: React.FC = () => {
   };
 
   const handleOpenSearch = () => {
+    if (!isAcervoEnabled()) return;
     ensureSoloAudio();
     setIsSearchOpen(true);
   };
@@ -343,13 +345,18 @@ const AppContent: React.FC = () => {
   };
 
   const handleContinue = async () => {
-    if (!savedSong) return;
+    if (!savedSong || (!isAcervoEnabled() && savedSong.songId > 0)) return;
     songSelectionVersion.current += 1;
     const version = songSelectionVersion.current;
     setRestoreError(null);
     setIsRestoring(true);
     ensureSoloAudio();
     try {
+      const local = savedSong.songId === DEMO_SONG_ID ? demoPart() : findExercisePart(savedSong.songId, savedSong.partId);
+      if (local) {
+        if (version === songSelectionVersion.current) setSession(soloSession(local));
+        return;
+      }
       const meta = await getSongMetadata(savedSong.songId);
       const trackIndex = meta.tracks.findIndex((track) => track.partId === savedSong.partId);
       if (trackIndex < 0) throw new Error('A faixa salva não está mais disponível.');
@@ -357,7 +364,7 @@ const AppContent: React.FC = () => {
       if (version === songSelectionVersion.current) setSession(soloSession({ tab: normalized, partId: savedSong.partId, revisionId: meta.revisionId }));
     } catch (err) {
       if (version === songSelectionVersion.current) {
-        setRestoreError(`Não foi possível abrir a última música. ${err instanceof Error ? err.message : 'Busque uma música para continuar.'}`);
+        setRestoreError(`Não foi possível abrir a última música. ${err instanceof Error ? err.message : 'Escolha um exercício para continuar.'}`);
       }
     } finally {
       setIsRestoring(false);
@@ -372,6 +379,7 @@ const AppContent: React.FC = () => {
   };
 
   const handleAcceptChallenge = async (challenge: Challenge) => {
+    if (!isAcervoEnabled() && challenge.songId > 0) return;
     clearChallengeParam();
     songSelectionVersion.current += 1;
     const version = songSelectionVersion.current;
@@ -502,7 +510,7 @@ const AppContent: React.FC = () => {
             devPreset={import.meta.env.DEV && devScene && session.key === devSessionKey ? gameDevPreset(devScene, Math.max(...sessionParts.map((part) => part.tab.totalDurationMs))) : null}
             onExit={leaveGame}
             onOpenSearch={() => {
-              if (isExerciseSongId(sessionParts[0].tab.songId)) {
+              if (!isAcervoEnabled() || isExerciseSongId(sessionParts[0].tab.songId)) {
                 setIsLibraryOpen(true);
                 leaveGame();
                 return;
@@ -551,7 +559,7 @@ const AppContent: React.FC = () => {
           <main id="main-content" className="scroll-mt-16">
             <section aria-labelledby="hero-title" className="relative isolate mx-auto max-w-7xl px-5 pb-10 pt-8 sm:px-8 sm:pt-12 lg:px-12 lg:pb-14">
               <div aria-hidden="true" className="pointer-events-none absolute -left-40 top-0 -z-10 size-96 rounded-full bg-amp-500/5 blur-3xl" />
-              {pendingChallenge && (
+              {pendingChallenge && (isAcervoEnabled() || pendingChallenge.songId <= 0) && (
                 <ChallengeCard challenge={pendingChallenge} isLoading={isLoadingChallenge}
                   onAccept={() => void handleAcceptChallenge(pendingChallenge)} onDismiss={handleDismissChallenge} />
               )}
@@ -575,11 +583,11 @@ const AppContent: React.FC = () => {
                     <button type="button" onClick={() => handleOpenLibrary()} className="flex min-h-16 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-600 bg-ink-900 px-6 py-3 text-sm font-semibold text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
                       <Dumbbell size={18} aria-hidden="true" /> Exercícios
                     </button>
-                    <button type="button" onClick={handleOpenSearch} className="flex min-h-16 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-600 bg-ink-900 px-6 py-3 text-sm font-semibold text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
+                    {isAcervoEnabled() && <button type="button" onClick={handleOpenSearch} className="flex min-h-16 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-600 bg-ink-900 px-6 py-3 text-sm font-semibold text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
                       <Music size={18} aria-hidden="true" /> Buscar música
-                    </button>
+                    </button>}
                   </div>
-                  {savedSong && (
+                  {savedSong && (isAcervoEnabled() || savedSong.songId <= 0) && (
                     <button type="button" onClick={() => void handleContinue()} disabled={isRestoring}
                       className="mt-3 flex min-h-14 w-full max-w-lg cursor-pointer items-center gap-3 rounded-xl border border-amp-500/30 bg-amp-500/5 px-4 py-2 text-left transition hover:bg-amp-500/10 disabled:cursor-wait disabled:opacity-70">
                       <History size={18} className="shrink-0 text-amp-300" aria-hidden="true" />
@@ -648,7 +656,7 @@ const AppContent: React.FC = () => {
                   {[
                     { icon: Zap, label: '01 / TIMBRE', title: 'Encontre o seu timbre.', description: 'Simulador de amplificador em tempo real, o PRGB Amp. Ajuste o ganho, o gabinete e o reverb até achar o seu som.', detail: 'PRGB Amp · Simulador + gabinete + reverb', color: 'text-amp-300', surface: 'bg-amp-500/10 border-amp-500/20' },
                     { icon: AudioLines, label: '02 / ENTRADA', title: 'Plugue. Afine. Toque.', description: 'Escolha sua interface, monte a rota de áudio e use o afinador integrado. A latência depende do seu navegador e do seu equipamento.', detail: 'Sua guitarra no centro de tudo', color: 'text-signal-300', surface: 'bg-signal-500/10 border-signal-500/20' },
-                    { icon: Target, label: '03 / PRÁTICA', title: 'Cada nota conta.', description: 'Acompanhe as tablaturas, acerte as notas e construa seu combo. Perfeito, Bom ou Errou: veja seu progresso enquanto toca.', detail: 'Exercício próprio e busca em acervo externo', color: 'text-hit', surface: 'bg-hit/10 border-hit/20' }
+                    { icon: Target, label: '03 / PRÁTICA', title: 'Cada nota conta.', description: 'Acompanhe as tablaturas, acerte as notas e construa seu combo. Perfeito, Bom ou Errou: veja seu progresso enquanto toca.', detail: isAcervoEnabled() ? 'Exercício próprio e busca em acervo externo' : 'Exercícios próprios do PRGB', color: 'text-hit', surface: 'bg-hit/10 border-hit/20' }
                   ].map(({ icon: Icon, label, title, description, detail, color, surface }) => (
                     <article key={label} className="grid grid-cols-[auto_1fr] items-center gap-x-3 rounded-2xl border border-ink-700 bg-ink-850 p-5 sm:p-6 md:grid-rows-[auto_auto_1fr_auto]">
                       <span className={`flex size-10 items-center justify-center rounded-xl border ${color} ${surface}`}><Icon size={20} aria-hidden="true" /></span>
@@ -668,7 +676,7 @@ const AppContent: React.FC = () => {
               <ol className="mt-7 grid gap-6 md:grid-cols-3 md:gap-10">
                 {[
                   { icon: PlugZap, title: 'Plugue a interface', description: 'Conecte a guitarra à sua interface USB e permita o acesso ao áudio no navegador.' },
-                  { icon: Music, title: 'Escolha a música', description: 'Comece pelo exercício do PRGB ou busque sua próxima música no acervo.' },
+                  { icon: Music, title: 'Escolha a música', description: isAcervoEnabled() ? 'Comece pelo exercício do PRGB ou busque sua próxima música no acervo.' : 'Escolha um dos exercícios do PRGB para praticar.' },
                   { icon: Headphones, title: 'Dê o play. Toque.', description: 'Coloque os fones, ajuste seu timbre e siga as notas. Repita aquele trecho até sair.' }
                 ].map(({ icon: Icon, title, description }, index) => (
                   <li key={title} className="relative border-t border-ink-600 pt-4">
@@ -708,7 +716,7 @@ const AppContent: React.FC = () => {
 
       {/* Song Search Modal */}
       <SongSearchModal
-        isOpen={isSearchOpen}
+        isOpen={isAcervoEnabled() && isSearchOpen}
         onClose={() => {
           setIsSearchOpen(false);
           // Left the search without a duo playing (gave up, or switched to Solo): back to the solo input

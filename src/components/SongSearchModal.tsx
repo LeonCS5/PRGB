@@ -1,6 +1,7 @@
+import { isAcervoEnabled } from '../services/acervoFlag';
 import { ModalFrame } from './ModalFrame';
 import React, { useId, useMemo, useRef, useState } from 'react';
-import { Search, Music, Disc, ListOrdered, Loader2, X, ChevronRight, Trophy, User, Users } from 'lucide-react';
+import { TriangleAlert, Search, Music, Disc, ListOrdered, Loader2, X, ChevronRight, Trophy, User, Users } from 'lucide-react';
 import { TabsApi, type TabSearchResult, type SongMeta, type NormalizedSongTab } from '../services/tabsApi';
 import type { SavedSong } from '../context/preferences';
 import { ErrorNotice } from './ErrorNotice';
@@ -49,7 +50,7 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
     [isOpen, selectedSongMeta]
   );
 
-  if (!isOpen) return null;
+  if (!isOpen || !isAcervoEnabled()) return null;
 
   const close = () => {
     loadTokenRef.current += 1;
@@ -190,7 +191,7 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
         )}
 
         {/* Search Bar */}
-        <form onSubmit={handleSearch} className="mb-4">
+        <form onSubmit={handleSearch} className="mb-4 shrink-0">
           <label htmlFor={searchId} className="mb-2 block text-xs font-semibold text-ink-200">Nome da música ou banda</label>
           <div className="relative">
             <input
@@ -212,6 +213,11 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
           </div>
         </form>
 
+        <div className="mb-4 flex shrink-0 gap-2 rounded-xl border border-near/40 bg-ink-950 p-3 text-sm leading-5 text-ink-100">
+          <TriangleAlert size={18} className="mt-0.5 shrink-0 text-near" aria-hidden="true" />
+          <p><strong className="text-near">Acervo experimental:</strong> tablaturas de terceiros, sem licença do PRGB. Podem ficar indisponíveis a qualquer momento. O ranking vale só para os exercícios e músicas do PRGB.</p>
+        </div>
+
         {error && (
           <div className="mb-4">
             <ErrorNotice message={error} onDismiss={() => { setError(null); setRetry(null); }}
@@ -220,7 +226,7 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
         )}
 
         {/* Scrollable Content Area */}
-        <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+        <div className="min-h-0 flex-1 overflow-y-auto space-y-4 pr-1">
           {/* Track Selection Step */}
           {selectedSongMeta ? (
             <div className="rounded-xl border border-ink-700 bg-ink-950 p-4 space-y-3">
