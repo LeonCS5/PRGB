@@ -1,7 +1,7 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { normalizeTab } from '../../supabase/functions/_shared/tabNormalizer.ts';
 import { rawDemo } from './demoSong';
-import { TabsApi, TabsFormatError, isSongRemoved, midiToNoteName, soundingMidi, type SongMeta } from './tabsApi';
+import { TabsApi, TabsBlockedError, TabsFormatError, isSongRemoved, midiToNoteName, soundingMidi, type SongMeta } from './tabsApi';
 
 const STANDARD = [64, 59, 55, 50, 45, 40];
 
@@ -158,6 +158,7 @@ describe('TabsApi.normalizeTab', () => {
 
 describe('shared tab normalizer (also used by the register-part Edge Function)', () => {
   afterEach(() => {
+    TabsApi.reset();
     vi.unstubAllGlobals();
   });
 
@@ -211,11 +212,13 @@ describe('shared tab normalizer (also used by the register-part Edge Function)',
 describe('TabsApi network hardening', () => {
   const song = { songId: 1, artistId: 2, artist: 'A', title: 'T', hasPlayer: true, tracks: [], defaultTrack: 0 };
   const goodMeta = { songId: 7, revisionId: 3, title: 'T', artist: 'A', image: 'img', tracks: [{ name: 'Lead', partId: 0 }] };
-  const defaults = { search: TabsApi.searchTimeoutMs, delay: TabsApi.retryDelayMs };
+  const defaults = { search: TabsApi.searchTimeoutMs, delay: TabsApi.retryDelayMs, now: TabsApi.now };
 
   afterEach(() => {
     TabsApi.searchTimeoutMs = defaults.search;
     TabsApi.retryDelayMs = defaults.delay;
+    TabsApi.now = defaults.now;
+    TabsApi.reset();
     vi.unstubAllGlobals();
   });
 
@@ -241,6 +244,7 @@ describe('TabsApi network hardening', () => {
     const flaky = vi.fn()
       .mockResolvedValueOnce(new Response('x', { status: 503 }))
       .mockResolvedValueOnce(new Response(JSON.stringify([song])));
+    TabsApi.reset();
     vi.stubGlobal('fetch', flaky);
     await expect(TabsApi.searchSongs('x')).resolves.toHaveLength(1);
     expect(flaky).toHaveBeenCalledTimes(2);
@@ -248,15 +252,18 @@ describe('TabsApi network hardening', () => {
     const offline = vi.fn()
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
       .mockResolvedValueOnce(new Response(JSON.stringify([song])));
+    TabsApi.reset();
     vi.stubGlobal('fetch', offline);
     await expect(TabsApi.searchSongs('x')).resolves.toHaveLength(1);
 
     const missing = vi.fn(async () => new Response('no', { status: 404 }));
+    TabsApi.reset();
     vi.stubGlobal('fetch', missing);
     await expect(TabsApi.searchSongs('x')).rejects.toThrow('Search failed: 404');
     expect(missing).toHaveBeenCalledTimes(1);
 
     const down = vi.fn(async () => new Response('no', { status: 500 }));
+    TabsApi.reset();
     vi.stubGlobal('fetch', down);
     await expect(TabsApi.searchSongs('x')).rejects.toThrow('Search failed: 500');
     expect(down).toHaveBeenCalledTimes(2);
@@ -269,18 +276,23 @@ describe('TabsApi network hardening', () => {
       controller.abort();
       throw new DOMException('Aborted', 'AbortError');
     });
+    TabsApi.reset();
     vi.stubGlobal('fetch', fetchMock);
     await expect(TabsApi.searchSongs('x', controller.signal)).rejects.toBeDefined();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('drops invalid search items but fails when the whole list is invalid', async () => {
+    TabsApi.reset();
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([song, null, { songId: 'x' }, { ...song, tracks: 'no' }]))));
     await expect(TabsApi.searchSongs('x')).resolves.toEqual([song]);
+    TabsApi.reset();
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([null, { songId: 'x' }]))));
     await expect(TabsApi.searchSongs('x')).rejects.toBeInstanceOf(TabsFormatError);
+    TabsApi.reset();
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{"error":"x"}')));
     await expect(TabsApi.searchSongs('x')).rejects.toBeInstanceOf(TabsFormatError);
+    TabsApi.reset();
     vi.stubGlobal('fetch', vi.fn(async () => new Response('[]')));
     await expect(TabsApi.searchSongs('x')).resolves.toEqual([]);
   });
@@ -303,5 +315,101 @@ describe('removed songs', () => {
 
   it('starts with nothing removed', () => {
     expect(isSongRemoved(5194)).toBe(false);
+  });
+});
+
+describe('TabsApi polite client', () => {
+  const song = { songId: 1, artistId: 2, artist: 'A', title: 'T', hasPlayer: true, tracks: [], defaultTrack: 0 };
+  const goodMeta = { songId: 7, revisionId: 3, title: 'T', artist: 'A', image: 'img', tracks: [{ name: 'Lead', partId: 0 }] };
+  const defaults = { now: TabsApi.now, delay: TabsApi.retryDelayMs };
+  let clock = 0;
+
+  beforeEach(() => {
+    clock = 1_000;
+    TabsApi.now = () => clock;
+    TabsApi.retryDelayMs = 0;
+  });
+
+  afterEach(() => {
+    TabsApi.now = defaults.now;
+    TabsApi.retryDelayMs = defaults.delay;
+    TabsApi.reset();
+    vi.unstubAllGlobals();
+  });
+
+  it('answers a repeated search and meta from the cache, normalizing the query', async () => {
+    const fetchMock = vi.fn(async (url: string) =>
+      new Response(JSON.stringify(url.includes('/meta/') ? goodMeta : [song])));
+    vi.stubGlobal('fetch', fetchMock);
+    const first = await TabsApi.searchSongs('Foo ');
+    expect(await TabsApi.searchSongs('foo')).toEqual(first);
+    await TabsApi.getSongMeta(7);
+    await TabsApi.getSongMeta(7);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('asks again after the cache expires and keeps at most 50 entries', async () => {
+    const fetchMock = vi.fn(async () => new Response('[]'));
+    vi.stubGlobal('fetch', fetchMock);
+    await TabsApi.searchSongs('a');
+    clock += 5 * 60_000;
+    await TabsApi.searchSongs('a');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (let i = 0; i < 51; i++) await TabsApi.searchSongs(`q${i}`);
+    fetchMock.mockClear();
+    await TabsApi.searchSongs('q50');
+    expect(fetchMock).not.toHaveBeenCalled();
+    await TabsApi.searchSongs('q0');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not cache failures', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response('nope', { status: 404 }))
+      .mockResolvedValue(new Response('[]'));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(TabsApi.searchSongs('x')).rejects.toThrow('Search failed: 404');
+    await expect(TabsApi.searchSongs('x')).resolves.toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([403, 429])('turns a %i into TabsBlockedError without retrying', async (status) => {
+    const fetchMock = vi.fn(async () => new Response('no', { status }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(TabsApi.searchSongs('x')).rejects.toBeInstanceOf(TabsBlockedError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('pauses every call for 60 s after a refusal, then lets them through', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response('no', { status: 403 }))
+      .mockResolvedValue(new Response('[]'));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(TabsApi.searchSongs('x')).rejects.toBeInstanceOf(TabsBlockedError);
+    clock += 59_000;
+    await expect(TabsApi.searchSongs('y')).rejects.toBeInstanceOf(TabsBlockedError);
+    await expect(TabsApi.getSongMeta(7)).rejects.toBeInstanceOf(TabsBlockedError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    clock += 1_000;
+    await expect(TabsApi.searchSongs('y')).resolves.toEqual([]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('treats a 403 from the reserve CDN as a missing tab, not a refusal', async () => {
+    const fetchMock = vi.fn(async (url: string) =>
+      url.startsWith('/cdn2/') ? new Response('{"measures":[]}') : new Response('no', { status: 404 }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(TabsApi.getTrackTabJson(1, 2, 'img', 0)).resolves.toEqual({ measures: [] });
+    const reserve403 = vi.fn(async (url: string) => new Response('no', { status: url.startsWith('/cdn2/') ? 403 : 404 }));
+    vi.stubGlobal('fetch', reserve403);
+    await expect(TabsApi.getTrackTabJson(1, 2, 'img', 0)).rejects.not.toBeInstanceOf(TabsBlockedError);
+    await expect(TabsApi.searchSongs('x')).rejects.not.toBeInstanceOf(TabsBlockedError);
+  });
+
+  it('stops the CDN loop at a refusal from the main CDN', async () => {
+    const fetchMock = vi.fn(async () => new Response('no', { status: 403 }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(TabsApi.getTrackTabJson(1, 2, 'img', 0)).rejects.toBeInstanceOf(TabsBlockedError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

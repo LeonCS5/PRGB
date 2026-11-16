@@ -53,6 +53,21 @@ export class TabsFormatError extends Error {
   }
 }
 
+/** The provider refused the access (HTTP 403 or 429). Persistent, so it is not retried and calls pause for a while. */
+export class TabsBlockedError extends Error {
+  readonly status: number;
+  constructor(status: number) {
+    super(`Catalog access refused: ${status}`);
+    this.status = status;
+    this.name = 'TabsBlockedError';
+  }
+}
+
+interface CacheEntry {
+  expiresAt: number;
+  value: unknown;
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -89,21 +104,71 @@ export class TabsApi {
   static metaTimeoutMs = 12_000;
   static tabTimeoutMs = 20_000;
   static retryDelayMs = 400;
+  static cacheTtlMs = 5 * 60_000;
+  static cacheMaxEntries = 50;
+  static blockCooldownMs = 60_000;
+  // Injectable so tests move time without timers
+  static now: () => number = () => Date.now();
+
+  private static readonly cache = new Map<string, CacheEntry>();
+  private static blockedUntil = 0;
+  private static blockedStatus = 403;
+
+  /** Forget cached answers and the cooldown (tests). */
+  static reset(): void {
+    this.cache.clear();
+    this.blockedUntil = 0;
+  }
+
+  private static cacheGet<T>(key: string): T | undefined {
+    const entry = this.cache.get(key);
+    if (!entry) return undefined;
+    if (entry.expiresAt <= this.now()) {
+      this.cache.delete(key);
+      return undefined;
+    }
+    return entry.value as T;
+  }
+
+  private static cacheSet(key: string, value: unknown): void {
+    this.cache.delete(key);
+    this.cache.set(key, { expiresAt: this.now() + this.cacheTtlMs, value });
+    while (this.cache.size > this.cacheMaxEntries) {
+      const oldest = this.cache.keys().next().value;
+      if (oldest === undefined) break;
+      this.cache.delete(oldest);
+    }
+  }
+
+  private static assertNotBlocked(): void {
+    if (this.now() < this.blockedUntil) throw new TabsBlockedError(this.blockedStatus);
+  }
+
+  private static block(status: number): never {
+    this.blockedStatus = status;
+    this.blockedUntil = this.now() + this.blockCooldownMs;
+    throw new TabsBlockedError(status);
+  }
 
   /**
    * GET with a timeout and one retry for network failures and 5xx. Timeouts are not retried (they would
-   * double an already long wait) and neither is a cancellation by the caller.
+   * double an already long wait) and neither is a cancellation by the caller. A 429, or a 403 unless
+   * `forbiddenIsMissing`, is a refusal: it starts the cooldown and is never retried.
    */
-  private static async fetchGet(url: string, timeoutMs: number, signal?: AbortSignal): Promise<Response> {
+  private static async fetchGet(
+    url: string, timeoutMs: number, signal?: AbortSignal, forbiddenIsMissing = false
+  ): Promise<Response> {
+    this.assertNotBlocked();
     for (let attempt = 0; ; attempt++) {
       const timeout = AbortSignal.timeout(timeoutMs);
       // AbortSignal.any is missing in older Safari: there only the timeout applies
       const combined = signal && typeof AbortSignal.any === 'function' ? AbortSignal.any([signal, timeout]) : timeout;
       try {
         const response = await fetch(url, { signal: combined });
+        if (response.status === 429 || (response.status === 403 && !forbiddenIsMissing)) this.block(response.status);
         if (response.status < 500 || attempt > 0) return response;
       } catch (error) {
-        if (signal?.aborted || timeout.aborted || attempt > 0) throw error;
+        if (error instanceof TabsBlockedError || signal?.aborted || timeout.aborted || attempt > 0) throw error;
       }
       await wait(this.retryDelayMs * (attempt + 1));
       if (signal?.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError');
@@ -125,6 +190,9 @@ export class TabsApi {
    * Search the catalog of songs
    */
   static async searchSongs(query: string, signal?: AbortSignal): Promise<TabSearchResult[]> {
+    const key = `search:${query.trim().toLowerCase()}`;
+    const cached = this.cacheGet<TabSearchResult[]>(key);
+    if (cached) return cached;
     const url = `${this.API_BASE}/songs?pattern=${encodeURIComponent(query)}`;
     const response = await this.fetchGet(url, this.searchTimeoutMs, signal);
     if (!response.ok) throw new Error(`Search failed: ${response.status}`);
@@ -132,7 +200,9 @@ export class TabsApi {
     if (!Array.isArray(data)) throw new TabsFormatError('search is not a list');
     const songs = data.map(parseSearchItem).filter((song): song is TabSearchResult => song !== null);
     if (data.length > 0 && songs.length === 0) throw new TabsFormatError('no valid search item');
-    return songs.filter((song) => !isSongRemoved(song.songId));
+    const result = songs.filter((song) => !isSongRemoved(song.songId));
+    this.cacheSet(key, result);
+    return result;
   }
 
   /**
@@ -140,12 +210,17 @@ export class TabsApi {
    */
   static async getSongMeta(songId: number, signal?: AbortSignal): Promise<SongMeta> {
     if (isSongRemoved(songId)) throw new Error('Song removed');
+    const key = `meta:${songId}`;
+    const cached = this.cacheGet<SongMeta>(key);
+    if (cached) return cached;
     const url = `${this.API_BASE}/meta/${songId}`;
     const response = await this.fetchGet(url, this.metaTimeoutMs, signal);
     if (!response.ok) throw new Error(`Meta fetch failed: ${response.status}`);
     const data = await this.readJson(response, 'meta is not JSON');
     assertSongMeta(data);
-    return normalizeSongMeta(data);
+    const meta = normalizeSongMeta(data);
+    this.cacheSet(key, meta);
+    return meta;
   }
 
   /**
@@ -160,14 +235,15 @@ export class TabsApi {
   ): Promise<unknown> {
     const cdnPath = `/${songId}/${revisionId}/${image}/${partId}.json`;
     let lastError: unknown = null;
-    for (const base of this.CDN_BASES) {
+    for (const [index, base] of this.CDN_BASES.entries()) {
       try {
-        const res = await this.fetchGet(`${base}${cdnPath}`, this.tabTimeoutMs, signal);
+        // The reserve CDN answers 403 for tabs it doesn't have: that is "missing", not a refusal
+        const res = await this.fetchGet(`${base}${cdnPath}`, this.tabTimeoutMs, signal, index > 0);
         if (res.ok) {
           return await res.json();
         }
       } catch (err) {
-        if (signal?.aborted) throw err;
+        if (err instanceof TabsBlockedError || signal?.aborted) throw err;
         lastError = err;
       }
     }
