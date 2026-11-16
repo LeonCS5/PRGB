@@ -3,7 +3,7 @@ import { LEGAL_CONTACT } from '../content/legal';
 import { RankingError } from '../services/backend/rankingApi';
 import { NICKNAME_ERROR_MESSAGES } from '../services/nickname';
 import { RoomError } from '../services/backend/roomChannel';
-import { TabsApi } from '../services/tabsApi';
+import { TabsApi, TabsBlockedError } from '../services/tabsApi';
 import { getRoomErrorMessage, getSearchErrorMessage, getSongMetadata } from './uiErrors';
 import { getRankingErrorMessage } from './uiErrors';
 
@@ -28,7 +28,23 @@ describe('getRankingErrorMessage', () => {
 });
 
 describe('tab provider and room messages', () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    TabsApi.reset();
+    vi.unstubAllGlobals();
+  });
+
+  it('says the external catalog refused, without promising a retry or naming the provider', async () => {
+    const blocked = new TabsBlockedError(403);
+    expect(getSearchErrorMessage(blocked)).toBe(
+      'O acervo externo recusou o acesso agora. Os exercícios e músicas do PRGB continuam disponíveis.');
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('no', { status: 429 })));
+    await expect(getSongMetadata(7)).rejects.toThrow('acervo externo recusou');
+  });
+
+  it('explains that a catalog song cannot be ranked', () => {
+    expect(getRankingErrorMessage(new RankingError('songsterr_unavailable')))
+      .toBe('Esta música não pode valer para o ranking agora. O ranking vale para os exercícios e músicas do PRGB.');
+  });
 
   it('says the format was unexpected, not that the connection failed', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{"oops":true}')));

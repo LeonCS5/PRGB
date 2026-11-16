@@ -2,7 +2,7 @@ import { LEGAL_CONTACT } from '../content/legal';
 import { toRankingError, type RankingErrorCode } from '../services/backend/rankingApi';
 import { RoomError, type RoomErrorCode } from '../services/backend/roomChannel';
 import { NICKNAME_ERROR_MESSAGES } from '../services/nickname';
-import { TabsApi, TabsFormatError, type NormalizedSongTab, type SongMeta } from '../services/tabsApi';
+import { TabsApi, TabsBlockedError, TabsFormatError, type NormalizedSongTab, type SongMeta } from '../services/tabsApi';
 
 const RANKING_ERROR_MESSAGES: Record<RankingErrorCode, string> = {
   not_configured: 'O ranking não está disponível neste site.',
@@ -28,7 +28,7 @@ const RANKING_ERROR_MESSAGES: Record<RankingErrorCode, string> = {
   empty_run: 'Nenhuma nota foi acertada nesta jogada, por isso ela não entrou no ranking.',
   song_not_found: 'Esta música não foi encontrada no acervo.',
   part_not_found: 'Esta faixa não foi encontrada no acervo.',
-  songsterr_unavailable: 'O acervo de músicas não respondeu agora. Tente novamente em instantes.',
+  songsterr_unavailable: 'Esta música não pode valer para o ranking agora. O ranking vale para os exercícios e músicas do PRGB.',
   tab_invalid: 'Esta tablatura não pode entrar no ranking.',
   tab_empty: 'Esta faixa não tem notas para pontuar, por isso não pode entrar no ranking.'
 };
@@ -74,16 +74,21 @@ export const getAudioErrorMessage = (error: unknown): string => {
 
 const TABS_FORMAT_MESSAGE = 'O acervo de tablaturas respondeu em um formato inesperado. Tente de novo mais tarde.';
 
-export const getSearchErrorMessage = (error: unknown): string =>
-  error instanceof TabsFormatError
+const TABS_BLOCKED_MESSAGE = 'O acervo externo recusou o acesso agora. Os exercícios e músicas do PRGB continuam disponíveis.';
+
+export const getSearchErrorMessage = (error: unknown): string => {
+  if (error instanceof TabsBlockedError) return TABS_BLOCKED_MESSAGE;
+  return error instanceof TabsFormatError
     ? TABS_FORMAT_MESSAGE
     : 'Não foi possível buscar músicas. Verifique sua conexão e tente novamente.';
+};
 
 export const getSongMetadata = async (songId: number): Promise<SongMeta> => {
   let meta: SongMeta;
   try {
     meta = await TabsApi.getSongMeta(songId);
   } catch (error) {
+    if (error instanceof TabsBlockedError) throw new Error(TABS_BLOCKED_MESSAGE);
     if (error instanceof TabsFormatError) throw new Error(TABS_FORMAT_MESSAGE);
     throw new Error('Não foi possível obter os dados da música. Verifique sua conexão e tente novamente.');
   }
@@ -100,6 +105,7 @@ export const loadSongTrack = async (meta: SongMeta, trackIndex: number): Promise
   try {
     rawTab = await TabsApi.getTrackTabJson(meta.songId, meta.revisionId, meta.image, track.partId);
   } catch (error) {
+    if (error instanceof TabsBlockedError) throw new Error(TABS_BLOCKED_MESSAGE);
     if (error instanceof TabsFormatError) throw new Error(TABS_FORMAT_MESSAGE);
     throw new Error('Não foi possível baixar a tablatura. Verifique sua conexão e tente novamente.');
   }

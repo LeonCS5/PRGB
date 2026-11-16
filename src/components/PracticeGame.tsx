@@ -47,6 +47,7 @@ import type { RankedPhase } from '../context/rankedRun';
 import { useRankedRun } from '../context/useRankedRun';
 import { buildCountIn, MetronomeScheduler, SoundFX } from '../services/synthAudio';
 import { isExerciseSongId } from '../services/exerciseIds';
+import { isRankableSongId } from '../services/rankable';
 import {
   accuracyPercent,
   applyJudgement,
@@ -169,8 +170,8 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   const isExercise = isExerciseSongId(mainTab.songId);
   const changeLabel = isExercise ? 'Mudar exercício' : 'Mudar música';
   const ranked = useRankedRun({
-    // The server only counts the demo and downloaded songs
-    part: isDuo || isExercise ? null : lanes[0].part,
+    // The server only ranks content seeded in the database
+    part: isDuo || !isRankableSongId(mainTab.songId) ? null : lanes[0].part,
     start: rankedStart,
     reloadTab: onRankedTabOutdated,
     devSessionId: devPreset?.rankedSessionId
