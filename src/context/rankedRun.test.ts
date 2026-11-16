@@ -118,7 +118,7 @@ describe('preparing a ranked run', () => {
     api.registerPart.mockImplementation(failWith('songsterr_unavailable'));
     expect(await controller.turnOn()).toBe(false);
     expect(controller.getState()).toMatchObject({
-      phase: 'off', notice: { text: 'O acervo de músicas não respondeu agora. Tente novamente em instantes.', tone: 'error' }
+      phase: 'off', notice: { text: 'Esta música não pode valer para o ranking agora. O ranking vale para os exercícios e músicas do PRGB.', tone: 'error' }
     });
     expect(forgetAccount).not.toHaveBeenCalled();
   });
