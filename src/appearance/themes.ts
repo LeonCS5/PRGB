@@ -1,11 +1,9 @@
-// TEMPORARY theme lab: lets the palettes be compared in the real app. To drop it after choosing an identity,
-// delete this file, themes.test.ts, context/useTheme.ts, components/ThemeLab.tsx and the three lines in main.tsx;
-// the --color-* defaults in index.css are the Original theme and stay as they are.
-//
 // A theme is 9 base colors. They are written as CSS variables on <html> (CSSOM, allowed by the CSP), overriding the
-// existing ink-* / amp-* / signal-* tokens, so every component follows without edits. "Original" writes nothing.
+// existing ink-* / amp-* / signal-* tokens, so every component follows without edits. "Original" writes nothing:
+// the --color-* defaults in index.css are that theme.
 // Gameplay colors (six strings, players, hit/near/miss, note violet, the canvas position/hit line) have their own
 // tokens that no theme touches: only the surfaces around them change.
+import type { ThemeId } from './types';
 
 export interface ThemeColors {
   background: string;
@@ -20,14 +18,14 @@ export interface ThemeColors {
 }
 
 export interface ThemeDefinition {
-  id: string;
+  id: ThemeId;
   name: string;
   description: string;
   // null = the current identity, untouched
   colors: ThemeColors | null;
 }
 
-export const ORIGINAL_THEME_ID = 'original';
+export const ORIGINAL_THEME_ID: ThemeId = 'original';
 
 // The Original swatches only feed the preview; they are the real current tokens (index.css)
 export const ORIGINAL_PREVIEW: ThemeColors = {
@@ -50,7 +48,7 @@ export const THEMES: readonly ThemeDefinition[] = [
     colors: { background: '#111214', surface: '#1C1E22', surfaceElevated: '#272A30', border: '#363A40', primary: '#F2A45C', secondary: '#79C9CE', text: '#F5F5F4', textMuted: '#A8ADB4', success: '#65C98C' }
   },
   {
-    id: 'analog-vintage', name: 'Analog Vintage', description: 'Amplificadores clássicos e estúdio tradicional.',
+    id: 'analog-soul', name: 'Analog Soul', description: 'Amplificadores clássicos e estúdio tradicional.',
     colors: { background: '#191714', surface: '#29251F', surfaceElevated: '#373128', border: '#504537', primary: '#D6A65C', secondary: '#A6B8A0', text: '#F2E8D8', textMuted: '#B4A695', success: '#88B987' }
   },
   {
@@ -60,6 +58,8 @@ export const THEMES: readonly ThemeDefinition[] = [
 ];
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
+
+export const isHexColor = (value: string): boolean => HEX.test(value);
 
 const parse = (hex: string): [number, number, number] =>
   [1, 3, 5].map((index) => parseInt(hex.slice(index, index + 2), 16)) as [number, number, number];
@@ -123,6 +123,9 @@ export const deriveTokens = (colors: ThemeColors): Record<string, string> => {
   };
 };
 
+// Every variable name any theme may write, so applying a theme can clear what the previous one left
+export const THEME_TOKEN_NAMES: readonly string[] = Object.keys(deriveTokens(THEMES[1].colors!));
+
 export const findTheme = (id: string | null): ThemeDefinition =>
   THEMES.find((theme) => theme.id === id) ?? THEMES[0];
 
@@ -137,69 +140,3 @@ export const READABILITY_CHECKS = (colors: ThemeColors) => [
   { name: 'cor secundária no fundo', ratio: contrastRatio(colors.secondary, colors.background), min: 4.5 },
   { name: 'sucesso no fundo', ratio: contrastRatio(colors.success, colors.background), min: 4.5 }
 ];
-
-// --- runtime (browser only) ---
-
-export const THEME_STORAGE_KEY = 'prgb:theme-lab:v1';
-
-export const isThemeLabEnabled = (): boolean =>
-  import.meta.env.DEV || import.meta.env.VITE_THEME_LAB?.trim() === 'true';
-
-let currentId = ORIGINAL_THEME_ID;
-const listeners = new Set<() => void>();
-let appliedNames: string[] = [];
-
-const readStoredId = (): string => {
-  try {
-    const id = localStorage.getItem(THEME_STORAGE_KEY);
-    return THEMES.some((theme) => theme.id === id) ? (id as string) : ORIGINAL_THEME_ID;
-  } catch {
-    return ORIGINAL_THEME_ID;
-  }
-};
-
-const paint = (id: string): void => {
-  const root = document.documentElement;
-  for (const name of appliedNames) root.style.removeProperty(name);
-  appliedNames = [];
-  const theme = findTheme(id);
-  if (theme.colors) {
-    for (const [name, value] of Object.entries(deriveTokens(theme.colors))) {
-      root.style.setProperty(name, value);
-      appliedNames.push(name);
-    }
-    root.dataset.theme = theme.id;
-  } else {
-    delete root.dataset.theme;
-  }
-};
-
-/** Applies the saved theme before the first render, so there is no flash of the original one. */
-export const applySavedTheme = (): void => {
-  if (!isThemeLabEnabled()) return;
-  currentId = readStoredId();
-  paint(currentId);
-};
-
-export const getThemeId = (): string => currentId;
-
-export const setTheme = (id: string): void => {
-  const next = findTheme(id).id;
-  if (next === currentId) return;
-  currentId = next;
-  paint(next);
-  try {
-    if (next === ORIGINAL_THEME_ID) localStorage.removeItem(THEME_STORAGE_KEY);
-    else localStorage.setItem(THEME_STORAGE_KEY, next);
-  } catch {
-    // Without storage the theme only lasts until the page closes.
-  }
-  for (const listener of listeners) listener();
-};
-
-export const subscribeTheme = (listener: () => void): (() => void) => {
-  listeners.add(listener);
-  return () => { listeners.delete(listener); };
-};
-
-export const isHexColor = (value: string): boolean => HEX.test(value);

@@ -12,7 +12,7 @@ export default defineConfig({
     enforce: 'post',
     generateBundle(_, bundle) {
       const publicFiles = [
-        'favicon.svg', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png',
+        'favicon.svg', 'manifest.webmanifest', 'appearance-boot.js', 'icons/icon-192.png', 'icons/icon-512.png',
         'fonts/inter-latin-wght-normal.woff2', 'fonts/space-grotesk-latin-wght-normal.woff2',
         'fonts/jetbrains-mono-latin-wght-normal.woff2'
       ]

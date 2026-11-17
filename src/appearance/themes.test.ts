@@ -54,6 +54,15 @@ describe('themes', () => {
       }
     });
 
+  it('uses the owner palettes and the renamed Analog Soul', () => {
+    const byId = (id: string) => THEMES.find((theme) => theme.id === id)!;
+    expect(THEMES.map((theme) => theme.id)).toEqual(['original', 'refined', 'midnight-arcade', 'graphite-studio', 'analog-soul', 'electric-neon']);
+    expect(byId('analog-soul').name).toBe('Analog Soul');
+    expect(byId('analog-soul').colors!.primary).toBe('#D6A65C');
+    expect(byId('electric-neon').colors!.primary).toBe('#B7F34B');
+    expect(findTheme('analog-vintage').id).toBe(ORIGINAL_THEME_ID);
+  });
+
   it('computes WCAG contrast and linear mixes', () => {
     expect(contrastRatio('#000000', '#ffffff')).toBeCloseTo(21, 0);
     expect(mix('#000000', '#ffffff', 0.5)).toBe('#808080');
