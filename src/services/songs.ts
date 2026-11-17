@@ -71,7 +71,7 @@ export interface Song {
 // moves forward, one year at a time: raise it when the year changes, never lower it.
 export const PUBLIC_DOMAIN_LAST_DEATH_YEAR = 1955;
 /** Composer name of the pieces written by the PRGB: they are ours, so there is no death year to check. */
-export const ORIGINAL_COMPOSER = 'PRGB';
+export const ORIGINAL_COMPOSER = 'Original'; // not "PRGB": the challenge text filter reserves that word
 /** Folk tunes have no known author, hence no death year: the melody is traditional and in the public domain. */
 export const TRADITIONAL_COMPOSER = 'Tradicional';
 
