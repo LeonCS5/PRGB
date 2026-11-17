@@ -56,14 +56,17 @@ src/
 ├── vite-env.d.ts                    # Tipos de import.meta.env (VITE_SUPPORT_URL, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY)
 │
 ├── content/
-│   └── legal.ts                     # Cópia legal (LGPD): Política de Privacidade, Termos, LEGAL_VERSION
+│   ├── legal.ts                     # Cópia legal (LGPD): Política de Privacidade, Termos, LEGAL_VERSION
+│   └── songs/                       # Repertório próprio (domínio público), uma peça por arquivo, carga lazy
+│
+├── appearance/                      # Aparência: tipos, padrões, validação, temas, presets, hook e script de boot (docs/aparencia.md)
 │
 ├── context/
 │   ├── AudioSessionContext.tsx      # AudioEngine, PRGB Amp, device/canal, erros; pitch via useLatestPitch
 │   ├── gameSession.ts               # Tipos de sessão de jogo (GamePart, SoloSession, DuoSession, RunSummary)
 │   ├── historyLayers.ts             # Uma entrada no histórico por camada aberta: o Voltar fecha a de cima
 │   ├── legalRoute.ts                # Roteamento por hash (#privacidade / #termos) sem router library
-│   ├── localData.ts                 # Exportar/apagar dados locais; flag de sessão de ranking
+│   ├── localData.ts                 # Exportar/apagar dados locais (inclui progresso e aparência); flag de sessão de ranking
 │   ├── ModalsContext.tsx            # Estado aberto/fechado dos modais
 │   ├── preferences.ts               # Persistência em localStorage (prgb:prefs:v1)
 │   ├── rankedRun.ts                 # RankedRunController: máquina de estados de um run ranqueado

@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AUTH_STORAGE_KEY } from '../services/backend/supabaseClient';
+import { DEFAULT_APPEARANCE } from '../appearance/defaults';
+import { getAppearance, reloadAppearance, setAppearance } from '../appearance/useAppearance';
+import { APPEARANCE_STORAGE_KEY } from '../appearance/validate';
 import {
   buildLocalDataExport,
   clearLocalData,
@@ -85,6 +88,15 @@ describe('buildLocalDataExport', () => {
     expect(result.description).toContain('progresso');
   });
 
+  it('includes the saved appearance, null when there is none, and says so in the description', () => {
+    expect((JSON.parse(buildLocalDataExport()) as Record<string, unknown>).appearance).toBeNull();
+    reloadAppearance();
+    setAppearance({ themeId: 'midnight-arcade' });
+    const result = JSON.parse(buildLocalDataExport()) as Record<string, unknown>;
+    expect(result.appearance).toMatchObject({ version: 1, settings: { themeId: 'midnight-arcade' } });
+    expect(result.description).toContain('aparência');
+  });
+
   it('includes saved preferences when the storage has them', () => {
     ls.setItem(PREFS_KEY, JSON.stringify({ deviceId: 'dev-xyz', channelMode: 'ch2', ampEngine: null, lastSong: null, nickname: null }));
     const result = JSON.parse(buildLocalDataExport()) as Record<string, unknown>;
@@ -114,6 +126,15 @@ describe('clearLocalData', () => {
     ls.setItem(PROGRESS_KEY, JSON.stringify({ version: 1 }));
     clearLocalData();
     expect(ls.getItem(PROGRESS_KEY)).toBeNull();
+  });
+
+  it('removes the saved appearance and goes back to the default look at once', () => {
+    reloadAppearance();
+    setAppearance({ themeId: 'midnight-arcade' });
+    expect(ls.getItem(APPEARANCE_STORAGE_KEY)).not.toBeNull();
+    clearLocalData();
+    expect(ls.getItem(APPEARANCE_STORAGE_KEY)).toBeNull();
+    expect(getAppearance()).toEqual(DEFAULT_APPEARANCE);
   });
 
   it('does not remove the auth session key', () => {

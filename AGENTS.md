@@ -53,7 +53,10 @@ PRGB/
 │   ├── vite-env.d.ts                # Tipos de import.meta.env (VITE_SUPPORT_URL, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY)
 │   │
 │   ├── content/
-│   │   └── legal.ts                 # Cópia legal (LGPD): Política de Privacidade, Termos de Uso, LEGAL_VERSION, ConsentCopy
+│   │   ├── legal.ts                 # Cópia legal (LGPD): Política de Privacidade, Termos de Uso, LEGAL_VERSION, ConsentCopy
+│   │   └── songs/                   # Repertório próprio (domínio público): catálogo em index.ts e uma peça por arquivo, em chunk lazy
+│   │
+│   ├── appearance/                  # Aparência: tipos e padrões (types, defaults), validação e persistência (validate, useAppearance), temas e presets, aplicação no <html> (apply) e script de boot (bootScript)
 │   │
 │   ├── vendor/nam-engine/           # Motor neural de terceiros, sem alterações: módulo, worklet e wasm (não editar)
 │   │
@@ -62,7 +65,7 @@ PRGB/
 │   │   ├── gameSession.ts           # Tipos de sessão de jogo: GamePart, SoloSession, DuoSession, RunSummary, RankedSubmission
 │   │   ├── historyLayers.ts         # Uma entrada no histórico por camada aberta (tela e modais): o Voltar fecha a de cima
 │   │   ├── legalRoute.ts            # Roteamento por hash (#privacidade / #termos) sem biblioteca de router
-│   │   ├── localData.ts             # Exportar/apagar dados locais (records + prefs); flag de sessão de ranking
+│   │   ├── localData.ts             # Exportar/apagar dados locais (records, prefs, progresso e aparência); flag de sessão de ranking
 │   │   ├── ModalsContext.tsx        # Estado aberto/fechado dos modais
 │   │   ├── preferences.ts           # localStorage versionado (prgb:prefs:v1): device, canal, PRGB Amp, última música
 │   │   ├── rankedRun.ts             # RankedRunController: máquina de estados de um run ranqueado (sem React)
@@ -93,6 +96,10 @@ PRGB/
 │   │   ├── ExerciseLibrary.tsx      # Tela de exercícios: categorias, tom, jeito de tocar e cartões
 │   │   ├── FreePlay.tsx             # Play Free: só escuta a guitarra e mostra as notas, sem música nem pontos
 │   │   ├── GameHud.tsx              # HUD do jogo: score, combo, accuracy, indicadores de run ranqueado
+│   │   ├── hudGlow.ts               # Estilo do brilho do COMBO no HUD (função pura, só com o efeito ligado)
+│   │   ├── gameEffects.ts           # Efeitos opcionais do canvas (pulso, faíscas, brilho do combo, fundo reativo), com pools fixos
+│   │   ├── RepertoireLibrary.tsx    # Tela do repertório próprio: porta de entrada das músicas; o acervo externo fica dentro, como extra experimental
+│   │   ├── ProgressSummary.tsx      # Estrelas, palhetas, ensaio da semana e nível, no resultado e no repertório
 │   │   ├── GameMoreSheet.tsx        # Folha "Mais" do jogo no celular; em telas largas só repassa os controles
 │   │   ├── LatencyTest.tsx          # Teste de latência: pista, medição ao vivo, resultado e ajuste salvo
 │   │   ├── LeaderboardModal.tsx     # Modal do placar online (semanal + all-time)
@@ -114,6 +121,10 @@ PRGB/
 │   │   └── AmpRack.tsx      # Modal: rack completo do amp modeler
 │   │
 │   ├── services/                    # Cada service tem um *.test.ts (Vitest) ao lado
+│   │   ├── songs.ts / songIds.ts    # Motor do repertório (notação compacta, carga lazy) e ids das peças (a partir de -200000, nunca renumerar)
+│   │   ├── progress.ts              # Progresso local: estrelas, palhetas e ensaio da semana (localStorage, entra na exportação e na exclusão)
+│   │   ├── rankable.ts              # Único ponto que decide o que vale para o ranking (isRankableSongId)
+│   │   ├── acervoFlag.ts            # VITE_ACERVO_ENABLED=false esconde todo caminho para o acervo externo
 │   │   ├── audioEngine.ts           # Captura, channel routing, pitch (NSDF), corda/casa estimadas, fila start/stop com fade
 │   │   ├── audioOutput.ts           # Saída: AudioContext.setSinkId (Chromium) ou <audio> com setSinkId (Firefox)
 │   │   ├── latencyTest.ts           # Lógica do teste de latência: notas, ataques, mediana, veredito e ajuste (pura)
@@ -255,7 +266,7 @@ Guitarra → USB Interface → getUserMedia(48kHz, raw, sem noise suppress)
 ### Marca
 - Nome: **PRGB**. Não usar nomes de produtos de terceiros em UI, código ou comentários.
 - O conteúdo vem de um provedor externo de tablaturas: o rodapé precisa manter o aviso de não afiliação, e a Política precisa continuar dizendo que ele existe e o que recebe.
-- Sem nomes de artistas, músicas ou marcas em chamadas, exemplos, presets e textos do site: nomes de terceiros só aparecem nos resultados que o jogador buscar.
+- Sem nomes de artistas, músicas ou marcas em chamadas, exemplos, presets e textos do site: nomes de terceiros só aparecem nos resultados que o jogador buscar. Exceção, liberada pelo dono: o nome do autor de uma peça de domínio público do repertório (`src/content/songs/`), como crédito de autoria na própria peça.
 - Alegações só com prova: nada de números de acervo, "baixa latência" ou "válvulas". O PRGB Amp é um simulador.
 - Licenças de terceiros não são uso de marca: `public/nam/`, `src/vendor/nam-engine/` e `/fonts` mantêm os avisos originais, como a licença exige. O código em `src/vendor/` não se edita.
 - O nome desse provedor só aparece onde é funcional: hosts em `vercel.json`, `vite.config.ts` e `handler.ts`, o código de erro devolvido pela função já publicada e as migrations congeladas.
@@ -425,6 +436,14 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 - [ ] **Ambientes separados** — previews e `.env.local` usam o projeto Supabase de produção; criar um segundo projeto gratuito (humano)
 - [ ] **Testes de ponta a ponta no repositório** — os scripts de navegador ficam fora dele; trazer um e2e (por exemplo Playwright) contra um Supabase local (@claude)
 - [ ] **Safari e celulares reais** — nunca testados (humano)
+
+### Rodada 14 — repertório próprio, progresso, acervo experimental e aparência (em `claude/aparencia-*`)
+- [x] **Repertório próprio** — peças de domínio público escritas em notação compacta, uma por arquivo em `src/content/songs/`, carregadas sob demanda; a tela `RepertoireLibrary` é a porta de entrada das músicas e o acervo externo ficou dentro dela, como extra experimental. Funciona offline: o chunk da tela e o das peças entram no precache (@claude/@codex; só a "Ode à Alegria" existe e **a revisão humana dela está pendente**; não testado com guitarra real)
+- [x] **Progresso local** — estrelas por peça, palhetas e dias de ensaio da semana, mostrados no resultado de uma partida solo; fica só no navegador, entra na exportação e na exclusão dos dados locais (@claude; não testado no navegador com uma sessão longa)
+- [x] **Acervo externo experimental** — aviso na tela, cache de 5 minutos, recuo de 60 s quando ele recusa (403/429) e `VITE_ACERVO_ENABLED=false` para esconder todo caminho até ele. O ranking só aceita o que está semeado no banco (por ora, só a demo) (@claude/@codex)
+- [x] **Aparência** — seis temas, estilos de nota, personalização de cordas, efeitos opcionais do canvas (desligados por padrão), estilos de componentes, três tipografias e quatro fundos; persistência em `prgb:appearance:v1`, aplicada antes da primeira pintura por `public/appearance-boot.js`. Original com os padrões é idêntico ao visual anterior. Entra na exportação e na exclusão dos dados locais e na Política, sem mudar `LEGAL_VERSION` (nada sai do dispositivo). Brilho do COMBO também no HUD; fontes IBM Plex e as telas próprias entram no precache. Contrato em `docs/aparencia.md` (@claude/@codex; medido só por testes unitários e build; **não testado**: telas no navegador real, Firefox, Safari, celulares, contraste de cada tema com leitor de tela, efeitos com guitarra tocando)
+- [ ] **Tela de Aparência** — a tela de personalização é de outra parte desta rodada; confirme no merge que o chunk dela cai no precache (a regra do `vite.config.ts` é por caminho: `components/AppearanceScreen` ou `components/appearance/`) (@claude)
+- [ ] **Mais peças e revisão do repertório** — só há uma peça; cada nova exige revisão humana e conferência do ano de morte do autor (@humano)
 
 ### Pendências conhecidas (sem dono)
 - [ ] **Permissão do provedor de tablaturas** — os termos dele proíbem transmitir, reutilizar e baixar o conteúdo sem autorização escrita. É o maior risco legal do projeto; depende de decisão do humano.

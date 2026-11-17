@@ -4,6 +4,7 @@ import { AUTH_STORAGE_KEY } from '../services/backend/supabaseClient';
 import { clearRecords, exportLocalData } from '../services/records';
 import { clearPreferences, readPreferences } from './preferences';
 import { clearProgress, exportProgress } from '../services/progress';
+import { clearAppearance, exportAppearance } from '../appearance/useAppearance';
 
 export const LOCAL_DATA_FILE_NAME = 'prgb-dados-locais.json';
 
@@ -11,8 +12,9 @@ export const buildLocalDataExport = (): string => {
   const records: unknown = JSON.parse(exportLocalData());
   return JSON.stringify({
     ...(typeof records === 'object' && records !== null ? records : {}),
-    description: 'Preferências, apelido local, recordes pessoais, histórico de jogadas e progresso (estrelas, palhetas e dias de ensaio) guardados neste navegador.',
+    description: 'Preferências, apelido local, preferências de aparência (tema, estilo das notas e efeitos), recordes pessoais, histórico de jogadas e progresso (estrelas, palhetas e dias de ensaio) guardados neste navegador.',
     preferences: readPreferences(),
+    appearance: exportAppearance(),
     progress: exportProgress()
   }, null, 2);
 };
@@ -23,6 +25,8 @@ export const clearLocalData = (): void => {
   clearRecords();
   clearProgress();
   clearPreferences();
+  // Also puts the <html> attributes and theme variables back to the default, so it holds even without the reload
+  clearAppearance();
 };
 
 // Reads the key directly: asking supabase-js would download it for players who never opened the ranking

@@ -29,7 +29,7 @@ export const StorageNotice: React.FC = () => {
     <aside aria-label="Aviso sobre dados no navegador" className="mx-auto max-w-7xl px-5 pt-4 sm:px-8 lg:px-12">
       <div className="flex items-center gap-3 rounded-xl border border-ink-700 bg-ink-900 px-4 py-2.5 text-xs leading-5 text-ink-200">
         <p className="min-w-0 flex-1">
-          Sem cookies, publicidade ou rastreadores. Suas preferências, recordes e progresso ficam só neste navegador.{' '}
+          Sem cookies, publicidade ou rastreadores. Suas preferências (inclusive de aparência), recordes e progresso ficam só neste navegador.{' '}
           <a href="#privacidade" className="text-signal-300 underline underline-offset-2 hover:text-signal-200">Política de Privacidade</a>
         </p>
         <button type="button" onClick={dismiss} className="min-h-10 shrink-0 cursor-pointer rounded-lg bg-amp-500 px-4 text-sm font-bold text-ink-950 hover:bg-amp-400">Entendi</button>
