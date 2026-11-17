@@ -123,6 +123,10 @@ describe('defineSong', () => {
   it('refuses a composer who is not in the public domain yet', () => {
     expect(() => defineSong(info({ composerDeathYear: PUBLIC_DOMAIN_LAST_DEATH_YEAR + 1 }), score(['1:0w']))).toThrow('só entra obra');
     expect(() => defineSong(info({ composerDeathYear: PUBLIC_DOMAIN_LAST_DEATH_YEAR }), score(['1:0w']))).not.toThrow();
+    // An original work of the PRGB has no death year; anyone else without one is refused
+    expect(() => defineSong(info({ composer: 'Original', composerDeathYear: null }), score(['1:0w']))).not.toThrow();
+    expect(() => defineSong(info({ composer: 'Tradicional', composerDeathYear: null }), score(['1:0w']))).not.toThrow();
+    expect(() => defineSong(info({ composer: 'Beethoven', composerDeathYear: null }), score(['1:0w']))).toThrow('só vale obra original');
   });
 
   it('refuses invalid metadata and parts that do not match', () => {
@@ -236,7 +240,7 @@ describe('finding a piece again', () => {
   it('loads each piece once and knows no other', async () => {
     const first = loadSong(1);
     expect(loadSong(1)).toBe(first);
-    expect(await loadSong(2)).toBeNull();
+    expect(await loadSong(9999)).toBeNull();
   });
 });
 

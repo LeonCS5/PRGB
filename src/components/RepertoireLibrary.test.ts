@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SONG_CATALOG } from '../content/songs';
+import { ORIGINAL_COMPOSER } from '../services/songs';
 import { isAcervoEnabled } from '../services/acervoFlag';
 import { getPersonalBest, type RunResult } from '../services/records';
 import { songSongId } from '../services/songIds';
@@ -24,7 +25,7 @@ describe('RepertoireLibrary', () => {
     for (const { info } of SONG_CATALOG) {
       expect(html).toContain(info.title);
       expect(html).toContain(info.composer);
-      expect(html).toContain(`Falecimento do compositor: ${info.composerDeathYear}`);
+      expect(html).toContain(info.composerDeathYear === null ? (info.composer === ORIGINAL_COMPOSER ? 'Obra original do PRGB' : 'Melodia tradicional, domínio público') : `Falecimento do compositor: ${info.composerDeathYear}`);
       expect(html).toContain(`Nível ${info.level} de 3 · ${info.bpm} bpm`);
       for (const part of info.parts) expect(html).toContain(`Tocar ${info.title} — ${part.name}`);
     }

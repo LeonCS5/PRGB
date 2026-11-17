@@ -39,7 +39,7 @@ export interface SongInfo {
   code: number; // stable and never reused: part of the song id
   title: string;
   composer: string; // shown as the artist
-  composerDeathYear: number;
+  composerDeathYear: number | null; // null only for an original work of the PRGB itself (composer ORIGINAL_COMPOSER)
   arranger: string;
   level: ExerciseLevel;
   bpm: number;
@@ -70,6 +70,10 @@ export interface Song {
 // Last year of death that is already in the public domain here (70 years after the year of death). It only
 // moves forward, one year at a time: raise it when the year changes, never lower it.
 export const PUBLIC_DOMAIN_LAST_DEATH_YEAR = 1955;
+/** Composer name of the pieces written by the PRGB: they are ours, so there is no death year to check. */
+export const ORIGINAL_COMPOSER = 'Original'; // not "PRGB": the challenge text filter reserves that word
+/** Folk tunes have no known author, hence no death year: the melody is traditional and in the public domain. */
+export const TRADITIONAL_COMPOSER = 'Tradicional';
 
 const LAST_FRET = 22;
 const TICKS_PER_WHOLE = 192; // fits whole, half, quarter, eighth, sixteenth, dotted and triplets as integers
@@ -210,7 +214,11 @@ function parsePart(info: SongInfo, score: SongScore, partCode: number): Beat[][]
 function checkInfo(info: SongInfo): Set<number> {
   const where = info.title || `código ${info.code}`;
   if (!info.title.trim() || !info.composer.trim() || !info.arranger.trim()) throw new Error(`${where}: título, compositor e arranjador são obrigatórios`);
-  if (info.composerDeathYear > PUBLIC_DOMAIN_LAST_DEATH_YEAR) {
+  if (info.composerDeathYear === null) {
+    if (info.composer !== ORIGINAL_COMPOSER && info.composer !== TRADITIONAL_COMPOSER) {
+      throw new Error(`${where}: sem ano de falecimento só vale obra original do ${ORIGINAL_COMPOSER} ou tradicional`);
+    }
+  } else if (info.composerDeathYear > PUBLIC_DOMAIN_LAST_DEATH_YEAR) {
     throw new Error(`${where}: ${info.composer} morreu em ${info.composerDeathYear}; só entra obra de quem morreu até ${PUBLIC_DOMAIN_LAST_DEATH_YEAR}`);
   }
   if (![1, 2, 3].includes(info.level)) throw new Error(`${where}: nível deve ser 1, 2 ou 3`);
