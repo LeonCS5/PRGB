@@ -1,6 +1,8 @@
 import type { PGlite, Transaction } from '@electric-sql/pglite';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { getDemoSong } from '../../src/services/demoSong';
+import { findSongPart } from '../../src/services/songs';
+import { songSongId } from '../../src/services/songIds';
 import {
   BLOCKED_TERMS,
   MODERATION_ALLOWLIST,
@@ -643,5 +645,26 @@ describe('server_time and seed data', () => {
       max_score: maxPossibleScore(scorable),
       registered_by: null
     });
+  });
+
+  it('seeds the repertoire piece with the numbers the game counts, and a ranked run on it is accepted', async () => {
+    const part = await findSongPart(songSongId(1, 0), 0);
+    expect(part).not.toBeNull();
+    const scorable = countScorableNotes(part!.tab.notes);
+    const { rows } = await db.query('select * from public.song_parts where song_id = $1 and part_id = 0', [part!.tab.songId]);
+    expect(rows[0]).toMatchObject({
+      title: part!.tab.title,
+      artist: part!.tab.artist,
+      track_name: part!.tab.trackName,
+      scorable_notes: scorable,
+      duration_ms: part!.tab.totalDurationMs,
+      max_score: maxPossibleScore(scorable),
+      registered_by: null
+    });
+    const userId = await newPlayer();
+    const sessionId = await startSession(userId, part!.tab.songId, 0);
+    await backdate(sessionId, '60 seconds');
+    const accepted = await submit(userId, sessionId, { score: 9000, perfect: 50, good: 8, miss: 4, maxCombo: 30, accuracy: 93 });
+    expect(accepted).toBeTruthy();
   });
 });
