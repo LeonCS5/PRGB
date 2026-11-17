@@ -54,7 +54,7 @@ export const RepertoireLibrary: React.FC<RepertoireLibraryProps> = ({ onPlay, on
             <article key={info.code} className="min-w-0 rounded-2xl border border-ink-700 bg-ink-900 p-5">
               <h2 className="font-display text-xl font-bold">{info.title}</h2>
               <p className="mt-2 text-sm text-ink-200">{info.composer}</p>
-              <p className="mt-1 text-xs text-ink-300">Falecimento do compositor: {info.composerDeathYear}</p>
+              <p className="mt-1 text-xs text-ink-300">{info.composerDeathYear === null ? (info.composer === 'PRGB' ? 'Obra original do PRGB' : 'Melodia tradicional, domínio público') : `Falecimento do compositor: ${info.composerDeathYear}`}</p>
               <p className="mt-3 text-sm text-ink-300">Nível {info.level} de 3 · {info.bpm} bpm</p>
               {info.parts.map((part) => {
                 const songId = songSongId(info.code, part.code);

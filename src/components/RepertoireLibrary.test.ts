@@ -24,7 +24,7 @@ describe('RepertoireLibrary', () => {
     for (const { info } of SONG_CATALOG) {
       expect(html).toContain(info.title);
       expect(html).toContain(info.composer);
-      expect(html).toContain(`Falecimento do compositor: ${info.composerDeathYear}`);
+      expect(html).toContain(info.composerDeathYear === null ? (info.composer === 'PRGB' ? 'Obra original do PRGB' : 'Melodia tradicional, domínio público') : `Falecimento do compositor: ${info.composerDeathYear}`);
       expect(html).toContain(`Nível ${info.level} de 3 · ${info.bpm} bpm`);
       for (const part of info.parts) expect(html).toContain(`Tocar ${info.title} — ${part.name}`);
     }
