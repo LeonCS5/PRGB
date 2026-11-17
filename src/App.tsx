@@ -634,7 +634,7 @@ const AppContent: React.FC = () => {
                       <Dumbbell size={18} aria-hidden="true" /> Exercícios
                     </button>
                     <button type="button" onClick={handleOpenRepertoire} className="flex min-h-16 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-600 bg-ink-900 px-6 py-3 text-sm font-semibold text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
-                      <Music size={18} aria-hidden="true" /> Repertório do PRGB
+                      <Music size={18} aria-hidden="true" /> Repertório
                     </button>
                   </div>
                   {savedSong && (isAcervoEnabled() || savedSong.songId <= 0) && (

@@ -99,6 +99,7 @@ PRGB/
 │   │   ├── hudGlow.ts               # Estilo do brilho do COMBO no HUD (função pura, só com o efeito ligado)
 │   │   ├── gameEffects.ts           # Efeitos opcionais do canvas (pulso, faíscas, brilho do combo, fundo reativo), com pools fixos
 │   │   ├── RepertoireLibrary.tsx    # Tela do repertório próprio: porta de entrada das músicas; o acervo externo fica dentro, como extra experimental
+│   │   ├── AppearanceScreen.tsx     # Tela Aparência (lazy): categorias, preview ao vivo, presets; controles em components/appearance/
 │   │   ├── ProgressSummary.tsx      # Estrelas, palhetas, ensaio da semana e nível, no resultado e no repertório
 │   │   ├── GameMoreSheet.tsx        # Folha "Mais" do jogo no celular; em telas largas só repassa os controles
 │   │   ├── LatencyTest.tsx          # Teste de latência: pista, medição ao vivo, resultado e ajuste salvo
@@ -442,7 +443,7 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 - [x] **Progresso local** — estrelas por peça, palhetas e dias de ensaio da semana, mostrados no resultado de uma partida solo; fica só no navegador, entra na exportação e na exclusão dos dados locais (@claude; não testado no navegador com uma sessão longa)
 - [x] **Acervo externo experimental** — aviso na tela, cache de 5 minutos, recuo de 60 s quando ele recusa (403/429) e `VITE_ACERVO_ENABLED=false` para esconder todo caminho até ele. O ranking só aceita o que está semeado no banco (por ora, só a demo) (@claude/@codex)
 - [x] **Aparência** — seis temas, estilos de nota, personalização de cordas, efeitos opcionais do canvas (desligados por padrão), estilos de componentes, três tipografias e quatro fundos; persistência em `prgb:appearance:v1`, aplicada antes da primeira pintura por `public/appearance-boot.js`. Original com os padrões é idêntico ao visual anterior. Entra na exportação e na exclusão dos dados locais e na Política, sem mudar `LEGAL_VERSION` (nada sai do dispositivo). Brilho do COMBO também no HUD; fontes IBM Plex e as telas próprias entram no precache. Contrato em `docs/aparencia.md` (@claude/@codex; medido só por testes unitários e build; **não testado**: telas no navegador real, Firefox, Safari, celulares, contraste de cada tema com leitor de tela, efeitos com guitarra tocando)
-- [ ] **Tela de Aparência** — a tela de personalização é de outra parte desta rodada; confirme no merge que o chunk dela cai no precache (a regra do `vite.config.ts` é por caminho: `components/AppearanceScreen` ou `components/appearance/`) (@claude)
+- [x] **Tela de Aparência** — tela cheia lazy (`AppearanceScreen` + `components/appearance/`): seis categorias, preview ao vivo com o mesmo desenho do jogo, presets, restaurar padrões e entrada no cabeçalho com camada própria no histórico. Testada no Edge (1280, 390 e 320 px; seis temas; persistência; Voltar; teclado; jogo com estilo de nota e esquema de cordas); o chunk está no precache. Não testado: Firefox, Safari, celular real, leitor de tela, hover/foco/active reais, offline com o service worker instalado, guitarra real (@claude)
 - [ ] **Mais peças e revisão do repertório** — só há uma peça; cada nova exige revisão humana e conferência do ano de morte do autor (@humano)
 
 ### Pendências conhecidas (sem dono)
