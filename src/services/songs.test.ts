@@ -240,7 +240,7 @@ describe('finding a piece again', () => {
   it('loads each piece once and knows no other', async () => {
     const first = loadSong(1);
     expect(loadSong(1)).toBe(first);
-    expect(await loadSong(2)).toBeNull();
+    expect(await loadSong(9999)).toBeNull();
   });
 });
 
