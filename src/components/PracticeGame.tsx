@@ -60,6 +60,7 @@ import {
   type ScoreState
 } from '../services/scoring';
 import { getPersonalBest, recordRun } from '../services/records';
+import { recordRunProgress } from '../context/progressStore';
 import {
   AmpEngine,
   AMP_PRESETS,
@@ -218,6 +219,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   const runStartedRef = useRef(devPreset !== null);
   const integrityRef = useRef({ jumped: false, speedChanged: false });
   const runFinishedRef = useRef(false);
+  const playedMsRef = useRef(0);
   const [runSummary, setRunSummary] = useState<RunSummary | null>(null);
 
   // Note hit tracking, one map per lane
@@ -430,7 +432,18 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
         personalBest = { isNew: outcome.isPersonalBest, previous: outcome.previousBest };
       }
     }
-    setRunSummary({ ...summary, personalBest });
+    // Online returned above; a duo or a DEV preview is recognized (and left out) by recordRunProgress
+    const progress = recordRunProgress(isDuo ? 'duo' : devPreset ? 'preview' : 'solo', {
+      songId: lanes[0].part.tab.songId,
+      partId: lanes[0].part.partId,
+      score: finalScores[0],
+      speed,
+      jumped: summary.jumped,
+      speedChanged,
+      laps,
+      playedMs: playedMsRef.current
+    }, Date.now());
+    setRunSummary({ ...summary, personalBest, progress });
     // The server can only see a run that was too fast, so a slower one must never be sent
     if (!isDuo) ranked.controller.submitRun(finalScores[0], { jumped, speedChanged: speedChanged || speed !== 1 });
   };
@@ -668,6 +681,8 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
         }
       }
       if (online && delta > MAX_FRAME_GAP_MS) skipNotesBefore(next);
+      // Real time actually played: not paused, not the count-in (position still negative), not a hidden tab
+      if (positionRef.current >= 0) playedMsRef.current += Math.min(elapsed, MAX_FRAME_GAP_MS);
       positionRef.current = next;
       setCurrentTimeMs(next);
       if (metronomeEnabled) metronome.update(next);
@@ -741,6 +756,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     runStartedRef.current = false;
     integrityRef.current = { jumped: false, speedChanged: false };
     runFinishedRef.current = false;
+    playedMsRef.current = 0;
     setRunSummary(null);
     for (const noteStates of noteStatesRef.current) noteStates.clear();
     synthPlayedNotesRef.current.clear();

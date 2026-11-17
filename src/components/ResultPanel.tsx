@@ -9,6 +9,7 @@ import { useRanking } from '../context/ranking';
 import { isExerciseSongId } from '../services/exerciseIds';
 import { isRankableSongId } from '../services/rankable';
 import { ChallengeSharePanel } from './ChallengeSharePanel';
+import { ProgressSummary } from './ProgressSummary';
 
 const formatPoints = (value: number) => value.toLocaleString('pt-BR');
 const formatSpeed = (speed: number) => speed.toLocaleString('pt-BR') + '×';
@@ -164,6 +165,7 @@ const SoloResult: React.FC<ResultPanelProps> = ({ titleId, summary, parts, chall
       <p className="mt-6 font-mono text-5xl font-bold text-amp-300">{formatPoints(score.score)}</p><p className="mt-2 text-xs text-ink-300">PONTOS</p>
       <div className="my-5 grid grid-cols-2 gap-3 font-mono"><div><p className="text-2xl text-hit">{accuracy}%</p><p className="text-xs text-ink-300">Precisão</p></div><div><p className="text-2xl text-signal-300">{score.maxCombo}</p><p className="text-xs text-ink-300">Max combo</p></div></div>
       <JudgementCounts score={score} />
+      {summary.progress && <ProgressSummary progress={summary.progress} />}
       {challenge && <ChallengeVerdict challenge={challenge} score={score.score} counts={canChallenge} />}
       {suggestsLatencyTest && (
         <div className="mt-4 rounded-xl border border-signal-500/30 bg-signal-500/5 px-4 py-3 text-sm text-ink-200">

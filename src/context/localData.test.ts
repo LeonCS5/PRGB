@@ -25,6 +25,7 @@ const makeStorage = (initial: Record<string, string> = {}): Storage => {
 
 const RECORDS_KEY = 'prgb:records:v1';
 const PREFS_KEY = 'prgb:prefs:v1';
+const PROGRESS_KEY = 'prgb:progress:v1';
 
 let ls: Storage;
 let ss: Storage;
@@ -77,6 +78,13 @@ describe('buildLocalDataExport', () => {
     expect(result.description).toContain('eferências');
   });
 
+  it('includes the progress and says so in the description', () => {
+    ls.setItem(PROGRESS_KEY, JSON.stringify({ version: 1, totals: { runs: 4, practiceMs: 90000, trainingLaps: 0, archivedStars: 0 } }));
+    const result = JSON.parse(buildLocalDataExport()) as Record<string, unknown>;
+    expect(result.progress).toMatchObject({ version: 1, totals: { runs: 4, practiceMs: 90000 }, level: 'Corda solta' });
+    expect(result.description).toContain('progresso');
+  });
+
   it('includes saved preferences when the storage has them', () => {
     ls.setItem(PREFS_KEY, JSON.stringify({ deviceId: 'dev-xyz', channelMode: 'ch2', ampEngine: null, lastSong: null, nickname: null }));
     const result = JSON.parse(buildLocalDataExport()) as Record<string, unknown>;
@@ -100,6 +108,12 @@ describe('clearLocalData', () => {
     ls.setItem(PREFS_KEY, JSON.stringify({ deviceId: 'dev-1' }));
     clearLocalData();
     expect(ls.getItem(PREFS_KEY)).toBeNull();
+  });
+
+  it('removes the progress key from localStorage', () => {
+    ls.setItem(PROGRESS_KEY, JSON.stringify({ version: 1 }));
+    clearLocalData();
+    expect(ls.getItem(PROGRESS_KEY)).toBeNull();
   });
 
   it('does not remove the auth session key', () => {

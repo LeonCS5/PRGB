@@ -101,6 +101,15 @@ describe('legal documents', () => {
     expect(TERMS_OF_USE.summary.join('\n')).toContain('experimental');
   });
 
+  // Nothing leaves the device, so this text did not need a new LEGAL_VERSION
+  it('say the progress stays only in this browser and goes with the local data export and erase', () => {
+    const local = sectionText(PRIVACY_POLICY, 'dados-no-navegador');
+    for (const fact of ['estrelas', 'palhetas', 'dias de ensaio', 'só existe neste navegador', 'exportação', 'apagado junto']) {
+      expect(local).toContain(fact);
+    }
+    expect(CONSENT_COPY.localDataDescription).toContain('progresso');
+  });
+
   it('never name the external provider', () => {
     // The name stays out of the UI: it is given only on request by e-mail.
     expect(sectionText(PRIVACY_POLICY, 'compartilhamento')).toContain('Você pode pedir o nome desse provedor');
