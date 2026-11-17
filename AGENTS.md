@@ -447,8 +447,8 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 - [x] **Mais peças** — Greensleeves, Minueto em Sol (Petzold), Brilha brilha estrelinha e seis originais (riffs e progressões), cada uma com teste de melodia independente e linha em `docs/repertorio.md`. A UI mostra "Em revisão" até alguém tocar e marcar `reviewed: true` no catálogo; só a Ode foi aprovada. Descartadas por falta de segurança na melodia: Atirei o pau no gato, Ciranda cirandinha, O cravo e a rosa, Para Elisa e Canon em Ré (@claude; ninguém tocou as novas)
 - [x] **Tela Meu progresso** — nível, ensaio da semana com meta de 3/5/7 dias, palhetas e conteúdo tocado, lazy e no cache offline (@claude; testada no Edge em 1280/390/320 px; offline provado com o service worker)
 - [x] **Orçamento de bundle** — `npm run check:bundle` no CI falha se o JS gzip passar dos limites de `scripts/check-bundle-size.mjs` (@claude)
-- [x] **register-part somente leitura (A6)** — o código está na `main`; a função **publicada no Supabase ainda precisa ser atualizada pelo painel** (@humano)
-- [ ] **Semear a Ode no ranking (B3)** — migration `20261117120000_seed_repertoire.sql` e `rankable.ts` estão na branch `claude/ranking-repertorio`, fora da `main` de propósito: só entram depois que a função for publicada e a migration rodar no SQL Editor (@humano, depois @claude)
+- [x] **register-part somente leitura (A6)** — publicada no Supabase em 2026-11-17 (versão 3, `verify_jwt` mantido, pelo CLI)
+- [x] **Semear a Ode no ranking (B3)** — migration `20261117120000_seed_repertoire.sql` rodada em produção em 2026-11-17 (linha conferida: 62 notas, 53333 ms, 32700 pontos) e `rankable.ts` na `main`. **Não testado**: uma partida ranqueada da Ode no site publicado (precisa de conta e microfone)
 
 ### Pendências conhecidas (sem dono)
 - [ ] **Permissão do provedor de tablaturas** — os termos dele proíbem transmitir, reutilizar e baixar o conteúdo sem autorização escrita. É o maior risco legal do projeto; depende de decisão do humano.
