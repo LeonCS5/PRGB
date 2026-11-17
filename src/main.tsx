@@ -3,16 +3,16 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { ErrorBoundary } from './components/ErrorBoundary.tsx'
-import { ThemeLab } from './components/ThemeLab.tsx'
-import { applySavedTheme, isThemeLabEnabled } from './services/themes.ts'
+import { getAppearance } from './appearance/useAppearance.ts'
 
-applySavedTheme()
+// public/appearance-boot.js already applied the saved look before the first paint; this loads the store and
+// applies it again (idempotent), and covers a browser where the boot script did not run
+getAppearance()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
       <App />
-      {isThemeLabEnabled() && <ThemeLab />}
     </ErrorBoundary>
   </StrictMode>,
 )
