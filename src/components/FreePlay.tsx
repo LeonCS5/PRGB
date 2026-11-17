@@ -11,10 +11,10 @@ import {
   layoutLanes,
   noteHeightFor,
   PIXELS_PER_MS,
-  readPalette,
   stringY,
   type LaneLayout,
 } from './practiceLanes';
+import { useGamePalette } from '../context/useTheme';
 import { useAudioSession, useLatestPitch } from '../context/AudioSessionContext';
 import { useModals } from '../context/ModalsContext';
 import { audioDeviceName } from '../services/audioDevices';
@@ -55,7 +55,7 @@ export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings,
   const { setFeedbackOpen } = useModals();
   const { audioEngine, isAudioRunning, startAudio, audioError, dismissAudioError, getLatestPitch, activeInput, outputName } = useAudioSession();
   const pitch = useLatestPitch();
-  const [palette] = useState(readPalette);
+  const palette = useGamePalette();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLElement>(null);
   const sceneRef = useRef<Scene | null>(null);

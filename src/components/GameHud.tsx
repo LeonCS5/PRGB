@@ -25,7 +25,7 @@ export const SoloHud: React.FC<SoloHudProps> = ({ score, goal }) => (
   </div>
 );
 
-const PLAYER_TEXT_COLORS: [string, string] = ['text-signal-300', 'text-note-violet'];
+const PLAYER_TEXT_COLORS: [string, string] = ['text-player-1', 'text-player-2'];
 
 const PlayerScore: React.FC<{ name: string; score: ScoreState; player: PlayerSlot }> = ({ name, score, player }) => (
   <div className={'min-w-0 ' + (player === 1 ? 'text-right' : '')}>

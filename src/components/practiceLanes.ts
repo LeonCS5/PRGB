@@ -29,9 +29,9 @@ export const readPalette = (): GamePalette => {
   const color = (name: string) => styles.getPropertyValue('--color-' + name).trim();
   return {
     background: color('ink-900'), rail: color('ink-800'), ink: color('ink-950'), muted: color('ink-400'),
-    divider: color('ink-600'), signal: color('signal-400'), hit: color('hit'), near: color('near'), miss: color('miss'),
-    strings: [color('note-violet'), color('signal-300'), color('signal-600'), color('hit'), color('near'), color('amp-400')],
-    players: [color('signal-300'), color('note-violet')]
+    divider: color('ink-600'), signal: color('play-signal'), hit: color('hit'), near: color('near'), miss: color('miss'),
+    strings: [1, 2, 3, 4, 5, 6].map((number) => color('string-' + number)),
+    players: [color('player-1'), color('player-2')]
   };
 };
 

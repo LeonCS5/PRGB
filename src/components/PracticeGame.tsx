@@ -28,13 +28,13 @@ import {
   layoutLanes,
   noteHeightFor,
   playHitFeedback,
-  readPalette,
   stringY,
   HIT_LINE_X,
   PIXELS_PER_MS,
   type HitEffects,
   type LaneLayout
 } from './practiceLanes';
+import { useGamePalette } from '../context/useTheme';
 import { useModals } from '../context/ModalsContext';
 import type { NoteEvent } from '../services/tabsApi';
 import type { NoteGraphic } from './practiceLanes';
@@ -155,7 +155,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   const isOnline = online != null;
   const { audioEngine, getLatestPitch, isAudioRunning, startAudio, channelMode } = useAudioSession();
   const { isConfigured: isRankingOn, openAccount } = useRanking();
-  const [palette] = useState(readPalette);
+  const palette = useGamePalette();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasContainerRef = useRef<HTMLElement | null>(null);
 

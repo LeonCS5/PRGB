@@ -18,7 +18,7 @@ const TITLE_ID = 'duo-setup-title';
 // AudioEngine decides on mirrored channels after 60 frames with both guitars above the gate; frames with
 // both notes detected are a subset of those, so 60 of them mean the engine's check has its answer
 const MIRROR_CHECK_FRAMES = 60;
-const PLAYER_COLORS: [string, string] = ['text-signal-300', 'text-note-violet'];
+const PLAYER_COLORS: [string, string] = ['text-player-1', 'text-player-2'];
 const primaryButton = 'flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-amp-400 px-5 font-bold text-ink-950 transition hover:bg-amp-300 disabled:cursor-not-allowed disabled:opacity-50';
 const secondaryButton = 'flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-600 px-4 text-sm font-semibold text-ink-100 transition hover:border-ink-400 disabled:opacity-50';
 

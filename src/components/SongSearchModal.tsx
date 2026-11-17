@@ -184,7 +184,7 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
             </div>
             {duoNames && (
               <p className="mt-2 text-xs text-ink-300">
-                <span className="text-signal-300">{duoNames[0]}</span> (canal 1) e <span className="text-note-violet">{duoNames[1]}</span> (canal 2): escolham a música e a parte de cada um.
+                <span className="text-player-1">{duoNames[0]}</span> (canal 1) e <span className="text-player-2">{duoNames[1]}</span> (canal 2): escolham a música e a parte de cada um.
               </p>
             )}
           </div>
@@ -248,7 +248,7 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
                 <div className="space-y-4">
                   {([0, 1] as const).map((player) => (
                     <label key={player} className="block">
-                      <span className={'text-xs font-semibold ' + (player === 0 ? 'text-signal-300' : 'text-note-violet')}>
+                      <span className={'text-xs font-semibold ' + (player === 0 ? 'text-player-1' : 'text-player-2')}>
                         Parte de {duoNames[player]} (canal {player + 1})
                       </span>
                       <select value={duoTracks[player]} disabled={isLoadingTab}
