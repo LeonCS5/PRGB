@@ -3,4 +3,35 @@
 
 import type { SongEntry } from '../../services/songs';
 
-export const CLASSIC_CATALOG: readonly SongEntry[] = [];
+export const CLASSIC_CATALOG: readonly SongEntry[] = [
+  {
+    info: {
+      code: 6,
+      title: 'Minueto em Sol',
+      composer: 'Christian Petzold',
+      composerDeathYear: 1733,
+      arranger: 'PRGB',
+      level: 2,
+      bpm: 88,
+      key: { tonic: 'G', scale: 'major' },
+      timeSignature: [3, 4],
+      parts: [{ code: 0, name: 'Melodia' }]
+    },
+    load: () => import('./minueto-em-sol').then((module) => module.score)
+  },
+  {
+    info: {
+      code: 7,
+      title: 'Brilha, brilha, estrelinha',
+      composer: 'Mozart',
+      composerDeathYear: 1791,
+      arranger: 'PRGB',
+      level: 1,
+      bpm: 84,
+      key: { tonic: 'C', scale: 'major' },
+      timeSignature: [4, 4],
+      parts: [{ code: 0, name: 'Melodia' }]
+    },
+    load: () => import('./estrelinha').then((module) => module.score)
+  }
+];
