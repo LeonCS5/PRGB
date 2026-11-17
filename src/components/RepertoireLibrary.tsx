@@ -46,7 +46,7 @@ export const RepertoireLibrary: React.FC<RepertoireLibraryProps> = ({ onPlay, on
           <ArrowLeft size={18} aria-hidden="true" /> Voltar ao início
         </button>
         <h1 ref={heading} tabIndex={-1} className="mt-5 font-display text-3xl font-bold">Repertório do PRGB</h1>
-        <p className="mt-2 text-sm leading-6 text-ink-300">Domínio público — arranjo PRGB</p>
+        <p className="mt-2 text-sm leading-6 text-ink-300">Domínio público e originais — arranjo PRGB</p>
         {error && <p role="alert" className="mt-4 text-sm text-miss">{error}</p>}
         <p role="status" className="mt-3 text-sm text-ink-300">{loadingId !== null ? 'Carregando peça…' : ''}</p>
         <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -56,6 +56,7 @@ export const RepertoireLibrary: React.FC<RepertoireLibraryProps> = ({ onPlay, on
               <p className="mt-2 text-sm text-ink-200">{info.composer}</p>
               <p className="mt-1 text-xs text-ink-300">{info.composerDeathYear === null ? (info.composer === ORIGINAL_COMPOSER ? 'Obra original do PRGB' : 'Melodia tradicional, domínio público') : `Falecimento do compositor: ${info.composerDeathYear}`}</p>
               <p className="mt-3 text-sm text-ink-300">Nível {info.level} de 3 · {info.bpm} bpm</p>
+              {info.reviewed !== true && <p className="mt-1 text-xs text-near">Em revisão: a melodia ainda não foi conferida tocando.</p>}
               {info.parts.map((part) => {
                 const songId = songSongId(info.code, part.code);
                 const bests = [1, 0.75, 0.5].flatMap((speed) => {

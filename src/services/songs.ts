@@ -47,6 +47,7 @@ export interface SongInfo {
   timeSignature: [number, number];
   tuning?: number[]; // standard tuning when missing
   parts: SongPartInfo[];
+  reviewed?: boolean; // true once a person played the piece and approved it; shown as "em revisão" until then
 }
 
 export interface SongScore {

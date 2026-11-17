@@ -18,7 +18,8 @@ export const SONG_CATALOG: readonly SongEntry[] = [
       bpm: 72,
       key: { tonic: 'C', scale: 'major' },
       timeSignature: [4, 4],
-      parts: [{ code: 0, name: 'Melodia' }]
+      parts: [{ code: 0, name: 'Melodia' }],
+      reviewed: true // played and approved by the owner, 2026-11-17
     },
     load: () => import('./ode-a-alegria').then((module) => module.score)
   },

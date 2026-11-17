@@ -17,11 +17,18 @@ const render = () => renderToStaticMarkup(createElement(RepertoireLibrary, { onP
 afterEach(() => vi.clearAllMocks());
 
 describe('RepertoireLibrary', () => {
+  it('marks the pieces nobody has played yet as under review', () => {
+    const html = renderToStaticMarkup(createElement(RepertoireLibrary, { onPlay: () => undefined, onSearch: () => undefined, onExit: () => undefined }));
+    const pending = SONG_CATALOG.filter(({ info }) => info.reviewed !== true).length;
+    expect(html.split('Em revisão').length - 1).toBe(pending);
+    expect(pending).toBeLessThan(SONG_CATALOG.length);
+  });
+
   it('lists metadata without loading scores or offering ranking', () => {
     const loads = SONG_CATALOG.map((entry) => vi.spyOn(entry, 'load'));
     const html = render();
     expect(html).toContain('Repertório do PRGB');
-    expect(html).toContain('Domínio público — arranjo PRGB');
+    expect(html).toContain('Domínio público e originais — arranjo PRGB');
     for (const { info } of SONG_CATALOG) {
       expect(html).toContain(info.title);
       expect(html).toContain(info.composer);
