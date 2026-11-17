@@ -166,7 +166,7 @@ PRGB/
 │   │   │   ├── scoreLimits.ts       # countScorableNotes / maxPossibleScore (shared entre Edge Function e app)
 │   │   │   └── tabNormalizer.ts     # Parser de tab (reutilizado no register-part)
 │   │   └── register-part/
-│   │       ├── handler.ts           # Lógica pura da Edge Function register-part (testável em Vitest)
+│   │       ├── handler.ts           # Lógica pura da Edge Function register-part: só devolve faixa já guardada no banco, sem consultar fonte externa (testável em Vitest)
 │   │       └── index.ts             # Entry point Deno: wires Supabase, rede e ALLOWED_ORIGINS
 │   └── db-tests/
 │       ├── harness.ts               # Utilitários de setup para testes de banco (roles, JWT, dados de seed)
@@ -371,7 +371,7 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 
 ### Rodada 4 — ranking Supabase (concluída, em `main`)
 - [x] **Ranking online** — `supabase/migrations/` (ranking, retention, reaccept_terms), `src/services/backend/rankingApi.ts`, `src/services/backend/supabaseClient.ts`, `src/services/scoring.ts`, `src/services/records.ts`, `src/services/nickname.ts`, `src/context/rankedRun.ts`, `src/context/ranking.ts`, `src/context/RankingProvider.tsx`, componentes de ranking (@claude/@codex)
-- [x] **Edge Function register-part** — conta notas do lado do servidor para limitar scores; `supabase/functions/register-part/` (@claude)
+- [x] **Edge Function register-part** — conta notas do lado do servidor para limitar scores; `supabase/functions/register-part/` (@claude). Desde a Rodada 14 (A6) ela só devolve faixa já guardada e não consulta fonte externa: o ranking vale só para conteúdo semeado
 - [x] **LGPD** — `src/content/legal.ts`, `src/context/localData.ts`, `src/context/legalRoute.ts`, `src/components/LegalPage.tsx`, `src/components/LocalDataControls.tsx`, `src/components/DeleteAccountConfirm.tsx` (@claude/@codex)
 - [x] **Desafios** — `src/services/challenge.ts`, `src/components/ChallengeCard.tsx`, `src/components/ChallengeSharePanel.tsx` (@claude/@codex)
 
@@ -499,7 +499,7 @@ Landing Page → Clica "Tocar" ou "Buscar" → getUserMedia() → PRGB Amp Ativo
 | NoteEvent | Estrutura normalizada de uma nota: `{timeMs, string, fret, midiNote, freqHz, ...}` |
 | LEGAL_VERSION | String ISO da data do texto legal aceito; salvo com cada consentimento para detectar atualizações |
 | RankedRun | Sessão de jogo com pontuação enviada ao servidor (requer conta + consentimento) |
-| register-part | Edge Function Supabase que conta notas do lado do servidor para validar scores |
+| register-part | Edge Function Supabase que devolve a contagem de notas de uma faixa já guardada no banco (semeada); nunca consulta fonte externa |
 | GamePart | Tab + partId + revisionId: o que o jogo precisa para uma música |
 | DuoSession | Sessão local: duas guitarras no mesmo computador, dois canais de áudio |
 | Sala online | Dupla em computadores diferentes (máximo 2): cada um toca no seu, sem se ouvir, e vê só o progresso e o placar da equipe, via Realtime |

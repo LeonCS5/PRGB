@@ -1,11 +1,11 @@
 // Deno entry point of the register-part Edge Function. POST { songId, partId } with the player's session
-// JWT; the logic lives in handler.ts. Database access uses a secret key (service role, bypasses RLS).
+// JWT; the logic lives in handler.ts. Database access uses a secret key (service role, bypasses RLS). Read-only:
+// it returns a stored part and never contacts an external catalog.
 
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';
 import {
   DEFAULT_ALLOWED_ORIGINS,
   createRegisterPartHandler,
-  type NewSongPart,
   type RegisterPartStore,
   type SongPart
 } from './handler.ts';
@@ -85,51 +85,8 @@ const store: RegisterPartStore = {
       .maybeSingle();
     if (error) throw new Error(`song_parts: ${error.code}`);
     return data ? toSongPart(data as SongPartRow) : null;
-  },
-
-  async consumeQuota(userId, limit) {
-    const { data, error } = await admin.rpc('consume_register_part_quota', { p_user_id: userId, p_limit: limit });
-    if (error) throw new Error(`register_part_quota: ${error.code}`);
-    return data === true;
-  },
-
-  async insertPart(part) {
-    const { error } = await admin.from('song_parts')
-      .upsert(toRow(part), { onConflict: 'song_id,part_id', ignoreDuplicates: true });
-    if (error) throw new Error(`song_parts insert: ${error.code}`);
-    return readBack(part);
-  },
-
-  async updatePart(part) {
-    const { error } = await admin.from('song_parts')
-      .update({ ...toRow(part), registered_at: new Date().toISOString() })
-      .eq('song_id', part.songId)
-      .eq('part_id', part.partId);
-    if (error) throw new Error(`song_parts update: ${error.code}`);
-    return readBack(part);
   }
 };
-
-function toRow(part: NewSongPart) {
-  return {
-    song_id: part.songId,
-    part_id: part.partId,
-    revision_id: part.revisionId,
-    title: part.title,
-    artist: part.artist,
-    track_name: part.trackName,
-    scorable_notes: part.scorableNotes,
-    duration_ms: part.durationMs,
-    max_score: part.maxScore,
-    registered_by: part.registeredBy
-  };
-}
-
-async function readBack(part: NewSongPart): Promise<SongPart> {
-  const stored = await store.findPart(part.songId, part.partId);
-  if (!stored) throw new Error('song_parts: row missing after write');
-  return stored;
-}
 
 // Optional override, comma-separated (e.g. to allow a Vercel preview URL)
 const allowedOrigins = (Deno.env.get('ALLOWED_ORIGINS') ?? '')
@@ -139,7 +96,6 @@ const allowedOrigins = (Deno.env.get('ALLOWED_ORIGINS') ?? '')
 
 Deno.serve(createRegisterPartHandler({
   store,
-  fetch,
   allowedOrigins: allowedOrigins.length > 0 ? allowedOrigins : DEFAULT_ALLOWED_ORIGINS,
   log: (message) => console.error(message)
 }));
