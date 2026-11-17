@@ -178,6 +178,11 @@ describe('readPreferences lastSong validation', () => {
     expect(readPreferences().lastSong).toEqual({ songId: 1, partId: 0 });
   });
 
+  it('keeps a repertoire piece (negative id) so Continue finds it after a reload', () => {
+    ls.setItem(STORAGE_KEY, JSON.stringify({ lastSong: { songId: -200010, partId: 0, title: 'Ode à Alegria' } }));
+    expect(readPreferences().lastSong).toEqual({ songId: -200010, partId: 0, title: 'Ode à Alegria' });
+  });
+
   it('discards lastSong when songId is 0 (must be >= 1)', () => {
     ls.setItem(STORAGE_KEY, JSON.stringify({ lastSong: { songId: 0, partId: 0 } }));
     expect(readPreferences().lastSong).toBeNull();

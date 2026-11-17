@@ -59,7 +59,7 @@ export const LocalDataControls: React.FC = () => {
       </div>
       {eraseStep === 'plain' && (
         <div role="group" aria-label="Confirmar exclusão dos dados locais" className="mt-4 rounded-xl border border-miss/40 bg-miss/5 p-4">
-          <p className="text-sm text-ink-100">Apagar recordes, histórico, preferências e apelido guardados neste navegador? Não dá para desfazer.</p>
+          <p className="text-sm text-ink-100">Apagar recordes, histórico, progresso, preferências e apelido guardados neste navegador? Não dá para desfazer.</p>
           <div className="mt-3 flex flex-wrap gap-3">
             <button type="button" onClick={handleClear} className={buttonClass + ' border-miss bg-miss text-ink-950 hover:bg-miss/90'}>Apagar</button>
             <button type="button" autoFocus onClick={() => setEraseStep(null)} className={buttonClass + ' border-ink-600 text-ink-100 hover:border-ink-400'}>Cancelar</button>
