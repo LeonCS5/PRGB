@@ -1,5 +1,5 @@
 import React from 'react';
-import { Dumbbell, LayoutGrid, Music, PlugZap, Sliders, Trophy, type LucideIcon } from 'lucide-react';
+import { Dumbbell, LayoutGrid, Music, Palette, PlugZap, Sliders, Trophy, type LucideIcon } from 'lucide-react';
 
 export interface SiteNavProps {
   isAudioRunning: boolean;
@@ -46,6 +46,14 @@ export const AudioChip: React.FC<Pick<SiteNavProps, 'isAudioRunning' | 'onAudio'
     className={`hidden min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-lg border px-3 text-sm font-semibold transition hover:bg-ink-800 lg:flex ${isAudioRunning ? 'border-ink-700 text-ink-200' : 'border-amp-500/50 text-amp-300'}`}>
     <span aria-hidden="true" className={`size-2 rounded-full ${isAudioRunning ? 'bg-hit' : 'bg-amp-400'}`} />
     {isAudioRunning ? 'Áudio conectado' : 'Conectar áudio'}
+  </button>
+);
+
+// Opens the appearance screen. Icon-only below xl (the tab bar of phones has no room for a sixth tab)
+export const AppearanceButton: React.FC<{ onOpen: () => void }> = ({ onOpen }) => (
+  <button type="button" onClick={onOpen} aria-label="Aparência"
+    className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-lg px-2 text-sm font-semibold text-ink-200 transition hover:bg-ink-800 hover:text-amp-300">
+    <Palette size={18} className="shrink-0 text-amp-400" aria-hidden="true" /><span className="hidden xl:inline">Aparência</span>
   </button>
 );
 
