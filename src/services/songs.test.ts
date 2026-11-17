@@ -124,7 +124,7 @@ describe('defineSong', () => {
     expect(() => defineSong(info({ composerDeathYear: PUBLIC_DOMAIN_LAST_DEATH_YEAR + 1 }), score(['1:0w']))).toThrow('só entra obra');
     expect(() => defineSong(info({ composerDeathYear: PUBLIC_DOMAIN_LAST_DEATH_YEAR }), score(['1:0w']))).not.toThrow();
     // An original work of the PRGB has no death year; anyone else without one is refused
-    expect(() => defineSong(info({ composer: 'PRGB', composerDeathYear: null }), score(['1:0w']))).not.toThrow();
+    expect(() => defineSong(info({ composer: 'Original', composerDeathYear: null }), score(['1:0w']))).not.toThrow();
     expect(() => defineSong(info({ composer: 'Tradicional', composerDeathYear: null }), score(['1:0w']))).not.toThrow();
     expect(() => defineSong(info({ composer: 'Beethoven', composerDeathYear: null }), score(['1:0w']))).toThrow('só vale obra original');
   });
