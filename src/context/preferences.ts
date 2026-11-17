@@ -1,6 +1,7 @@
 import type { InputChannelMode } from '../services/audioEngine';
 import { DEFAULT_AUDIO_OPTIONS, readAudioOptions, type AudioOptions } from '../services/audioDevices';
 import { validateNickname } from '../services/nickname';
+import { isRepertoireSongId } from '../services/songIds';
 import { AMP_PRESETS, type AmpSettings } from '../services/ampEngine';
 
 export interface SavedSong {
@@ -48,7 +49,7 @@ const readNickname = (value: unknown): string | null => {
 };
 
 const isSavedSong = (value: unknown): value is SavedSong =>
-  isRecord(value) && inRange(value.songId, 1, Number.MAX_SAFE_INTEGER)
+  isRecord(value) && (isRepertoireSongId(value.songId) || inRange(value.songId, 1, Number.MAX_SAFE_INTEGER))
   && Number.isInteger(value.songId) && inRange(value.partId, 0, Number.MAX_SAFE_INTEGER)
   && Number.isInteger(value.partId)
   && (value.title === undefined || typeof value.title === 'string');

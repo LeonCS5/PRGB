@@ -28,8 +28,9 @@ describe('ProgressSummary', () => {
     expect(html).toContain('Palheta nova: Primeira palhetada');
     expect(html).toContain('Tocou o primeiro exercício até o fim.');
     expect(html).toContain('Corda solta');
-    expect(html).toContain('role="status"');
-    expect(html).toContain('aria-live="polite"');
+    // The result panel already owns the live region; a nested one is not announced when it enters filled
+    expect(html).not.toContain('aria-live');
+    expect(html).toContain('aria-label="Seu progresso"');
   });
 
   it('shows the weekly rehearsal as days of the goal, with no loss wording when it was not reached', () => {
