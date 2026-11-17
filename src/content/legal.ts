@@ -37,7 +37,7 @@ export interface ConsentCopy {
   clearLocalLabel: string;
 }
 
-export const LEGAL_VERSION: string = '2026-11-04';
+export const LEGAL_VERSION: string = '2026-11-16';
 
 export const LEGAL_CONTACT: LegalContact = {
   controller: 'Leonam Candido',
@@ -215,7 +215,7 @@ export const PRIVACY_POLICY: LegalDocument = {
       ],
       items: [
         'Vercel (Vercel Inc., Estados Unidos): hospeda o site, entrega os arquivos por uma rede global de servidores e repassa ao provedor de tablaturas os pedidos de busca e de música. Trata os registros técnicos de acesso.',
-        'Supabase (Supabase Pte. Ltd., Singapura): guarda os dados do ranking e os relatos de problemas em servidores na região de São Paulo e transmite as mensagens da sala online. Para conferir pontuações, consulta no provedor de tablaturas dados públicos das faixas, como o número de notas e a duração, sem enviar dados seus.',
+        'Supabase (Supabase Pte. Ltd., Singapura): guarda os dados do ranking e os relatos de problemas em servidores na região de São Paulo e transmite as mensagens da sala online. O ranking vale só para faixas do próprio PRGB, já guardadas no banco: o jogo não pede ao Supabase que consulte o provedor de tablaturas. Faixas do acervo externo registradas antes dessa mudança continuam guardadas, conforme a retenção descrita nesta Política.',
         'Cloudflare (Cloudflare, Inc., Estados Unidos): faz a verificação anti-robô quando você cria a conta do ranking, carregada de challenges.cloudflare.com só nesse momento. Recebe dados técnicos do navegador e da conexão, como endereço IP, informações do navegador e sinais de interação com a página, e os trata conforme a política de privacidade dela. O PRGB recebe só o resultado da verificação e não o guarda.',
         'Provedor externo de tablaturas: serviço de terceiro que fornece o acervo de músicas. Recebe, repassados pela Vercel, o termo que você busca e os códigos da música e da faixa que você abre. Esses pedidos podem levar dados técnicos, como endereço IP e tipo de navegador, que ele trata conforme a política de privacidade dele. Ele nunca recebe dados da sua conta do ranking. Você pode pedir o nome desse provedor pelo e-mail desta Política.',
         'Outros jogadores: veem seu apelido e suas pontuações no ranking e, na sala online, seu placar ao vivo.',

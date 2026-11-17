@@ -86,7 +86,7 @@ describe('legal documents', () => {
 
   // The external catalog is third-party and experimental; the legal texts must say so (round of the provider's written answer).
   it('say the external catalog is third-party, unlicensed, experimental and outside the ranking, with a takedown channel', () => {
-    expect(LEGAL_VERSION).toBe('2026-11-04');
+    expect(LEGAL_VERSION).toBe('2026-11-16');
     const policy = sectionText(PRIVACY_POLICY, 'acervo-externo');
     for (const fact of ['de terceiros', 'não as licencia nem as hospeda', 'experimental', 'a qualquer momento, sem aviso',
       'O ranking não usa o acervo externo', 'titular de direitos', LEGAL_CONTACT.email, '15 dias']) {
