@@ -29,13 +29,14 @@ import { RoomModal } from '../components/RoomModal';
 const noop = () => undefined;
 
 describe('acervo entry points', () => {
-  it.each([HeaderNav, TabBar])('keeps music navigation (the PRGB repertoire) with the catalog off, with exercises and audio order', (component) => {
-    const props = { isAudioRunning: false, onExercises: noop, onSearch: noop, onAudio: noop, onRanking: noop };
-    vi.stubEnv('VITE_ACERVO_ENABLED', 'true');
-    expect(renderToStaticMarkup(createElement(component, props))).toContain('Músicas');
-    vi.stubEnv('VITE_ACERVO_ENABLED', 'false');
-    const html = renderToStaticMarkup(createElement(component, props));
-    expect(html).toContain('Músicas');
+  it.each([HeaderNav, TabBar])('shows the catalog search in the menu only when the catalog is on, and always keeps the PRGB repertoire', (component) => {
+    const base = { isAudioRunning: false, onExercises: noop, onRepertoire: noop, onAudio: noop, onRanking: noop };
+    const on = renderToStaticMarkup(createElement(component, { ...base, onSearch: noop }));
+    expect(on).toContain('Buscar');
+    expect(on).toContain('Repertório');
+    const html = renderToStaticMarkup(createElement(component, { ...base, onSearch: null }));
+    expect(html).not.toContain('Buscar');
+    expect(html).toContain('Repertório');
     expect(html).toContain('Exercícios');
     expect(html).toContain('Ranking');
     if (component === TabBar) expect(html.indexOf('Conectar')).toBeLessThan(html.indexOf('Ranking'));

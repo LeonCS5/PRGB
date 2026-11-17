@@ -1,10 +1,11 @@
 import React from 'react';
-import { Award, Dumbbell, LayoutGrid, Music, Palette, PlugZap, Sliders, Trophy, type LucideIcon } from 'lucide-react';
+import { Award, Dumbbell, LayoutGrid, Music, Palette, PlugZap, Search, Sliders, Trophy, type LucideIcon } from 'lucide-react';
 
 export interface SiteNavProps {
   isAudioRunning: boolean;
   onExercises: () => void;
-  onSearch: () => void;
+  onRepertoire: () => void;
+  onSearch: (() => void) | null; // null when the external catalog is hidden
   onAudio: () => void;
   onRanking: (() => void) | null; // null when the ranking is not configured
 }
@@ -16,9 +17,10 @@ interface NavItem {
   onSelect?: () => void; // without it, the item is a link to the game modes on the landing
 }
 
-const navItems = ({ onExercises, onSearch, onRanking }: SiteNavProps): NavItem[] => [
+const navItems = ({ onExercises, onRepertoire, onSearch, onRanking }: SiteNavProps): NavItem[] => [
   { label: 'Exercícios', icon: Dumbbell, onSelect: onExercises },
-  { label: 'Músicas', icon: Music, onSelect: onSearch },
+  { label: 'Repertório', icon: Music, onSelect: onRepertoire },
+  ...(onSearch ? [{ label: 'Buscar', ariaLabel: 'Buscar músicas no acervo', icon: Search, onSelect: onSearch }] : []),
   { label: 'Modos', icon: LayoutGrid },
   ...(onRanking ? [{ label: 'Ranking', icon: Trophy, onSelect: onRanking }] : [])
 ];
@@ -53,7 +55,7 @@ export const AudioChip: React.FC<Pick<SiteNavProps, 'isAudioRunning' | 'onAudio'
 export const ProgressButton: React.FC<{ onOpen: () => void }> = ({ onOpen }) => (
   <button type="button" onClick={onOpen} aria-label="Meu progresso"
     className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-lg px-2 text-sm font-semibold text-ink-200 transition hover:bg-ink-800 hover:text-amp-300">
-    <Award size={18} className="shrink-0 text-amp-400" aria-hidden="true" /><span className="hidden xl:inline">Progresso</span>
+    <Award size={18} className="shrink-0 text-amp-400" aria-hidden="true" /><span className="hidden 2xl:inline">Progresso</span>
   </button>
 );
 
@@ -61,7 +63,7 @@ export const ProgressButton: React.FC<{ onOpen: () => void }> = ({ onOpen }) => 
 export const AppearanceButton: React.FC<{ onOpen: () => void }> = ({ onOpen }) => (
   <button type="button" onClick={onOpen} aria-label="Aparência"
     className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-lg px-2 text-sm font-semibold text-ink-200 transition hover:bg-ink-800 hover:text-amp-300">
-    <Palette size={18} className="shrink-0 text-amp-400" aria-hidden="true" /><span className="hidden xl:inline">Aparência</span>
+    <Palette size={18} className="shrink-0 text-amp-400" aria-hidden="true" /><span className="hidden 2xl:inline">Aparência</span>
   </button>
 );
 
@@ -72,7 +74,7 @@ export const TabBar: React.FC<SiteNavProps> = (props) => {
     : { label: 'Conectar', ariaLabel: 'Conectar áudio', icon: PlugZap, onSelect: props.onAudio };
   return (
     <nav aria-label="Principal" className="fixed inset-x-0 bottom-0 z-40 flex border-t border-ink-700 bg-ink-950/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
-      {[...items.filter((item) => item.label !== 'Ranking'), audio, ...items.filter((item) => item.label === 'Ranking')].map((item) => (
+      {[...items.filter((item) => item.label !== 'Ranking' && item.label !== 'Modos'), audio, ...items.filter((item) => item.label === 'Ranking')].map((item) => (
         <NavEntry key={item.label} item={item} iconSize={20}
           className="flex min-h-14 min-w-0 flex-1 cursor-pointer flex-col items-center justify-center gap-0.5 text-[11px] font-semibold text-ink-200 transition hover:text-amp-300" />
       ))}

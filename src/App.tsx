@@ -3,6 +3,7 @@ import React, { lazy, Suspense, useEffect, useEffectEvent, useMemo, useRef, useS
 import {
   Music,
   Play,
+  Search,
   Sliders,
   ArrowRight,
   AudioLines,
@@ -482,7 +483,8 @@ const AppContent: React.FC = () => {
   const navProps = {
     isAudioRunning,
     onExercises: () => handleOpenLibrary(),
-    onSearch: handleOpenRepertoire,
+    onRepertoire: handleOpenRepertoire,
+    onSearch: isAcervoEnabled() ? handleOpenSearch : null,
     onAudio: handleOpenAudio,
     onRanking: isRankingOn ? handleOpenRanking : null
   };
@@ -604,11 +606,11 @@ const AppContent: React.FC = () => {
                 {isRankingOn && (
                   <button type="button" onClick={openAccount} aria-label={hasAccount ? 'Minha conta do ranking' : 'Entrar no ranking'}
                     className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-lg px-2 text-sm font-semibold text-ink-200 transition hover:bg-ink-800 hover:text-amp-300">
-                    <UserRound size={18} className="shrink-0 text-amp-400" aria-hidden="true" /><span className="hidden xl:inline">{hasAccount ? 'Minha conta' : 'Entrar'}</span>
+                    <UserRound size={18} className="shrink-0 text-amp-400" aria-hidden="true" /><span className="hidden 2xl:inline">{hasAccount ? 'Minha conta' : 'Entrar'}</span>
                   </button>
                 )}
                 <a href={supportHref} target="_blank" rel="noopener noreferrer" title={supportLabel} className="flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg px-2 text-sm font-semibold text-ink-200 transition hover:bg-ink-800 hover:text-amp-300">
-                  <Heart size={18} className="shrink-0 text-amp-400" aria-hidden="true" /><span className="sr-only xl:not-sr-only">Apoiar</span>
+                  <Heart size={18} className="shrink-0 text-amp-400" aria-hidden="true" /><span className="sr-only 2xl:not-sr-only">Apoiar</span>
                 </a>
               </div>
             </div>
@@ -640,12 +642,16 @@ const AppContent: React.FC = () => {
                       <Play size={22} className="fill-current" aria-hidden="true" />
                       <span className="text-left"><span className="block text-base font-bold">Tocar agora</span><span className="mt-0.5 block text-xs font-medium">Exercício original · ~20 s</span></span>
                     </button>
-                    <button type="button" onClick={() => handleOpenLibrary()} className="flex min-h-16 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-600 bg-ink-900 px-6 py-3 text-sm font-semibold text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
-                      <Dumbbell size={18} aria-hidden="true" /> Exercícios
-                    </button>
-                    <button type="button" onClick={handleOpenRepertoire} className="flex min-h-16 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-600 bg-ink-900 px-6 py-3 text-sm font-semibold text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
-                      <Music size={18} aria-hidden="true" /> Repertório
-                    </button>
+                    {isAcervoEnabled() ? (
+                      <button type="button" onClick={handleOpenSearch} className="flex min-h-16 cursor-pointer items-center justify-center gap-3 rounded-xl border border-ink-600 bg-ink-900 px-6 py-3 text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
+                        <Search size={20} className="text-signal-300" aria-hidden="true" />
+                        <span className="text-left"><span className="block text-base font-bold">Buscar uma música</span><span className="mt-0.5 block text-xs font-medium text-ink-300">Pelo nome ou pelo artista</span></span>
+                      </button>
+                    ) : (
+                      <button type="button" onClick={handleOpenRepertoire} className="flex min-h-16 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-600 bg-ink-900 px-6 py-3 text-sm font-semibold text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
+                        <Music size={18} aria-hidden="true" /> Repertório
+                      </button>
+                    )}
                   </div>
                   {savedSong && (isAcervoEnabled() || savedSong.songId <= 0) && (
                     <button type="button" onClick={() => void handleContinue()} disabled={isRestoring}
@@ -661,9 +667,21 @@ const AppContent: React.FC = () => {
               </div>
             </section>
 
+            <section aria-labelledby="pick-title" className="mx-auto max-w-7xl px-5 pb-10 sm:px-8 lg:px-12 lg:pb-14">
+              <h2 id="pick-title" className="font-display text-2xl font-bold tracking-tight">O que você quer tocar?</h2>
+              <p className="mt-1 text-sm text-ink-300">Três caminhos, do mais guiado ao mais livre.</p>
+              <div className={`mt-4 grid gap-3 ${isAcervoEnabled() ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
+                <ActionRow icon={Dumbbell} tone={AMP_TONE} title="Exercícios" description="Escalas, acordes e técnicas, em qualquer tom. Funciona sem internet." onClick={() => handleOpenLibrary()} />
+                <ActionRow icon={Music} tone={SIGNAL_TONE} title="Repertório do PRGB" description="Peças de domínio público e originais, com ranking nas liberadas." onClick={handleOpenRepertoire} />
+                {isAcervoEnabled() && (
+                  <ActionRow icon={Search} tone={HIT_TONE} title="Buscar no acervo (experimental)" description="Tablaturas de outros artistas, de um provedor externo. Sem ranking." onClick={handleOpenSearch} />
+                )}
+              </div>
+            </section>
+
             <section aria-labelledby="exercises-title" className="mx-auto max-w-7xl px-5 pb-10 sm:px-8 lg:px-12 lg:pb-14">
               <div className="flex items-end justify-between gap-4">
-                <h2 id="exercises-title" className="font-display text-2xl font-bold tracking-tight">Exercícios</h2>
+                <h2 id="exercises-title" className="font-display text-2xl font-bold tracking-tight">Exercícios por categoria</h2>
                 <button type="button" onClick={() => handleOpenLibrary()} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg px-2 text-sm font-semibold text-amp-300 transition hover:text-amp-200">Ver todos <ArrowRight size={16} aria-hidden="true" /></button>
               </div>
               <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-9">
