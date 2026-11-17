@@ -110,6 +110,13 @@ describe('legal documents', () => {
     expect(CONSENT_COPY.localDataDescription).toContain('progresso');
   });
 
+  it('say the appearance preferences stay only in this browser and go with the local data export and erase', () => {
+    const local = sectionText(PRIVACY_POLICY, 'dados-no-navegador');
+    expect(local).toContain('preferências de aparência (tema, estilo das notas e efeitos)');
+    expect(local).toContain('entram na exportação');
+    expect(CONSENT_COPY.localDataDescription).toContain('aparência');
+  });
+
   it('never name the external provider', () => {
     // The name stays out of the UI: it is given only on request by e-mail.
     expect(sectionText(PRIVACY_POLICY, 'compartilhamento')).toContain('Você pode pedir o nome desse provedor');

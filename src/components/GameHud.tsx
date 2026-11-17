@@ -2,6 +2,8 @@ import React from 'react';
 import { accuracyPercent, comboMultiplier, type ScoreState } from '../services/scoring';
 import type { PlayerSlot } from '../services/audioEngine';
 import { useLatestPitch } from '../context/AudioSessionContext';
+import { useGameplayAppearance } from '../appearance/useAppearance';
+import { comboGlowStyle } from './hudGlow';
 
 const formatPoints = (value: number) => value.toLocaleString('pt-BR');
 
@@ -10,20 +12,23 @@ export interface SoloHudProps {
   goal?: number | null; // score of the accepted challenge
 }
 
-export const SoloHud: React.FC<SoloHudProps> = ({ score, goal }) => (
-  <div className="mt-3 grid grid-cols-4 gap-3 border-t border-ink-700 pt-3 font-mono [@media(max-height:500px)]:mt-1 [@media(max-height:500px)]:pt-1">
-    {[
-      { label: 'PONTUAÇÃO', value: formatPoints(score.score), color: 'text-amp-300' },
-      { label: 'COMBO', value: score.combo + ' ×' + comboMultiplier(score.combo), color: 'text-near' },
-      { label: 'PRECISÃO', value: accuracyPercent(score) + '%', color: 'text-hit' },
-      { label: 'MAX COMBO', value: score.maxCombo, color: 'text-signal-300' }
-    ].map(item => <div key={item.label}>
-      <p className="text-[9px] tracking-wider text-ink-300 sm:text-[10px]">{item.label}</p>
-      <p className={'mt-0.5 text-xl font-bold sm:text-2xl ' + item.color}>{item.value}</p>
-      {item.label === 'PONTUAÇÃO' && goal != null && <p className="truncate text-[10px] text-amp-200 sm:text-xs">Meta: {formatPoints(goal)}</p>}
-    </div>)}
-  </div>
-);
+export const SoloHud: React.FC<SoloHudProps> = ({ score, goal }) => {
+  const { effects } = useGameplayAppearance();
+  return (
+    <div className="mt-3 grid grid-cols-4 gap-3 border-t border-ink-700 pt-3 font-mono [@media(max-height:500px)]:mt-1 [@media(max-height:500px)]:pt-1">
+      {[
+        { label: 'PONTUAÇÃO', value: formatPoints(score.score), color: 'text-amp-300' },
+        { label: 'COMBO', value: score.combo + ' ×' + comboMultiplier(score.combo), color: 'text-near' },
+        { label: 'PRECISÃO', value: accuracyPercent(score) + '%', color: 'text-hit' },
+        { label: 'MAX COMBO', value: score.maxCombo, color: 'text-signal-300' }
+      ].map(item => <div key={item.label}>
+        <p className="text-[9px] tracking-wider text-ink-300 sm:text-[10px]">{item.label}</p>
+        <p className={'mt-0.5 text-xl font-bold sm:text-2xl ' + item.color} style={item.label === 'COMBO' ? comboGlowStyle(score.combo, effects) : undefined}>{item.value}</p>
+        {item.label === 'PONTUAÇÃO' && goal != null && <p className="truncate text-[10px] text-amp-200 sm:text-xs">Meta: {formatPoints(goal)}</p>}
+      </div>)}
+    </div>
+  );
+};
 
 const PLAYER_TEXT_COLORS: [string, string] = ['text-player-1', 'text-player-2'];
 

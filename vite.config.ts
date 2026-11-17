@@ -14,13 +14,19 @@ export default defineConfig({
       const publicFiles = [
         'favicon.svg', 'manifest.webmanifest', 'appearance-boot.js', 'icons/icon-192.png', 'icons/icon-512.png',
         'fonts/inter-latin-wght-normal.woff2', 'fonts/space-grotesk-latin-wght-normal.woff2',
-        'fonts/jetbrains-mono-latin-wght-normal.woff2'
+        'fonts/jetbrains-mono-latin-wght-normal.woff2',
+        // Typography "technical" (IBM Plex): a saved choice must still render offline
+        'fonts/ibm-plex-sans-latin-wght-normal.woff2', 'fonts/ibm-plex-mono-latin-400-normal.woff2',
+        'fonts/ibm-plex-mono-latin-600-normal.woff2', 'fonts/ibm-plex-mono-latin-700-normal.woff2'
       ]
       // Lazy chunks (the Supabase client) and the neural engine stay out of the precache: visitors who never
-      // open them shouldn't download them, and the game doesn't need them offline
+      // open them shouldn't download them, and the game doesn't need them offline. The exception is our own lazy
+      // content: the repertoire screen, its pieces (src/content/songs) and the appearance screen. They are
+      // recognised by source path, so a new piece or a renamed chunk is covered without touching this list.
+      const ownLazyContent = /[\\/]src[\\/](content[\\/]songs[\\/]|components[\\/](RepertoireLibrary|AppearanceScreen|appearance[\\/]))/
       const assets = Object.values(bundle).filter((file) => (
         file.fileName.startsWith('assets/') && !file.fileName.startsWith('assets/nam-')
-        && !(file.type === 'chunk' && file.isDynamicEntry)
+        && !(file.type === 'chunk' && file.isDynamicEntry && !(file.facadeModuleId && ownLazyContent.test(file.facadeModuleId)))
       ))
       const shellFiles = ['index.html', ...assets.map((file) => file.fileName), ...publicFiles]
       const template = readFileSync(new URL('./public/sw.js', import.meta.url), 'utf8')

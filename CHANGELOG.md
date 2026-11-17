@@ -2,6 +2,10 @@
 
 O histórico detalhado, com dono e status de cada item, fica em [AGENTS.md](AGENTS.md) › Problemas Conhecidos. Este arquivo resume cada rodada. As versões passam a ser marcadas com tags (`v0.N.0`, uma por rodada) a partir da rodada 13.
 
+## Rodada 14 — repertório próprio, progresso, acervo experimental e aparência
+- Repertório próprio de domínio público (offline), progresso local (estrelas, palhetas, ensaio da semana) e acervo externo como extra experimental, com chave para desligá-lo; o ranking só aceita conteúdo semeado no banco.
+- Aparência: seis temas, estilos de nota, cordas, efeitos opcionais, estilos de componentes, tipografias e fundos, salvos só no navegador. Entram na exportação e na exclusão dos dados locais e na Política (sem mudar `LEGAL_VERSION`). Brilho do COMBO no HUD. Repertório, fontes IBM Plex e tela de Aparência no cache offline.
+
 ## Rodada 13 — endurecimento (auditoria de um checklist de software)
 - Tela de recuperação em vez de página branca quando uma tela quebra; CI no GitHub (lint, build, testes e `npm audit`); Dependabot.
 - Documentação de operação: inventário, plano de incidente, backup e rotação de chaves (`docs/operacao.md`).
