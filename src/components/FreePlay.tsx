@@ -14,7 +14,8 @@ import {
   stringY,
   type LaneLayout,
 } from './practiceLanes';
-import { useGamePalette } from '../context/useTheme';
+import { useGameplayLook } from './useGameplayLook';
+import { paintNoteRect } from './noteStyles';
 import { useAudioSession, useLatestPitch } from '../context/AudioSessionContext';
 import { useModals } from '../context/ModalsContext';
 import { audioDeviceName } from '../services/audioDevices';
@@ -55,7 +56,8 @@ export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings,
   const { setFeedbackOpen } = useModals();
   const { audioEngine, isAudioRunning, startAudio, audioError, dismissAudioError, getLatestPitch, activeInput, outputName } = useAudioSession();
   const pitch = useLatestPitch();
-  const palette = useGamePalette();
+  const { look } = useGameplayLook();
+  const { palette, kit, strings } = look;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLElement>(null);
   const sceneRef = useRef<Scene | null>(null);
@@ -92,7 +94,7 @@ export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings,
       ctx.fillStyle = palette.background;
       ctx.fillRect(0, 0, width, height);
       const [layout] = layoutLanes(height, [6]);
-      drawLaneBackground(ctx, layout, width, palette, null, width - NOW_LINE_MARGIN);
+      drawLaneBackground(ctx, layout, width, palette, null, width - NOW_LINE_MARGIN, strings);
       sceneRef.current = { width, height, dpr, background, layout, noteHeight: noteHeightFor(layout) };
       // A resize wipes the canvas after this frame's drawing, so without this it would paint blank once
       canvas.getContext('2d')?.drawImage(background, 0, 0);
@@ -104,7 +106,7 @@ export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings,
       observer.disconnect();
       sceneRef.current = null;
     };
-  }, [palette]);
+  }, [palette, strings]);
 
   useEffect(() => {
     const drawNote = (ctx: CanvasRenderingContext2D, scene: Scene, note: PlayedNote, nowMs: number) => {
@@ -117,11 +119,7 @@ export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings,
       const y = stringY(layout, note.string);
       const scale = noteHeight / 46;
       const textX = x + noteHeight * 0.3;
-      ctx.fillStyle = palette.strings[note.string - 1];
-      ctx.beginPath();
-      ctx.roundRect(x, y - noteHeight / 2, noteWidth, noteHeight, noteHeight / 2);
-      ctx.fill();
-      ctx.fillStyle = palette.ink;
+      ctx.fillStyle = paintNoteRect(ctx, kit, note.string, x, y - noteHeight / 2, noteWidth, noteHeight);
       ctx.textBaseline = 'middle';
       ctx.textAlign = 'left';
       ctx.font = `900 ${Math.round(18 * scale)}px Inter, sans-serif`;
@@ -159,7 +157,7 @@ export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings,
     };
     frame = requestAnimationFrame(render);
     return () => cancelAnimationFrame(frame);
-  }, [getLatestPitch, palette]);
+  }, [getLatestPitch, kit]);
 
   const clear = () => {
     trailRef.current = [];

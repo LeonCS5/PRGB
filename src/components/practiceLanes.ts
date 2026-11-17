@@ -1,9 +1,13 @@
 // Canvas helpers of the practice game: lane geometry, the cached static layer, note pills and hit effects.
 // Solo has one lane filling the canvas; duo stacks two lanes (player 1 on top), each with its own strings.
 
+import type { NoteStyle, StringSettings } from '../appearance/types';
+import { DEFAULT_STRINGS } from '../appearance/defaults';
 import type { NoteEvent } from '../services/tabsApi';
 import type { Judgement } from '../services/scoring';
 import { SoundFX } from '../services/synthAudio';
+import { STRING_THICKNESS_PX } from './gameplayPalette';
+import { traceNote, traceNoteDetail } from './noteStyles';
 
 export const HIT_LINE_X = 140; // practice hit target X
 export const PIXELS_PER_MS = 0.45; // at 1×; scaled by the playback speed
@@ -64,18 +68,23 @@ export const noteHeightFor = (lane: LaneLayout): number =>
 export const stringY = (lane: LaneLayout, string: number): number =>
   lane.top + lane.topMargin + (string - 1) * lane.stringSpacing;
 
+export type Canvas2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+
 /**
  * Static part of a lane (rails, string labels, hit line), drawn once into the cached background.
  * `label` names the player in duo mode. Play Free moves the line to where the notes are born.
+ * `strings` only changes how the string lines look; the defaults draw exactly the original lane.
  */
 export const drawLaneBackground = (
-  ctx: OffscreenCanvasRenderingContext2D,
+  ctx: Canvas2D,
   lane: LaneLayout,
   width: number,
   palette: GamePalette,
   label: { text: string; color: string } | null,
-  hitLineX: number = HIT_LINE_X
+  hitLineX: number = HIT_LINE_X,
+  strings: StringSettings = DEFAULT_STRINGS
 ): void => {
+  const lineWidth = STRING_THICKNESS_PX[strings.thickness];
   const availableHeight = lane.height - lane.topMargin * 2;
 
   // 1. Draw horizontal string rails
@@ -87,17 +96,33 @@ export const drawLaneBackground = (
     ctx.beginPath();
     ctx.strokeStyle = palette.rail;
     ctx.lineWidth = 14;
+    if (strings.laneOpacity < 100) ctx.globalAlpha = strings.laneOpacity / 100;
     ctx.moveTo(0, y);
     ctx.lineTo(width, y);
     ctx.stroke();
+    if (strings.laneOpacity < 100) ctx.globalAlpha = 1;
+
+    // Halo of the string: a wider translucent stroke, drawn once into the cached layer
+    if (strings.glow > 0) {
+      ctx.beginPath();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = lineWidth + 6;
+      ctx.globalAlpha = 0.32 * strings.glow / 100;
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
 
     // Colored string center line
     ctx.beginPath();
     ctx.strokeStyle = color;
-    ctx.lineWidth = 2.5;
+    ctx.lineWidth = lineWidth;
+    if (strings.lineStyle === 'dashed') ctx.setLineDash([14, 6]);
     ctx.moveTo(0, y);
     ctx.lineTo(width, y);
     ctx.stroke();
+    if (strings.lineStyle === 'dashed') ctx.setLineDash([]);
 
     // String label on the left (e.g. 1 / E, 6 / E)
     ctx.font = 'bold 13px Inter, sans-serif';
@@ -147,11 +172,12 @@ export interface NoteGraphic {
   subtitleX: number;
   fretFont: string;
   subtitleFont: string;
+  detail: Path2D | null; // stroke-only marks inside the note (digital style)
 }
 
 // Pill shapes are shared between notes of the same size, so a song builds only a handful of Path2D
-export const buildNoteGraphics = (notes: NoteEvent[], speed: number, noteHeight: number): NoteGraphic[] => {
-  const paths = new Map<string, Path2D>();
+export const buildNoteGraphics = (notes: NoteEvent[], speed: number, noteHeight: number, style: NoteStyle = 'classic'): NoteGraphic[] => {
+  const paths = new Map<string, { path: Path2D; detail: Path2D | null }>();
   const scale = noteHeight / MAX_NOTE_HEIGHT;
   const fretFontSize = 23 * scale;
   const subtitleFontSize = 13 * scale;
@@ -165,15 +191,22 @@ export const buildNoteGraphics = (notes: NoteEvent[], speed: number, noteHeight:
     const labelWidth = 20 * scale + fretWidth + (subtitle ? 8 * scale + subtitle.length * subtitleFontSize * 0.65 : 0);
     const width = Math.max((technique ? 104 : 70) * scale, labelWidth, note.durationMs * PIXELS_PER_MS * speed * 0.7);
     const key = `${width}:${noteHeight}`;
-    let path = paths.get(key);
-    if (!path) {
-      path = new Path2D();
-      path.roundRect(left, -noteHeight / 2, width, noteHeight, noteHeight / 2);
-      paths.set(key, path);
+    let shape = paths.get(key);
+    if (!shape) {
+      const path = new Path2D();
+      traceNote(path, style, left, -noteHeight / 2, width, noteHeight);
+      let detail: Path2D | null = null;
+      if (style === 'digital') {
+        detail = new Path2D();
+        traceNoteDetail(detail, left, -noteHeight / 2, width, noteHeight);
+      }
+      shape = { path, detail };
+      paths.set(key, shape);
     }
     return {
       note,
-      path,
+      path: shape.path,
+      detail: shape.detail,
       fret,
       subtitle,
       fretX: 0,

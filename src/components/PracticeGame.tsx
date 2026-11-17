@@ -32,12 +32,14 @@ import {
   HIT_LINE_X,
   PIXELS_PER_MS,
   type HitEffects,
-  type LaneLayout
+  type LaneLayout,
+  type NoteGraphic
 } from './practiceLanes';
-import { useGamePalette } from '../context/useTheme';
+import { useGameplayLook } from './useGameplayLook';
+import { GameEffects, type EffectArea } from './gameEffects';
+import { drawNoteGraphic, trailFor, type NoteState } from './noteStyles';
 import { useModals } from '../context/ModalsContext';
 import type { NoteEvent } from '../services/tabsApi';
-import type { NoteGraphic } from './practiceLanes';
 import type { DetectedPitch, PlayerSlot } from '../services/audioEngine';
 import type { Challenge } from '../services/challenge';
 import { useAudioSession } from '../context/AudioSessionContext';
@@ -98,8 +100,6 @@ interface PracticeGameProps {
   online?: OnlineRun | null;
 }
 
-type NoteState = 'pending' | 'perfect' | 'good' | 'miss' | 'skipped';
-
 interface Lane {
   part: GamePart;
   player: PlayerSlot;
@@ -155,7 +155,15 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   const isOnline = online != null;
   const { audioEngine, getLatestPitch, isAudioRunning, startAudio, channelMode } = useAudioSession();
   const { isConfigured: isRankingOn, openAccount } = useRanking();
-  const palette = useGamePalette();
+  const { look, appearance } = useGameplayLook();
+  const { palette, kit, strings } = look;
+  // The canvas loop reads the settings from refs: changing them never restarts the loop or the audio
+  const effectSettingsRef = useRef(appearance.effects);
+  useEffect(() => {
+    effectSettingsRef.current = appearance.effects;
+  });
+  const gameEffects = useMemo(() => new GameEffects(), []);
+  const effectAreaRef = useRef<EffectArea>({ hitLineX: HIT_LINE_X, width: 0, height: 0, top: 0, bottom: 0 });
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasContainerRef = useRef<HTMLElement | null>(null);
 
@@ -278,7 +286,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
             color: palette.players[index]
           }
           : null;
-        drawLaneBackground(ctx, layout, width, palette, label);
+        drawLaneBackground(ctx, layout, width, palette, label, HIT_LINE_X, strings);
       });
       if (isDuo) {
         ctx.fillStyle = palette.divider;
@@ -306,7 +314,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
       syncCanvasSizeRef.current = null;
       sceneRef.current = null;
     };
-  }, [lanes, names, isDuo, palette]);
+  }, [lanes, names, isDuo, palette, strings]);
 
   const particlePath = useMemo(() => {
     const path = new Path2D();
@@ -315,8 +323,8 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   }, []);
 
   const laneGraphics = useMemo(
-    () => lanes.map((lane, index) => buildNoteGraphics(lane.part.tab.notes, speed, noteHeights[index])),
-    [lanes, speed, noteHeights]
+    () => lanes.map((lane, index) => buildNoteGraphics(lane.part.tab.notes, speed, noteHeights[index], look.noteStyle)),
+    [lanes, speed, noteHeights, look.noteStyle]
   );
 
   // Every judgement of a pending note goes through here, with the full pitch of the note's player
@@ -334,6 +342,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     playersRef.current = players;
     setScores(players.map((run) => run.score));
     playHitFeedback(outcome, note, y, palette, effectsRef.current);
+    gameEffects.onJudgement(outcome, HIT_LINE_X, y, performance.now(), effectSettingsRef.current, palette.hit, palette.near);
     return outcome;
   };
 
@@ -492,12 +501,22 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   }, [isPlaying, synthAudioEnabled, currentTimeMs, lanes]);
 
   // Render Canvas Scene
-  const drawGame = useEffectEvent((ctx: CanvasRenderingContext2D) => {
+  const drawGame = useEffectEvent((ctx: CanvasRenderingContext2D, now: number) => {
     const scene = sceneRef.current;
     if (!scene) return;
     const { width, dpr, background, layouts } = scene;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.drawImage(background, 0, 0, background.width / dpr, background.height / dpr);
+    const effectSettings = effectSettingsRef.current;
+    const area = effectAreaRef.current;
+    area.width = width;
+    area.height = scene.height;
+    area.top = layouts[0].top + layouts[0].topMargin - 20;
+    area.bottom = layouts[layouts.length - 1].top + layouts[layouts.length - 1].height - layouts[layouts.length - 1].topMargin + 20;
+    let combo = 0;
+    for (const run of playersRef.current) combo = Math.max(combo, run.score.combo);
+    gameEffects.drawUnder(ctx, now, effectSettings, area, combo, getLatestPitch(0)?.volume ?? 0, palette.signal);
+    const trail = effectSettings.noteTrail ? trailFor(effectSettings.intensity) : null;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.font = 'bold 13px Inter, sans-serif';
@@ -515,8 +534,8 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
       const latestPitch = getLatestPitch(player);
 
       // Draws one note pill, culled off screen
-      const drawNote = ({ note, path, fret, subtitle, fretX, subtitleX, fretFont, subtitleFont }: NoteGraphic, noteX: number, noteY: number, state: NoteState) => {
-        const stringColor = palette.strings[(note.string) - 1] || palette.muted;
+      const drawNote = (graphic: NoteGraphic, noteX: number, noteY: number, state: NoteState) => {
+        const { note } = graphic;
         if (noteX < -100 || noteX > width + 100 || !noteHeight) return;
         if (note.chord) {
           ctx.font = 'bold 15px Inter, sans-serif';
@@ -525,54 +544,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
           ctx.fillStyle = palette.signal;
           ctx.fillText(note.chord.label, noteX, layout.top + Math.max(11, layout.topMargin * 0.3));
         }
-        ctx.save();
-        ctx.translate(noteX, noteY);
-        if (note.grace) ctx.scale(0.75, 0.75);
-
-        // Shadow / Glow
-        if (state === 'perfect') {
-          ctx.shadowColor = palette.hit;
-          ctx.shadowBlur = 18;
-        } else if (state === 'good') {
-          ctx.shadowColor = palette.near;
-          ctx.shadowBlur = 12;
-        } else if (state === 'miss') {
-          ctx.globalAlpha = 0.35;
-        } else if (state === 'skipped' || note.ghost) {
-          ctx.globalAlpha = 0.55;
-        }
-
-        // Note background fill
-        if (state === 'perfect') {
-          ctx.fillStyle = palette.hit;
-        } else if (state === 'good') {
-          ctx.fillStyle = palette.near;
-        } else if (state === 'miss') {
-          ctx.fillStyle = palette.muted;
-        } else {
-          ctx.fillStyle = stringColor;
-        }
-        ctx.fill(path);
-
-        // Note border
-        ctx.lineWidth = 2.5 * noteHeight / 46;
-        ctx.strokeStyle = state === 'perfect' ? palette.hit : palette.ink;
-        ctx.stroke(path);
-
-        // Draw Fret Number inside the note block
-        ctx.fillStyle = palette.ink;
-        ctx.font = fretFont;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(fret, fretX, 0);
-
-        // Note name subtitle (e.g. A2, D3)
-        ctx.fillStyle = palette.ink;
-        ctx.font = subtitleFont;
-        ctx.textAlign = 'left';
-        ctx.fillText(subtitle, subtitleX, 0);
-
-        ctx.restore();
+        drawNoteGraphic(ctx, graphic, kit, noteX, noteY, state, noteHeight, trail);
       };
 
       for (const graphic of laneGraphics[laneIndex]) {
@@ -653,6 +625,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
       ctx.fillText(ft.text, ft.x, ft.y);
       ctx.restore();
     }
+    gameEffects.drawOver(ctx, now, effectSettings);
   });
 
   const renderFrame = useEffectEvent((now: number) => {
@@ -701,7 +674,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
       syncCanvasSizeRef.current?.();
     }
     const ctx = canvasRef.current?.getContext('2d');
-    if (ctx) drawGame(ctx);
+    if (ctx) drawGame(ctx, now);
   });
 
   // A hidden tab gets few or no frames: pause instead of letting the song run on unseen
