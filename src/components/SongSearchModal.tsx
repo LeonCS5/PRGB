@@ -163,7 +163,7 @@ export const SongSearchModal: React.FC<SongSearchModalProps> = ({
             <Music className="text-ink-100" size={24} />
           </div>
           <div>
-            <h2 id="SongSearchModal-title" className="font-display text-xl font-bold">Acervo de Músicas</h2>
+            <h2 id="SongSearchModal-title" className="font-display text-xl font-bold">Acervo externo (experimental)</h2>
             <p className="text-xs text-ink-300">
               Busque uma música e escolha a faixa para tocar
             </p>

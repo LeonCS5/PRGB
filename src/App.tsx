@@ -1,5 +1,5 @@
 import { isAcervoEnabled } from './services/acervoFlag';
-import React, { useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import React, { lazy, Suspense, useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   Music,
   Play,
@@ -65,6 +65,8 @@ import { RankingProvider } from './context/RankingProvider';
 import { RoomProvider } from './context/RoomProvider';
 import { useRanking } from './context/ranking';
 import { useRoom } from './context/useRoom';
+
+const RepertoireLibrary = lazy(() => import('./components/RepertoireLibrary').then((module) => ({ default: module.RepertoireLibrary })));
 
 const supportUrl = import.meta.env.VITE_SUPPORT_URL?.trim();
 const supportHref = supportUrl || 'https://github.com/LeonCS5/PRGB';
@@ -217,6 +219,7 @@ const AppContent: React.FC = () => {
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [isFreePlayOpen, setIsFreePlayOpen] = useState(false);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+  const [isRepertoireOpen, setIsRepertoireOpen] = useState(false);
   const [libraryView, setLibraryView] = useState<LibraryView>({ categoryId: EXERCISE_CATEGORIES[0].id, key: 9, patterns: {} });
   const [onlineSession, setOnlineSession] = useState<{ part: GamePart; partnerName: string; startAtMs: number; sessionKey: number } | null>(null);
 
@@ -248,8 +251,8 @@ const AppContent: React.FC = () => {
 
   const screen = onlineSession ? 'sala' : isFreePlayOpen ? 'play_free' : session ? 'jogo' : 'inicio';
   const isPlayScreen = screen !== 'inicio';
-  const isOnScreen = isPlayScreen || isLibraryOpen;
-  const isOverLibrary = isPlayScreen && isLibraryOpen;
+  const isOnScreen = isPlayScreen || isLibraryOpen || isRepertoireOpen;
+  const isOverLibrary = isPlayScreen && (isLibraryOpen || isRepertoireOpen);
 
   // Duo is a session mode: leaving it restores the input channel saved in the preferences
   const soloChannelMode = () => channelMode === 'duo' ? readPreferences().channelMode : channelMode;
@@ -294,7 +297,8 @@ const AppContent: React.FC = () => {
 
   // Each layer closes only its own screen: a jump back in the browser's list can close both in one go
   const closeBottomScreen = useEffectEvent(() => {
-    if (isLibraryOpen) setIsLibraryOpen(false);
+    if (isRepertoireOpen) setIsRepertoireOpen(false);
+    else if (isLibraryOpen) setIsLibraryOpen(false);
     else closePlayScreen();
   });
 
@@ -329,6 +333,20 @@ const AppContent: React.FC = () => {
     setIsLibraryOpen(true);
   };
 
+  const handleOpenRepertoire = () => {
+    songSelectionVersion.current += 1;
+    setRestoreError(null);
+    setIsRepertoireOpen(true);
+  };
+
+  const handlePlayRepertoire = (part: GamePart) => {
+    songSelectionVersion.current += 1;
+    setRestoreError(null);
+    ensureSoloAudio();
+    rememberSong({ songId: part.tab.songId, partId: part.partId, title: part.tab.title });
+    setSession(soloSession(part));
+  };
+
   const handlePlayExercise = (exercise: Exercise, key: number, pattern?: ExercisePattern) => {
     songSelectionVersion.current += 1;
     setRestoreError(null);
@@ -358,6 +376,12 @@ const AppContent: React.FC = () => {
       const local = savedSong.songId === DEMO_SONG_ID ? demoPart() : findExercisePart(savedSong.songId, savedSong.partId);
       if (local) {
         if (version === songSelectionVersion.current) setSession(soloSession(local));
+        return;
+      }
+      if (isRepertoireSongId(savedSong.songId)) {
+        const part = await findSongPart(savedSong.songId, savedSong.partId);
+        if (!part) throw new Error('A peça não está disponível. Tente novamente pelo repertório.');
+        if (version === songSelectionVersion.current) setSession(soloSession(part));
         return;
       }
       const meta = await getSongMetadata(savedSong.songId);
@@ -448,13 +472,13 @@ const AppContent: React.FC = () => {
   const navProps = {
     isAudioRunning,
     onExercises: () => handleOpenLibrary(),
-    onSearch: handleOpenSearch,
+    onSearch: handleOpenRepertoire,
     onAudio: handleOpenAudio,
     onRanking: isRankingOn ? handleOpenRanking : null
   };
 
   const latencyAdjustMs = Math.round(((audioOptions.inputLatencySamples + audioOptions.outputLatencySamples) / (audioEngine.getEngineInfo()?.sampleRate ?? 48000)) * 1000);
-  const pageName = onlineSession ? 'Dupla online' : isFreePlayOpen ? 'Play Free' : session ? sessionParts[0].tab.title : isLibraryOpen ? 'Exercícios' : legalRoute?.document.title;
+  const pageName = onlineSession ? 'Dupla online' : isFreePlayOpen ? 'Play Free' : session ? sessionParts[0].tab.title : isRepertoireOpen ? 'Repertório do PRGB' : isLibraryOpen ? 'Exercícios' : legalRoute?.document.title;
 
   return (
     <div className="h-dvh w-full overflow-hidden bg-ink-950 font-sans text-ink-100">
@@ -517,6 +541,11 @@ const AppContent: React.FC = () => {
             devPreset={import.meta.env.DEV && devScene && session.key === devSessionKey ? gameDevPreset(devScene, Math.max(...sessionParts.map((part) => part.tab.totalDurationMs))) : null}
             onExit={leaveGame}
             onOpenSearch={() => {
+              if (isRepertoireSongId(sessionParts[0].tab.songId)) {
+                handleOpenRepertoire();
+                leaveGame();
+                return;
+              }
               if (!isAcervoEnabled() || isExerciseSongId(sessionParts[0].tab.songId)) {
                 setIsLibraryOpen(true);
                 leaveGame();
@@ -532,6 +561,10 @@ const AppContent: React.FC = () => {
             onRankedTabOutdated={session.mode === 'solo' ? () => reloadOutdatedPart(session) : undefined}
           />
         </>
+      ) : isRepertoireOpen ? (
+        <Suspense fallback={<p role="status" className="p-5">Carregando repertório…</p>}>
+          <RepertoireLibrary onPlay={handlePlayRepertoire} onSearch={handleOpenSearch} onExit={() => setIsRepertoireOpen(false)} />
+        </Suspense>
       ) : isLibraryOpen ? (
         <ExerciseLibrary view={libraryView} onViewChange={setLibraryView} onPlay={handlePlayExercise} onExit={() => setIsLibraryOpen(false)} />
       ) : legalRoute ? (
@@ -590,9 +623,9 @@ const AppContent: React.FC = () => {
                     <button type="button" onClick={() => handleOpenLibrary()} className="flex min-h-16 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-600 bg-ink-900 px-6 py-3 text-sm font-semibold text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
                       <Dumbbell size={18} aria-hidden="true" /> Exercícios
                     </button>
-                    {isAcervoEnabled() && <button type="button" onClick={handleOpenSearch} className="flex min-h-16 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-600 bg-ink-900 px-6 py-3 text-sm font-semibold text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
-                      <Music size={18} aria-hidden="true" /> Buscar música
-                    </button>}
+                    <button type="button" onClick={handleOpenRepertoire} className="flex min-h-16 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-600 bg-ink-900 px-6 py-3 text-sm font-semibold text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
+                      <Music size={18} aria-hidden="true" /> Repertório do PRGB
+                    </button>
                   </div>
                   {savedSong && (isAcervoEnabled() || savedSong.songId <= 0) && (
                     <button type="button" onClick={() => void handleContinue()} disabled={isRestoring}
@@ -683,7 +716,7 @@ const AppContent: React.FC = () => {
               <ol className="mt-7 grid gap-6 md:grid-cols-3 md:gap-10">
                 {[
                   { icon: PlugZap, title: 'Plugue a interface', description: 'Conecte a guitarra à sua interface USB e permita o acesso ao áudio no navegador.' },
-                  { icon: Music, title: 'Escolha a música', description: isAcervoEnabled() ? 'Comece pelo exercício do PRGB ou busque sua próxima música no acervo.' : 'Escolha um dos exercícios do PRGB para praticar.' },
+                  { icon: Music, title: 'Escolha a música', description: 'Escolha uma peça do repertório do PRGB ou um exercício para praticar.' },
                   { icon: Headphones, title: 'Dê o play. Toque.', description: 'Coloque os fones, ajuste seu timbre e siga as notas. Repita aquele trecho até sair.' }
                 ].map(({ icon: Icon, title, description }, index) => (
                   <li key={title} className="relative border-t border-ink-600 pt-4">

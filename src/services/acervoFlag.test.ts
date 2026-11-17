@@ -29,13 +29,13 @@ import { RoomModal } from '../components/RoomModal';
 const noop = () => undefined;
 
 describe('acervo entry points', () => {
-  it.each([HeaderNav, TabBar])('hides music navigation but keeps exercises and audio order', (component) => {
+  it.each([HeaderNav, TabBar])('keeps music navigation (the PRGB repertoire) with the catalog off, with exercises and audio order', (component) => {
     const props = { isAudioRunning: false, onExercises: noop, onSearch: noop, onAudio: noop, onRanking: noop };
     vi.stubEnv('VITE_ACERVO_ENABLED', 'true');
     expect(renderToStaticMarkup(createElement(component, props))).toContain('Músicas');
     vi.stubEnv('VITE_ACERVO_ENABLED', 'false');
     const html = renderToStaticMarkup(createElement(component, props));
-    expect(html).not.toContain('Músicas');
+    expect(html).toContain('Músicas');
     expect(html).toContain('Exercícios');
     expect(html).toContain('Ranking');
     if (component === TabBar) expect(html.indexOf('Conectar')).toBeLessThan(html.indexOf('Ranking'));

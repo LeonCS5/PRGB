@@ -1,4 +1,3 @@
-import { isAcervoEnabled } from '../services/acervoFlag';
 import React from 'react';
 import { Dumbbell, LayoutGrid, Music, PlugZap, Sliders, Trophy, type LucideIcon } from 'lucide-react';
 
@@ -19,7 +18,7 @@ interface NavItem {
 
 const navItems = ({ onExercises, onSearch, onRanking }: SiteNavProps): NavItem[] => [
   { label: 'Exercícios', icon: Dumbbell, onSelect: onExercises },
-  ...(isAcervoEnabled() ? [{ label: 'Músicas', icon: Music, onSelect: onSearch }] : []),
+  { label: 'Músicas', icon: Music, onSelect: onSearch },
   { label: 'Modos', icon: LayoutGrid },
   ...(onRanking ? [{ label: 'Ranking', icon: Trophy, onSelect: onRanking }] : [])
 ];
