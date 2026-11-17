@@ -9,6 +9,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "test": "vitest run",
+    "check:bundle": "node scripts/check-bundle-size.mjs",
     "gen:appearance-boot": "node scripts/gen-appearance-boot.mjs",
     "preview": "vite preview"
   },
