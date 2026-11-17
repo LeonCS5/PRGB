@@ -55,7 +55,7 @@ import { ModalsProvider, useModals } from './context/ModalsContext';
 import { FeedbackModal } from './components/FeedbackModal';
 import { StorageNotice } from './components/StorageNotice';
 import { LEGAL_CONTACT } from './content/legal';
-import { AudioChip, HeaderNav, TabBar } from './components/SiteNav';
+import { AppearanceButton, AudioChip, HeaderNav, TabBar } from './components/SiteNav';
 import { CategoryIcon, ExerciseLibrary, type LibraryView } from './components/ExerciseLibrary';
 import { EXERCISE_CATEGORIES, exercisePart, findExercisePart, type Exercise, type ExerciseCategoryId, type ExercisePattern } from './services/exercises';
 import { isExerciseSongId } from './services/exerciseIds';
@@ -66,6 +66,7 @@ import { RoomProvider } from './context/RoomProvider';
 import { useRanking } from './context/ranking';
 import { useRoom } from './context/useRoom';
 
+const AppearanceScreen = lazy(() => import('./components/AppearanceScreen').then((module) => ({ default: module.AppearanceScreen })));
 const RepertoireLibrary = lazy(() => import('./components/RepertoireLibrary').then((module) => ({ default: module.RepertoireLibrary })));
 
 const supportUrl = import.meta.env.VITE_SUPPORT_URL?.trim();
@@ -220,6 +221,7 @@ const AppContent: React.FC = () => {
   const [isFreePlayOpen, setIsFreePlayOpen] = useState(false);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   const [isRepertoireOpen, setIsRepertoireOpen] = useState(false);
+  const [isAppearanceOpen, setIsAppearanceOpen] = useState(false);
   const [libraryView, setLibraryView] = useState<LibraryView>({ categoryId: EXERCISE_CATEGORIES[0].id, key: 9, patterns: {} });
   const [onlineSession, setOnlineSession] = useState<{ part: GamePart; partnerName: string; startAtMs: number; sessionKey: number } | null>(null);
 
@@ -251,7 +253,7 @@ const AppContent: React.FC = () => {
 
   const screen = onlineSession ? 'sala' : isFreePlayOpen ? 'play_free' : session ? 'jogo' : 'inicio';
   const isPlayScreen = screen !== 'inicio';
-  const isOnScreen = isPlayScreen || isLibraryOpen || isRepertoireOpen;
+  const isOnScreen = isPlayScreen || isLibraryOpen || isRepertoireOpen || isAppearanceOpen;
   const isOverLibrary = isPlayScreen && (isLibraryOpen || isRepertoireOpen);
 
   // Duo is a session mode: leaving it restores the input channel saved in the preferences
@@ -297,7 +299,8 @@ const AppContent: React.FC = () => {
 
   // Each layer closes only its own screen: a jump back in the browser's list can close both in one go
   const closeBottomScreen = useEffectEvent(() => {
-    if (isRepertoireOpen) setIsRepertoireOpen(false);
+    if (isAppearanceOpen) setIsAppearanceOpen(false);
+    else if (isRepertoireOpen) setIsRepertoireOpen(false);
     else if (isLibraryOpen) setIsLibraryOpen(false);
     else closePlayScreen();
   });
@@ -332,6 +335,8 @@ const AppContent: React.FC = () => {
     if (categoryId) setLibraryView((view) => ({ ...view, categoryId }));
     setIsLibraryOpen(true);
   };
+
+  const handleOpenAppearance = () => setIsAppearanceOpen(true);
 
   const handleOpenRepertoire = () => {
     songSelectionVersion.current += 1;
@@ -478,7 +483,7 @@ const AppContent: React.FC = () => {
   };
 
   const latencyAdjustMs = Math.round(((audioOptions.inputLatencySamples + audioOptions.outputLatencySamples) / (audioEngine.getEngineInfo()?.sampleRate ?? 48000)) * 1000);
-  const pageName = onlineSession ? 'Dupla online' : isFreePlayOpen ? 'Play Free' : session ? sessionParts[0].tab.title : isRepertoireOpen ? 'Repertório do PRGB' : isLibraryOpen ? 'Exercícios' : legalRoute?.document.title;
+  const pageName = onlineSession ? 'Dupla online' : isFreePlayOpen ? 'Play Free' : session ? sessionParts[0].tab.title : isAppearanceOpen ? 'Aparência' : isRepertoireOpen ? 'Repertório do PRGB' : isLibraryOpen ? 'Exercícios' : legalRoute?.document.title;
 
   return (
     <div className="h-dvh w-full overflow-hidden bg-ink-950 font-sans text-ink-100">
@@ -561,6 +566,10 @@ const AppContent: React.FC = () => {
             onRankedTabOutdated={session.mode === 'solo' ? () => reloadOutdatedPart(session) : undefined}
           />
         </>
+      ) : isAppearanceOpen ? (
+        <Suspense fallback={<p role="status" className="p-5">Carregando aparência…</p>}>
+          <AppearanceScreen onExit={() => setIsAppearanceOpen(false)} />
+        </Suspense>
       ) : isRepertoireOpen ? (
         <Suspense fallback={<p role="status" className="p-5">Carregando repertório…</p>}>
           <RepertoireLibrary onPlay={handlePlayRepertoire} onSearch={handleOpenSearch} onExit={() => setIsRepertoireOpen(false)} />
@@ -581,6 +590,7 @@ const AppContent: React.FC = () => {
               <div className="flex items-center gap-1 lg:gap-2">
                 <span role="status" className="sr-only">Áudio {isAudioRunning ? 'conectado' : 'desconectado'}</span>
                 <AudioChip isAudioRunning={isAudioRunning} onAudio={handleOpenAudio} />
+                <AppearanceButton onOpen={handleOpenAppearance} />
                 {isRankingOn && (
                   <button type="button" onClick={openAccount} aria-label={hasAccount ? 'Minha conta do ranking' : 'Entrar no ranking'}
                     className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-lg px-2 text-sm font-semibold text-ink-200 transition hover:bg-ink-800 hover:text-amp-300">
