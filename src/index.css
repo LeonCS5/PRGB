@@ -95,8 +95,42 @@
   --color-note-violet: #c49bff;
   --color-miss: #ff4d6d;
 
-  --shadow-glow-amp: 0 0 0 1px rgb(255 122 26 / 0.35), 0 10px 40px -10px rgb(255 122 26 / 0.55);
-  --shadow-glow-signal: 0 0 0 1px rgb(52 227 255 / 0.3), 0 10px 40px -12px rgb(52 227 255 / 0.45);
+  /*
+   * Gameplay colors: no theme overrides these, so the six strings, the players and the hit line read the same
+   * in every identity. Values are the original ones (they used to be the signal/amp/hit tokens above).
+   */
+  --color-string-1: #c49bff;
+  --color-string-2: #8cf1ff;
+  --color-string-3: #0a9cbb;
+  --color-string-4: #3ee08f;
+  --color-string-5: #ffc94d;
+  --color-string-6: #ff9a4d;
+  --color-player-1: #8cf1ff;
+  --color-player-2: #c49bff;
+  --color-play-signal: #34e3ff;
+
+  /* Logo gradient stops: follow the primary color of the active theme */
+  --color-logo-1: #ffb066;
+  --color-logo-2: #ff7a1a;
+  --color-logo-3: #d94f00;
+
+  /* Semantic names over the scales above; a theme only has to redefine the scales (and --color-success) */
+  --color-success: #3ee08f;
+  --color-warning: var(--color-near);
+  --color-error: var(--color-miss);
+  --color-background: var(--color-ink-950);
+  --color-surface: var(--color-ink-900);
+  --color-surface-elevated: var(--color-ink-800);
+  --color-border: var(--color-ink-700);
+  --color-text: var(--color-ink-100);
+  --color-text-muted: var(--color-ink-400);
+  --color-primary: var(--color-amp-400);
+  --color-primary-hover: var(--color-amp-300);
+  --color-primary-muted: var(--color-amp-700);
+  --color-secondary: var(--color-signal-400);
+
+  --shadow-glow-amp: 0 0 0 1px color-mix(in srgb, var(--color-amp-500) 35%, transparent), 0 10px 40px -10px color-mix(in srgb, var(--color-amp-500) 55%, transparent);
+  --shadow-glow-signal: 0 0 0 1px color-mix(in srgb, var(--color-signal-400) 30%, transparent), 0 10px 40px -12px color-mix(in srgb, var(--color-signal-400) 45%, transparent);
   --shadow-panel: 0 1px 0 0 rgb(255 255 255 / 0.04) inset, 0 24px 60px -24px rgb(0 0 0 / 0.8);
 }
 
@@ -114,7 +148,7 @@ html, body, #root {
 }
 
 ::selection {
-  background: rgb(255 122 26 / 0.35);
+  background: color-mix(in srgb, var(--color-amp-500) 35%, transparent);
   color: #fff;
 }
 

@@ -197,7 +197,7 @@ const SoloResult: React.FC<ResultPanelProps> = ({ titleId, summary, parts, chall
   );
 };
 
-const PLAYER_COLORS: [string, string] = ['text-signal-300', 'text-note-violet'];
+const PLAYER_COLORS: [string, string] = ['text-player-1', 'text-player-2'];
 
 const DuoResult: React.FC<ResultPanelProps & { names: [string, string] }> = ({ titleId, summary, parts, names, onPlayAgain, onChooseSong }) => {
   const [first, second] = summary.scores;
