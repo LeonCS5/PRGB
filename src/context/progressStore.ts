@@ -1,6 +1,6 @@
 // Thin layer between the game and the pure progress logic (services/progress.ts): load, apply, save.
 // Everything stays in this browser. Only a solo run counts; the caller names the mode so the rule lives here.
-import { loadProgress, recordEvent, recordRun, saveProgress, type FinishedRun, type RunReport } from '../services/progress';
+import { loadProgress, recordEvent, recordRun, saveProgress, setWeeklyGoal, type FinishedRun, type Progress, type RunReport, type WeeklyGoal } from '../services/progress';
 
 export type ProgressMode = 'solo' | 'duo' | 'online' | 'preview';
 
@@ -36,3 +36,10 @@ export const formatCountedTime = (ms: number): string => {
   if (minutes >= 60) return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')} min`;
   return rest === 0 ? `${minutes} min` : `${minutes} min ${rest} s`;
 };
+
+// The weekly goal chosen on the progress screen: saved on its own, so a run finishing later reads it back
+export function saveWeeklyGoal(goal: WeeklyGoal | null, storage?: Storage): Progress {
+  const next = setWeeklyGoal(loadProgress(storage), goal);
+  saveProgress(next, storage);
+  return next;
+}

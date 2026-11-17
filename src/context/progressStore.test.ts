@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { exerciseSongId } from '../services/exerciseIds';
 import { loadProgress, PROGRESS_STORAGE_KEY, type FinishedRun } from '../services/progress';
 import type { ScoreState } from '../services/scoring';
-import { recordLatencyTestSaved, recordRunProgress } from './progressStore';
+import { recordLatencyTestSaved, recordRunProgress, saveWeeklyGoal } from './progressStore';
 
 const memoryStorage = (): Storage => {
   const items = new Map<string, string>();
@@ -78,5 +78,36 @@ describe('recordLatencyTestSaved', () => {
     expect(recordLatencyTestSaved(NOW, storage)).toEqual(['mao-no-tempo']);
     expect(Object.keys(loadProgress(storage).achievements)).toEqual(['mao-no-tempo']);
     expect(recordLatencyTestSaved(NOW + 1000, storage)).toEqual([]);
+  });
+});
+
+describe('saveWeeklyGoal', () => {
+  it('saves the goal and keeps the rest of the progress', () => {
+    const storage = memoryStorage();
+    recordRunProgress('solo', run(), NOW, storage);
+    expect(saveWeeklyGoal(5, storage).prefs.weeklyGoal).toBe(5);
+    const saved = loadProgress(storage);
+    expect(saved.prefs.weeklyGoal).toBe(5);
+    expect(saved.totals.runs).toBe(1);
+  });
+
+  it('is read back by the next run, whose summary shows the goal', () => {
+    const storage = memoryStorage();
+    saveWeeklyGoal(3, storage);
+    expect(recordRunProgress('solo', run(), NOW, storage)?.report.weekly.goal).toBe(3);
+  });
+
+  it('clears the goal with null and rejects a value outside 3, 5, 7', () => {
+    const storage = memoryStorage();
+    saveWeeklyGoal(7, storage);
+    // @ts-expect-error 4 is not a WeeklyGoal: the pure setter must ignore it
+    expect(saveWeeklyGoal(4, storage).prefs.weeklyGoal).toBe(7);
+    expect(saveWeeklyGoal(null, storage).prefs.weeklyGoal).toBeNull();
+    expect(loadProgress(storage).prefs.weeklyGoal).toBeNull();
+  });
+
+  it('does not throw when storage is blocked', () => {
+    const blocked = { ...memoryStorage(), setItem: () => { throw new Error('full'); } } as Storage;
+    expect(saveWeeklyGoal(5, blocked).prefs.weeklyGoal).toBe(5);
   });
 });
