@@ -3,6 +3,9 @@
 O histórico detalhado, com dono e status de cada item, fica em [AGENTS.md](AGENTS.md) › Problemas Conhecidos. Este arquivo resume cada rodada. As versões passam a ser marcadas com tags (`v0.N.0`, uma por rodada) a partir da rodada 13.
 
 ## Rodada 14 — repertório próprio, progresso, acervo experimental e aparência
+
+- Peças novas no repertório (Greensleeves, Minueto em Sol, Brilha brilha estrelinha e seis originais), marcadas "Em revisão" até alguém tocar.
+- Tela Meu progresso, orçamento de bundle no CI e `register-part` somente leitura (a função publicada precisa ser atualizada pelo painel do Supabase).
 - Repertório próprio de domínio público (offline), progresso local (estrelas, palhetas, ensaio da semana) e acervo externo como extra experimental, com chave para desligá-lo; o ranking só aceita conteúdo semeado no banco.
 - Aparência: seis temas, estilos de nota, cordas, efeitos opcionais, estilos de componentes, tipografias e fundos, salvos só no navegador. Entram na exportação e na exclusão dos dados locais e na Política (sem mudar `LEGAL_VERSION`). Brilho do COMBO no HUD. Repertório, fontes IBM Plex e tela de Aparência no cache offline.
 
