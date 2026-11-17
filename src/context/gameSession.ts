@@ -3,6 +3,7 @@ import type { Challenge } from '../services/challenge';
 import type { RunResult } from '../services/records';
 import type { ScoreState } from '../services/scoring';
 import type { NormalizedSongTab } from '../services/tabsApi';
+import type { RunProgress } from './progressStore';
 
 // A loaded part of a song. The tab doesn't carry its source partId, which records and challenges need,
 // nor the revision the ranking checks it against (null: the offline demo, which has none).
@@ -47,6 +48,7 @@ export interface RunSummary {
   // Laps of an exercise looped in training mode: more than one counts for no record and no challenge
   laps: number;
   personalBest: PersonalBestOutcome | null; // solo only
+  progress?: RunProgress; // solo only: stars, picks, level and the week, kept in this browser
 }
 
 // What happened to a ranked run at the end of the song. 'skipped': it was not sent, see the reason.

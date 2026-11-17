@@ -112,6 +112,7 @@ export const PRIVACY_POLICY: LegalDocument = {
       items: [
         'preferências: a entrada e a saída de áudio escolhidas (por identificadores criados pelo próprio navegador), o canal de entrada, as opções de áudio, os ajustes do amplificador e a última música aberta;',
         'seus recordes pessoais e o histórico das suas últimas partidas;',
+        'seu progresso nos exercícios (estrelas, palhetas e dias de ensaio da semana), que também só existe neste navegador, entra na exportação dos dados locais e é apagado junto com eles;',
         'o apelido local, se você escolher um;',
         'a marca de que você já viu o aviso da primeira visita;',
         'se você entrar no ranking, a chave de sessão que mantém sua conta conectada neste navegador.'
@@ -532,6 +533,6 @@ export const CONSENT_COPY: ConsentCopy = {
   deleteTitle: DELETE_LABEL,
   deleteDescription: `Apaga na hora sua conta do ranking e tudo o que está ligado a ela: apelido, pontuações e registros das partidas. Não dá para desfazer nem recuperar. Os dados guardados só neste navegador continuam aqui; para apagá-los, use “${CLEAR_LOCAL_LABEL}”.`,
   deleteConfirmLabel: 'Excluir definitivamente',
-  localDataDescription: 'O PRGB guarda só neste navegador, sem enviar a nenhum servidor: suas preferências de áudio e do amplificador, a última música, seus recordes, o histórico das últimas partidas e seu apelido local. Apagar esses dados não exclui sua conta do ranking, se você tiver uma.',
+  localDataDescription: 'O PRGB guarda só neste navegador, sem enviar a nenhum servidor: suas preferências de áudio e do amplificador, a última música, seus recordes, o histórico das últimas partidas, seu progresso (estrelas, palhetas e dias de ensaio) e seu apelido local. Apagar esses dados não exclui sua conta do ranking, se você tiver uma.',
   clearLocalLabel: CLEAR_LOCAL_LABEL
 };

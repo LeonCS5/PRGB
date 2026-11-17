@@ -4,6 +4,7 @@ import { InputLevelMeter } from './AudioRouting';
 import { ModalFrame } from './ModalFrame';
 import { HIT_LINE_X, PIXELS_PER_MS, readPalette } from './practiceLanes';
 import { useAudioSession } from '../context/AudioSessionContext';
+import { recordLatencyTestSaved } from '../context/progressStore';
 import {
   HIGH_LATENCY_MS,
   TEST_END_MS,
@@ -246,6 +247,7 @@ export const LatencyTest: React.FC<LatencyTestProps> = ({ isOpen, onClose }) => 
   const save = async (offsets: (number | null)[]) => {
     const { latencyMs } = summarizeTest(offsets);
     await changeAudioOptions(latencySettings(latencyMs, audioEngine.getEngineInfo()?.sampleRate ?? 48000));
+    recordLatencyTestSaved(Date.now());
     setPhase({ name: 'result', offsets, saved: true });
   };
 
