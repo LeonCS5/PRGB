@@ -7,28 +7,34 @@ import { EXERCISE_CATEGORIES } from '../services/exercises';
 vi.setConfig({ testTimeout: 30000 });
 
 const noop = () => {};
-const render = (view: LibraryView, withPlayAll: boolean): string =>
-  renderToStaticMarkup(createElement(ExerciseLibrary, { view, onViewChange: noop, onPlay: noop, onExit: noop, onPlayAll: withPlayAll ? noop : undefined }));
+const render = (view: LibraryView, withPlayAll: boolean, initialPlayAll = false): string =>
+  renderToStaticMarkup(createElement(ExerciseLibrary, { view, onViewChange: noop, onPlay: noop, onExit: noop, onPlayAll: withPlayAll ? noop : undefined, initialPlayAll }));
 
 describe('ExerciseLibrary: play every variation', () => {
   const scales = EXERCISE_CATEGORIES.find((category) => category.patterns.length > 1 && category.groups.some((group) => group.exercises.some((exercise) => exercise.keyed)));
+  const view: LibraryView = { categoryId: scales!.id, key: 0, patterns: {} };
 
-  it('offers to play all the variations of an exercise in a row, with the count and the time', () => {
-    expect(scales).toBeDefined();
-    const html = render({ categoryId: scales!.id, key: 0, patterns: {} }, true);
-    expect(html).toMatch(/Tocar as \d+ variações em sequência/);
-    expect(html).toMatch(/\d+ min/);
+  it('starts by playing one variation, with the choice to play all of them stated up front', () => {
+    const html = render(view, true);
+    for (const text of ['Ao tocar um cartão', 'Só esta variação', 'Todas as variações em sequência']) expect(html).toContain(text);
+    expect(html).toMatch(/<input[^>]*name="exercise-play-mode"(?=[^>]*value="one")(?=[^>]*checked)/);
+    expect(html).not.toContain('variações em sequência ·');
+    expect(html).toContain('Como tocar');
+    expect(html).not.toContain('Quantos tons');
   });
 
-  it('lets the player choose how many keys the sequence goes through', () => {
-    const html = render({ categoryId: scales!.id, key: 0, patterns: {} }, true);
-    for (const text of ['Tons ao tocar todas as variações', 'Só este tom', '3 tons', '6 tons', '12 tons']) expect(html).toContain(text);
+  it('in "all" mode every card says it plays the sequence, with the count and the time, and the keys can be chosen', () => {
+    const html = render(view, true, true);
+    expect(html).toMatch(/\d+ variações em sequência · \d+ min/);
+    expect(html).toContain(`${scales!.patterns.length * 3} variações em sequência`);
+    for (const text of ['Quantos tons', 'Só este tom', '3 tons', '6 tons', '12 tons', 'Começar no tom']) expect(html).toContain(text);
     expect(html).toMatch(/<input[^>]*name="exercise-cycle"(?=[^>]*value="3")(?=[^>]*checked)/);
-    expect(html).toContain(`Tocar as ${scales!.patterns.length * 3} variações em sequência`);
+    expect(html).not.toContain('Como tocar</legend>');
   });
 
-  it('has no such button when the caller does not handle it', () => {
-    const html = render({ categoryId: scales!.id, key: 0, patterns: {} }, false);
+  it('has no such choice when the caller does not handle sequences', () => {
+    const html = render(view, false);
+    expect(html).not.toContain('Ao tocar um cartão');
     expect(html).not.toContain('variações em sequência');
   });
 });

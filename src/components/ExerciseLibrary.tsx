@@ -30,6 +30,7 @@ export interface ExerciseLibraryProps {
   onExit: () => void;
   onSession?: () => void; // opens the practice session builder
   onPlayAll?: (items: SessionItem[]) => void; // plays every variation of one exercise in a row
+  initialPlayAll?: boolean; // starts with the library set to play all the variations (tests)
 }
 
 const CATEGORY_ICONS: Record<ExerciseCategoryId, LucideIcon> = {
@@ -88,11 +89,16 @@ interface ExerciseCardProps {
   pattern?: ExercisePattern;
   showsKey: boolean; // the category has keys, so a card without them must say so
   onPlay: () => void;
-  onPlayAll?: (items: SessionItem[]) => void;
-  keys: KeyCycle; // how many keys "play all" goes through
+  playAll: PlayAll | null; // set while the library plays every variation instead of one
 }
 
-const ExerciseCard: React.FC<ExerciseCardProps> = ({ exercise, keyIndex, pattern, showsKey, onPlay, onPlayAll, keys }) => {
+// What a click on a card plays when the library is set to "all the variations": the keys and ways to play it
+interface PlayAll {
+  keys: KeyCycle;
+  start: (items: SessionItem[]) => void;
+}
+
+const ExerciseCard: React.FC<ExerciseCardProps> = ({ exercise, keyIndex, pattern, showsKey, onPlay, playAll }) => {
   const { seconds, best } = useMemo(() => {
     const tab = buildExerciseTab(exercise, keyIndex, pattern);
     return {
@@ -102,67 +108,85 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({ exercise, keyIndex, pattern
   }, [exercise, keyIndex, pattern]);
 
   // The chosen number of keys (a fourth apart) and every way to play each, one after the other
-  const variations = useMemo(() => expandItem({ code: exercise.code, key: keyIndex }, { keys, allPatterns: true }), [exercise, keyIndex, keys]);
-  const variationsMinutes = useMemo(() => formatMinutes(sessionDurationMs(variations)), [variations]);
+  const variations = useMemo(() => (playAll ? expandItem({ code: exercise.code, key: keyIndex }, { keys: playAll.keys, allPatterns: true }) : []), [exercise, keyIndex, playAll]);
+  const sequence = playAll !== null && variations.length > 1;
+  const sequenceMinutes = useMemo(() => (sequence ? formatMinutes(sessionDurationMs(variations)) : ''), [sequence, variations]);
 
   return (
-    <div className="flex flex-col">
-    <button type="button" onClick={onPlay}
-      className={'group flex min-h-32 w-full flex-1 cursor-pointer flex-col border border-ink-700 bg-ink-900 p-4 text-left transition hover:border-amp-500/60 hover:bg-ink-800 ' + (onPlayAll && variations.length > 1 ? 'rounded-t-2xl' : 'rounded-2xl')}>
+    <button type="button" onClick={sequence && playAll ? () => playAll.start(variations) : onPlay}
+      className={'group flex min-h-32 w-full cursor-pointer flex-col rounded-2xl border bg-ink-900 p-4 text-left transition hover:bg-ink-800 ' + (sequence ? 'border-signal-500/50 hover:border-signal-400' : 'border-ink-700 hover:border-amp-500/60')}>
       <span className="flex items-start justify-between gap-3">
         <span className="font-display text-base font-bold leading-snug text-ink-100">{exercise.title}</span>
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-ink-800 text-amp-300 transition group-hover:bg-amp-400 group-hover:text-ink-950"><Play size={15} className="fill-current" aria-hidden="true" /></span>
+        <span className={'flex size-8 shrink-0 items-center justify-center rounded-lg bg-ink-800 transition ' + (sequence ? 'text-signal-300 group-hover:bg-signal-400 group-hover:text-ink-950' : 'text-amp-300 group-hover:bg-amp-400 group-hover:text-ink-950')}>
+          {sequence ? <ListChecks size={15} aria-hidden="true" /> : <Play size={15} className="fill-current" aria-hidden="true" />}
+        </span>
       </span>
       <span className="mt-1.5 flex-1 text-sm leading-5 text-ink-300">{exercise.description}</span>
       <span className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-300">
         <LevelMark level={exercise.level} />
-        <span className="font-mono">{seconds} s · {exercise.bpm} bpm</span>
+        {sequence
+          ? <span className="font-mono font-semibold text-signal-300">{variations.length} variações em sequência · {sequenceMinutes}</span>
+          : <span className="font-mono">{seconds} s · {exercise.bpm} bpm</span>}
         {showsKey && !exercise.keyed && <span>Tom fixo</span>}
-        {best !== null && <span className="font-mono text-amp-300">Recorde {formatPoints(best)}</span>}
+        {!sequence && best !== null && <span className="font-mono text-amp-300">Recorde {formatPoints(best)}</span>}
       </span>
     </button>
-    {onPlayAll && variations.length > 1 && (
-      <button type="button" onClick={() => onPlayAll(variations)}
-        className="flex min-h-11 w-full cursor-pointer items-center justify-between gap-2 rounded-b-2xl border border-t-0 border-ink-700 bg-ink-900 px-4 text-left text-xs font-semibold text-signal-300 transition hover:border-signal-500/60 hover:bg-ink-800">
-        <span className="flex items-center gap-2"><ListChecks size={15} aria-hidden="true" /><span>Tocar as {variations.length} variações em sequência</span></span>
-        <span className="font-mono font-normal text-ink-300">{variationsMinutes}</span>
-      </button>
-    )}
-    </div>
   );
 };
 
 const KEY_CYCLE_LABELS: Record<KeyCycle, string> = { 1: 'Só este tom', 3: '3 tons', 6: '6 tons', 12: '12 tons' };
+const PLAY_MODE_LABELS = { one: 'Só esta variação', all: 'Todas as variações em sequência' } as const;
 
-const Controls: React.FC<{ category: ExerciseCategory; view: LibraryView; onViewChange: (view: LibraryView) => void; pattern?: ExercisePattern; keys?: KeyCycle; onKeysChange?: (keys: KeyCycle) => void }> = ({ category, view, onViewChange, pattern, keys, onKeysChange }) => {
+interface ControlsProps {
+  category: ExerciseCategory;
+  view: LibraryView;
+  onViewChange: (view: LibraryView) => void;
+  pattern?: ExercisePattern;
+  // Present when the library can play a sequence: the choice between one variation and all of them, and the keys
+  sequence?: { all: boolean; onAllChange: (all: boolean) => void; keys: KeyCycle; onKeysChange: (keys: KeyCycle) => void };
+}
+
+const Controls: React.FC<ControlsProps> = ({ category, view, onViewChange, pattern, sequence }) => {
   const hasKeys = category.groups.some((group) => group.exercises.some((exercise) => exercise.keyed));
+  const canSequence = sequence !== undefined && (hasKeys || category.patterns.length > 1);
   if (!hasKeys && category.patterns.length === 0) return null;
+  const all = canSequence && sequence.all;
   return (
     <div className="mt-6 grid gap-5 rounded-2xl border border-ink-700 bg-ink-900/60 p-4">
+      {canSequence && (
+        <ChipGroup legend="Ao tocar um cartão" name="exercise-play-mode" value={all ? 'all' : 'one'}
+          options={[{ value: 'one', label: PLAY_MODE_LABELS.one }, { value: 'all', label: PLAY_MODE_LABELS.all }]}
+          onChange={(value) => sequence.onAllChange(value === 'all')} />
+      )}
       {hasKeys && (
-        <ChipGroup legend="Tom" name="exercise-key" value={String(view.key)}
+        <ChipGroup legend={all ? 'Começar no tom' : 'Tom'} name="exercise-key" value={String(view.key)}
           options={KEYS.map((name, index) => ({ value: String(index), label: name }))}
           onChange={(value) => onViewChange({ ...view, key: Number(value) })} />
       )}
-      {hasKeys && keys !== undefined && onKeysChange && (
-        <ChipGroup legend="Tons ao tocar todas as variações" name="exercise-cycle" value={String(keys)}
+      {all && hasKeys && (
+        <ChipGroup legend="Quantos tons" name="exercise-cycle" value={String(sequence.keys)}
           options={KEY_CYCLES.map((count) => ({ value: String(count), label: KEY_CYCLE_LABELS[count] }))}
-          onChange={(value) => onKeysChange(Number(value) as KeyCycle)} />
+          onChange={(value) => sequence.onKeysChange(Number(value) as KeyCycle)} />
       )}
-      {category.patterns.length > 0 && pattern && (
+      {!all && category.patterns.length > 0 && pattern && (
         <ChipGroup legend="Como tocar" name="exercise-pattern" value={pattern}
           options={category.patterns.map((id) => ({ value: id, label: patternName(category, id) }))}
           onChange={(value) => onViewChange({ ...view, patterns: { ...view.patterns, [category.id]: value as ExercisePattern } })} />
       )}
+      {all && category.patterns.length > 1 && <p className="text-xs leading-5 text-ink-300">Cada tom toca de todos os jeitos: {category.patterns.map((id) => patternName(category, id)).join(', ')}.</p>}
     </div>
   );
 };
 
-export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ view, onViewChange, onPlay, onExit, onSession, onPlayAll }) => {
+export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ view, onViewChange, onPlay, onExit, onSession, onPlayAll, initialPlayAll = false }) => {
   const category = EXERCISE_CATEGORIES.find((item) => item.id === view.categoryId) ?? EXERCISE_CATEGORIES[0];
   const pattern = view.patterns[category.id] ?? category.patterns[0];
   const hasKeys = category.groups.some((group) => group.exercises.some((exercise) => exercise.keyed));
+  const [playAllMode, setPlayAllMode] = useState(initialPlayAll);
   const [keys, setKeys] = useState<KeyCycle>(3);
+  const sequence = onPlayAll ? { all: playAllMode, onAllChange: setPlayAllMode, keys, onKeysChange: setKeys } : undefined;
+  const canSequence = sequence !== undefined && (hasKeys || category.patterns.length > 1);
+  const playAll: PlayAll | null = onPlayAll && canSequence && playAllMode ? { keys, start: onPlayAll } : null;
 
   return (
     <div className="h-full overflow-y-auto overflow-x-hidden">
@@ -207,14 +231,14 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ view, onViewCh
           {category.note && (
             <p className="mt-3 flex max-w-2xl gap-2 text-sm leading-6 text-signal-300"><Info size={16} className="mt-1 shrink-0" aria-hidden="true" /> {category.note}</p>
           )}
-          <Controls category={category} view={view} onViewChange={onViewChange} pattern={pattern} keys={onPlayAll ? keys : undefined} onKeysChange={onPlayAll ? setKeys : undefined} />
+          <Controls category={category} view={view} onViewChange={onViewChange} pattern={pattern} sequence={sequence} />
           {category.groups.map((group) => (
             <section key={group.title} aria-label={group.title} className="mt-8">
               <h3 className="font-display text-lg font-bold">{group.title}</h3>
               <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {group.exercises.map((exercise) => (
                   <ExerciseCard key={exercise.code} exercise={exercise} keyIndex={view.key} pattern={pattern} showsKey={hasKeys}
-                    onPlay={() => onPlay(exercise, view.key, pattern)} onPlayAll={onPlayAll} keys={keys} />
+                    onPlay={() => onPlay(exercise, view.key, pattern)} playAll={playAll} />
                 ))}
               </div>
             </section>

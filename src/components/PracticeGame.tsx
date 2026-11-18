@@ -129,6 +129,7 @@ const MAX_FRAME_GAP_MS = 100;
 // A run from the very start begins this long before the first note, whatever the speed, so the player sees the
 // opening notes coming and hears the tempo
 const LEAD_IN_MS = 5000;
+const SESSION_TAIL_MS = 800; // past the last note: the late hit window (260 ms) plus room for the latency compensation
 // During the count the opening notes wait on screen to be read, and only start moving this long before the first one
 const LEAD_IN_MOVING_MS = 2000;
 const LEAD_IN_RIGHT_MARGIN = 60;
@@ -181,6 +182,13 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   const clockTab = useMemo(() => lanes.reduce((longest, lane) =>
     lane.part.tab.totalDurationMs > longest.part.tab.totalDurationMs ? lane : longest).part.tab, [lanes]);
   const mainTab = lanes[0].part.tab;
+  // In the middle of a session the run ends once the last note could still be judged, not at the end of the bar:
+  // the quiet tail would only be a pause before the next exercise
+  const endMs = useMemo(() => {
+    if (isDuo || !session || session.queue.index >= session.queue.items.length - 1) return durationMs;
+    const lastNoteMs = Math.max(0, ...mainTab.notes.map((note) => note.timeMs));
+    return Math.min(durationMs, lastNoteMs + SESSION_TAIL_MS);
+  }, [isDuo, session, mainTab, durationMs]);
   const isExercise = isExerciseSongId(mainTab.songId);
   const changeLabel = isExercise ? 'Mudar exercício' : 'Mudar música';
   const ranked = useRankedRun({
@@ -669,7 +677,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
       setCurrentTimeMs(next);
       if (metronomeEnabled) metronome.update(next);
       if (next < 0) countIn.update(next);
-      if (next >= durationMs) {
+      if (next >= endMs) {
         setIsPlaying(false);
         finishRun();
       }
