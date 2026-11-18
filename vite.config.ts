@@ -21,9 +21,9 @@ export default defineConfig({
       ]
       // Lazy chunks (the Supabase client) and the neural engine stay out of the precache: visitors who never
       // open them shouldn't download them, and the game doesn't need them offline. The exception is our own lazy
-      // content: the repertoire screen, its pieces (src/content/songs) and the appearance screen. They are
+      // content: the screens, the game and the modals (split off the entry to shorten the first load, but needed offline) and the pieces (src/content/songs). They are
       // recognised by source path, so a new piece or a renamed chunk is covered without touching this list.
-      const ownLazyContent = /[\\/]src[\\/](content[\\/]songs[\\/]|components[\\/](RepertoireLibrary|AppearanceScreen|ProgressScreen|TrailScreen|SessionScreen|SessionStrip|appearance[\\/]|progress[\\/]))/
+      const ownLazyContent = /[\\/]src[\\/](content[\\/]songs[\\/]|components[\\/](RepertoireLibrary|AppearanceScreen|ProgressScreen|TrailScreen|SessionScreen|SessionStrip|PracticeGame|FreePlay|OnlinePracticeGame|RoomModal|SongSearchModal|AudioSettingsModal|AmpRack|LatencyTest|DuoSetupModal|FeedbackModal|RankingModals|appearance[\\/]|progress[\\/]))/
       const assets = Object.values(bundle).filter((file) => (
         file.fileName.startsWith('assets/') && !file.fileName.startsWith('assets/nam-')
         && !(file.type === 'chunk' && file.isDynamicEntry && !(file.facadeModuleId && ownLazyContent.test(file.facadeModuleId)))

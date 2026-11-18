@@ -39,29 +39,19 @@ import { findSongInfo, findSongPart } from './services/songs';
 import { ErrorNotice } from './components/ErrorNotice';
 import { ChallengeCard } from './components/ChallengeCard';
 import { LocalRecords } from './components/LocalRecords';
-import { DuoSetupModal } from './components/DuoSetupModal';
 import { LegalPage } from './components/LegalPage';
 import { NotFound } from './components/NotFound';
 import { readHash, resolveLegalRoute, subscribeToHash } from './context/legalRoute';
 import { consumeLocalDataCleared } from './context/localData';
 import { gameDevPreset, readDevScene } from './components/devScenes';
 import { rankingDevSetup } from './components/devRanking';
-import { RankingModals } from './components/RankingModals';
 import { CHALLENGE_PARAM, readChallengeFromSearch, type Challenge } from './services/challenge';
 import { BrandMark } from './components/BrandMark';
 import { openModalLayer, openScreenLayer } from './context/historyLayers';
 import { getSongMetadata, loadSongTrack } from './context/uiErrors';
-import { PracticeGame } from './components/PracticeGame';
-import { FreePlay } from './components/FreePlay';
-import { OnlinePracticeGame } from './components/OnlinePracticeGame';
-import { RoomModal } from './components/RoomModal';
-import { SongSearchModal } from './components/SongSearchModal';
-import { AudioSettingsModal } from './components/AudioSettingsModal';
-import { AmpRack } from './components/AmpRack';
-import { LatencyTest } from './components/LatencyTest';
 import { AudioSessionProvider, useAudioSession, useLatestPitch } from './context/AudioSessionContext';
 import { ModalsProvider, useModals } from './context/ModalsContext';
-import { FeedbackModal } from './components/FeedbackModal';
+import { OnDemand } from './components/OnDemand';
 import { StorageNotice } from './components/StorageNotice';
 import { LEGAL_CONTACT } from './content/legal';
 import { AppearanceButton, AudioChip, HeaderNav, ProgressButton, TabBar } from './components/SiteNav';
@@ -75,6 +65,17 @@ import { RoomProvider } from './context/RoomProvider';
 import { useRanking } from './context/ranking';
 import { useRoom } from './context/useRoom';
 
+const PracticeGame = lazy(() => import('./components/PracticeGame').then((module) => ({ default: module.PracticeGame })));
+const FreePlay = lazy(() => import('./components/FreePlay').then((module) => ({ default: module.FreePlay })));
+const OnlinePracticeGame = lazy(() => import('./components/OnlinePracticeGame').then((module) => ({ default: module.OnlinePracticeGame })));
+const RoomModal = lazy(() => import('./components/RoomModal').then((module) => ({ default: module.RoomModal })));
+const SongSearchModal = lazy(() => import('./components/SongSearchModal').then((module) => ({ default: module.SongSearchModal })));
+const AudioSettingsModal = lazy(() => import('./components/AudioSettingsModal').then((module) => ({ default: module.AudioSettingsModal })));
+const AmpRack = lazy(() => import('./components/AmpRack').then((module) => ({ default: module.AmpRack })));
+const LatencyTest = lazy(() => import('./components/LatencyTest').then((module) => ({ default: module.LatencyTest })));
+const DuoSetupModal = lazy(() => import('./components/DuoSetupModal').then((module) => ({ default: module.DuoSetupModal })));
+const FeedbackModal = lazy(() => import('./components/FeedbackModal').then((module) => ({ default: module.FeedbackModal })));
+const RankingModals = lazy(() => import('./components/RankingModals').then((module) => ({ default: module.RankingModals })));
 const AppearanceScreen = lazy(() => import('./components/AppearanceScreen').then((module) => ({ default: module.AppearanceScreen })));
 const ProgressScreen = lazy(() => import('./components/ProgressScreen').then((module) => ({ default: module.ProgressScreen })));
 const SessionScreen = lazy(() => import('./components/SessionScreen').then((module) => ({ default: module.SessionScreen })));
@@ -155,7 +156,7 @@ const initialSession = (devScene: ReturnType<typeof readDevScene>): GameSession 
     return duoSession([demo, demo], ['Ana', 'Beto']);
   }
   if (devScene === 'ranking-partida') return soloSession(demoPart(), null, 'on');
-  if (devScene === 'resultado' || devScene === 'desafio' || devScene === 'ranking-resultado' || new URLSearchParams(window.location.search).has('demo')) {
+  if (devScene === 'resultado' || devScene === 'desafio' || devScene === 'ranking-resultado' || devScene === 'ranking-automatico' || devScene === 'ranking-sem-conta' || new URLSearchParams(window.location.search).has('demo')) {
     return soloSession(demoPart());
   }
   return null;
@@ -227,7 +228,7 @@ const AppContent: React.FC = () => {
     setFeedbackOpen: setIsFeedbackOpen,
     setLatencyTestOpen: setIsLatencyTestOpen
   } = useModals();
-  const { isConfigured: isRankingOn, hasAccount, openAccount, openLeaderboard } = useRanking();
+  const { isConfigured: isRankingOn, hasAccount, openAccount, openLeaderboard, entryMode, isAccountOpen, leaderboardTarget } = useRanking();
   const { leaveRoom } = useRoom();
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [isFreePlayOpen, setIsFreePlayOpen] = useState(false);
@@ -581,6 +582,7 @@ const AppContent: React.FC = () => {
         )}
       </div>
       {onlineSession ? (
+        <Suspense fallback={<p role="status" className="p-5">Carregando o jogo…</p>}>
         <OnlinePracticeGame
           key={onlineSession.sessionKey}
           myPart={onlineSession.part}
@@ -595,12 +597,15 @@ const AppContent: React.FC = () => {
           ampEngine={ampEngine}
           onOpenAmpRack={() => setIsAmpRackOpen(true)}
         />
+        </Suspense>
       ) : isFreePlayOpen ? (
+        <Suspense fallback={<p role="status" className="p-5">Carregando o Play Free…</p>}>
         <FreePlay onExit={() => setIsFreePlayOpen(false)} onOpenAudioSettings={() => setIsSettingsOpen(true)}
           onOpenAmpRack={() => setIsAmpRackOpen(true)} />
+        </Suspense>
       ) : session ? (
         /* Practice mode */
-        <>
+        <Suspense fallback={<p role="status" className="p-5">Carregando o jogo…</p>}>
           <PracticeGame
             key={session.key}
             parts={sessionParts}
@@ -636,7 +641,7 @@ const AppContent: React.FC = () => {
               onEnd: handleEndSession
             } : null}
           />
-        </>
+        </Suspense>
       ) : isProgressOpen ? (
         <Suspense fallback={<p role="status" className="p-5">Carregando progresso…</p>}>
           <ProgressScreen onExit={() => setIsProgressOpen(false)} onOpenExercises={() => { setIsProgressOpen(false); handleOpenLibrary(); }} />
@@ -867,9 +872,10 @@ const AppContent: React.FC = () => {
         </div>
       )}
 
-      <FeedbackModal isOpen={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)} screen={screen} />
+      <OnDemand open={isFeedbackOpen}><FeedbackModal isOpen={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)} screen={screen} /></OnDemand>
 
       {/* Song Search Modal */}
+      <OnDemand open={isAcervoEnabled() && isSearchOpen}>
       <SongSearchModal
         isOpen={isAcervoEnabled() && isSearchOpen}
         onClose={() => {
@@ -900,8 +906,10 @@ const AppContent: React.FC = () => {
           if (song.songId !== DEMO_SONG_ID) rememberSong({ ...song, title: tab.title });
         }}
       />
+      </OnDemand>
 
       {isDuoSetupOpen && (
+        <OnDemand open>
         <DuoSetupModal
           onCancel={() => {
             setIsDuoSetupOpen(false);
@@ -918,9 +926,11 @@ const AppContent: React.FC = () => {
             setIsSearchOpen(true);
           }}
         />
+        </OnDemand>
       )}
 
       {/* Audio Interface Settings Modal */}
+      <OnDemand open={isSettingsOpen}>
       <AudioSettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
@@ -931,18 +941,18 @@ const AppContent: React.FC = () => {
         onChannelModeChange={handleChannelModeChange}
         onOpenAmpRack={() => setIsAmpRackOpen(true)}
       />
+      </OnDemand>
 
       {/* PRGB Amp & Monitoring Rack */}
-      <AmpRack
-        isOpen={isAmpRackOpen}
-        onClose={() => setIsAmpRackOpen(false)}
-        ampEngine={ampEngine}
-      />
+      <OnDemand open={isAmpRackOpen}>
+        <AmpRack isOpen={isAmpRackOpen} onClose={() => setIsAmpRackOpen(false)} ampEngine={ampEngine} />
+      </OnDemand>
 
-      <LatencyTest isOpen={isLatencyTestOpen} onClose={() => setIsLatencyTestOpen(false)} />
+      <OnDemand open={isLatencyTestOpen}><LatencyTest isOpen={isLatencyTestOpen} onClose={() => setIsLatencyTestOpen(false)} /></OnDemand>
 
-      <RankingModals />
+      <OnDemand open={entryMode !== null || isAccountOpen || leaderboardTarget !== null}><RankingModals /></OnDemand>
 
+      <OnDemand open={isRoomModalOpen}>
       <RoomModal
         isOpen={isRoomModalOpen}
         onClose={() => setIsRoomModalOpen(false)}
@@ -952,6 +962,7 @@ const AppContent: React.FC = () => {
           setIsRoomModalOpen(false);
         }}
       />
+      </OnDemand>
     </div>
   );
 };

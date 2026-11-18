@@ -6,12 +6,12 @@ import { applyJudgement, createScoreState, type Judgement, type ScoreState } fro
 export type DevScene =
   | 'resultado' | 'desafio' | 'dupla-assistente' | 'dupla' | 'dupla-resultado'
   | 'ranking-entrada' | 'ranking-reaceite' | 'ranking-conta' | 'ranking-lista' | 'ranking-vazio' | 'ranking-partida'
-  | 'ranking-resultado' | 'ranking-apagar';
+  | 'ranking-resultado' | 'ranking-apagar' | 'ranking-automatico' | 'ranking-sem-conta';
 
 const SCENES: readonly DevScene[] = [
   'resultado', 'desafio', 'dupla-assistente', 'dupla', 'dupla-resultado',
   'ranking-entrada', 'ranking-reaceite', 'ranking-conta', 'ranking-lista', 'ranking-vazio', 'ranking-partida',
-  'ranking-resultado', 'ranking-apagar'
+  'ranking-resultado', 'ranking-apagar', 'ranking-automatico', 'ranking-sem-conta'
 ];
 
 export interface GameDevPreset {

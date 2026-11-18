@@ -93,6 +93,9 @@ export const rankingDevSetup = (scene: DevScene | null): RankingDevSetup | null 
       return { api: signedIn, leaderboardTarget: DEMO_TARGET };
     case 'ranking-vazio':
       return { api: createDevApi({ profile: PROFILE, rows: [] }), leaderboardTarget: DEMO_TARGET };
+    case 'ranking-sem-conta':
+      return { api: createDevApi({ profile: null, rows }) };
+    case 'ranking-automatico':
     case 'ranking-partida':
     case 'ranking-resultado':
     case 'ranking-apagar':

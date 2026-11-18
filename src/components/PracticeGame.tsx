@@ -159,7 +159,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
 }) => {
   const isOnline = online != null;
   const { audioEngine, getLatestPitch, isAudioRunning, startAudio, channelMode } = useAudioSession();
-  const { isConfigured: isRankingOn, openAccount } = useRanking();
+  const { isConfigured: isRankingOn, hasAccount, openAccount } = useRanking();
   const { look, appearance } = useGameplayLook();
   const { palette, kit, strings } = look;
   // The canvas loop reads the settings from refs: changing them never restarts the loop or the audio
@@ -781,10 +781,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   // A ranked run goes from the start at 1×, so turning it on only touches the current run once the account and
   // the part are confirmed: giving up leaves the song paused where it was
   const toggleRanked = async () => {
-    if (ranked.isOn) {
-      ranked.controller.turnOff();
-      return;
-    }
+    if (ranked.isOn) return;
     setIsPlaying(false);
     if (await ranked.controller.turnOn()) {
       resetRun(false);
@@ -796,6 +793,13 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     setIsPlaying(false);
     openAccount();
   };
+
+  // An account made while the game is open puts the run in the ranking right away
+  const hadAccountRef = useRef(hasAccount);
+  useEffect(() => {
+    if (hasAccount && !hadAccountRef.current && ranked.isAvailable && !ranked.isOn) void toggleRanked();
+    hadAccountRef.current = hasAccount;
+  });
 
   const seekTo = (target: number) => {
     const previous = positionRef.current;
@@ -893,14 +897,13 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
           <span className="font-mono text-xs text-ink-300">{formatTime(durationMs)}</span>
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2 pb-1">
-          {!isOnline && ranked.isAvailable && (
-            <button role="switch" aria-checked={ranked.isOn} aria-describedby={lockedHelp} onClick={() => void toggleRanked()} className={toolClass + ' max-sm:gap-1.5 max-sm:px-2' + (ranked.isOn ? ' border-amp-400! text-amp-300!' : '')}>
-              {ranked.phase === 'preparing' ? <Loader2 size={16} className="animate-spin" aria-hidden="true" /> : <Trophy size={16} aria-hidden="true" />}<span>Valer para o ranking</span>
-              <span aria-hidden="true" className={'relative h-4 w-7 shrink-0 rounded-full transition ' + (ranked.isOn ? 'bg-amp-400' : 'bg-ink-600')}>
-                <span className={'absolute top-0.5 size-3 rounded-full bg-ink-100 transition-all ' + (ranked.isOn ? 'left-3.5' : 'left-0.5')} />
-              </span>
-            </button>
-          )}
+          {!isOnline && ranked.isAvailable && (ranked.isOn
+            ? <span aria-describedby={lockedHelp} className={toolClass + ' max-sm:gap-1.5 max-sm:px-2 border-amp-400! text-amp-300!'}><Trophy size={16} aria-hidden="true" /><span>Valendo para o ranking</span></span>
+            : ranked.isBusy
+              ? <span className={toolClass + ' max-sm:px-2'}><Loader2 size={16} className="animate-spin" aria-hidden="true" /><span>Conferindo o ranking…</span></span>
+              : <button onClick={() => hasAccount ? void toggleRanked() : openRankingAccount()} className={toolClass + ' max-sm:gap-1.5 max-sm:px-2'}>
+                <Trophy size={16} aria-hidden="true" /><span>{hasAccount ? 'Tentar o ranking de novo' : 'Crie uma conta para valer no ranking'}</span>
+              </button>)}
           {isExercise && !isOnline && (
             <button aria-pressed={isTraining} onClick={() => setIsTraining(!isTraining)} aria-describedby={isTraining ? trainingHelpId : undefined} className={toolClass + (isTraining ? ' border-signal-500! text-signal-300!' : '')}>
               <Repeat size={16} aria-hidden="true" /><span>Modo treino</span>{isTraining && <span className="font-mono">· volta {lap}</span>}

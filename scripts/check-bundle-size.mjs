@@ -7,12 +7,13 @@ import { gzipSync } from 'node:zlib';
 const DIR = new URL('../dist/assets/', import.meta.url);
 const KB = 1024;
 const BUDGETS = [
-  { name: 'entry (index-*)', test: (file) => file.startsWith('index-'), max: 150 * KB },
+  { name: 'entry (index-*)', test: (file) => file.startsWith('index-'), max: 75 * KB },
   { name: 'react', test: (file) => file.startsWith('react-'), max: 75 * KB },
   { name: 'supabase client (dist-*)', test: (file) => file.startsWith('dist-'), max: 65 * KB }
 ];
 const OTHER_CHUNK_MAX = 30 * KB; // every other lazy chunk (screens, pieces, engines)
-const TOTAL_MAX = 300 * KB;
+const TOTAL_MAX = 340 * KB; // every chunk together: only matters for the offline precache, not for the first visit
+const FIRST_LOAD_MAX = 140 * KB; // entry + react: what a first visitor downloads before the page works
 
 const files = readdirSync(DIR).filter((file) => file.endsWith('.js'));
 if (files.length === 0) {
@@ -21,6 +22,9 @@ if (files.length === 0) {
 }
 const sizes = files.map((file) => ({ file, gzip: gzipSync(readFileSync(new URL(file, DIR))).length }));
 const failures = [];
+const firstLoad = sizes.filter(({ file }) => file.startsWith('index-') || file.startsWith('react-')).reduce((sum, item) => sum + item.gzip, 0);
+console.log(`     ${(firstLoad / KB).toFixed(1).padStart(7)} kB  max ${(FIRST_LOAD_MAX / KB).toFixed(0).padStart(3)} kB  first load (entry + react)`);
+if (firstLoad > FIRST_LOAD_MAX) failures.push(`first load: ${(firstLoad / KB).toFixed(1)} kB gzip > ${(FIRST_LOAD_MAX / KB).toFixed(0)} kB`);
 for (const { file, gzip } of sizes) {
   const budget = BUDGETS.find((item) => item.test(file));
   const max = budget ? budget.max : OTHER_CHUNK_MAX;

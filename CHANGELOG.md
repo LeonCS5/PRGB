@@ -2,6 +2,11 @@
 
 O histórico detalhado, com dono e status de cada item, fica em [AGENTS.md](AGENTS.md) › Problemas Conhecidos. Este arquivo resume cada rodada. As versões passam a ser marcadas com tags (`v0.N.0`, uma por rodada) a partir da rodada 13.
 
+## Rodada 17 — primeira carga menor e ranking automático
+
+- O jogo, o Play Free, a dupla online e os modais (áudio, amp, busca, latência, relato, ranking) saíram do pacote de entrada e carregam ao abrir; seguem no cache offline. Primeira carga (entrada + React): 186 kB para 126 kB gzip. O orçamento agora limita a primeira carga (140 kB) e a entrada (75 kB); o total (340 kB) só vale para o cache offline.
+- Ranking: quem tem conta joga sempre valendo, sem chave para ligar (nas peças que o ranking aceita); sem conta, um botão discreto leva à criação da conta, e criar a conta no meio do jogo já liga o ranking. Cenas de DEV `ranking-automatico` e `ranking-sem-conta`.
+
 ## Rodada 16 — sessões de prática
 
 - Sessão de prática: exercícios em sequência, sem voltar ao menu, montada por etapa da trilha, por tempo (10, 15 ou 20 min) ou à mão; com "rodar os tons" (3, 6 ou 12) e "todos os jeitos de tocar" para deixar cada exercício mais longo. Detalhes em `docs/sessoes.md`.
