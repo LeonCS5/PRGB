@@ -66,7 +66,7 @@ describe('RepertoireLibrary', () => {
 describe('repertoire navigation', () => {
   it.each([HeaderNav, TabBar])('keeps the music entry with the external catalog disabled', (Nav) => {
     vi.mocked(isAcervoEnabled).mockReturnValue(false);
-    const html = renderToStaticMarkup(createElement(Nav, { isAudioRunning: false, onExercises: vi.fn(), onRepertoire: vi.fn(), onSearch: null, onAudio: vi.fn(), onRanking: null }));
-    expect(html).toContain('Repertório</button>');
+    const html = renderToStaticMarkup(createElement(Nav, { isAudioRunning: false, onExercises: vi.fn(), onTrail: vi.fn(), onRepertoire: vi.fn(), onSearch: null, onAudio: vi.fn(), onRanking: null }));
+    expect(html).toMatch(/Repertório(<\/span>)?<\/button>/);
   });
 });

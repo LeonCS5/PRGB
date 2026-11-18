@@ -1,9 +1,10 @@
 import React from 'react';
-import { Award, Dumbbell, LayoutGrid, Music, Palette, PlugZap, Search, Sliders, Trophy, type LucideIcon } from 'lucide-react';
+import { Award, Dumbbell, LayoutGrid, Music, Palette, PlugZap, Route, Search, Sliders, Trophy, type LucideIcon } from 'lucide-react';
 
 export interface SiteNavProps {
   isAudioRunning: boolean;
   onExercises: () => void;
+  onTrail: () => void;
   onRepertoire: () => void;
   onSearch: (() => void) | null; // null when the external catalog is hidden
   onAudio: () => void;
@@ -17,27 +18,30 @@ interface NavItem {
   onSelect?: () => void; // without it, the item is a link to the game modes on the landing
 }
 
-const navItems = ({ onExercises, onRepertoire, onSearch, onRanking }: SiteNavProps): NavItem[] => [
+const navItems = ({ onExercises, onTrail, onRepertoire, onSearch, onRanking }: SiteNavProps): NavItem[] => [
   { label: 'Exercícios', icon: Dumbbell, onSelect: onExercises },
+  { label: 'Trilha', icon: Route, onSelect: onTrail },
   { label: 'Repertório', icon: Music, onSelect: onRepertoire },
   ...(onSearch ? [{ label: 'Buscar', ariaLabel: 'Buscar músicas no acervo', icon: Search, onSelect: onSearch }] : []),
   { label: 'Modos', icon: LayoutGrid },
   ...(onRanking ? [{ label: 'Ranking', icon: Trophy, onSelect: onRanking }] : [])
 ];
 
-const NavEntry: React.FC<{ item: NavItem; iconSize: number; className: string }> = ({ item, iconSize, className }) => {
+const NavEntry: React.FC<{ item: NavItem; iconSize: number; className: string; compact?: boolean }> = ({ item, iconSize, className, compact = false }) => {
   const { label, ariaLabel, icon: Icon, onSelect } = item;
-  const content = <><Icon size={iconSize} className="shrink-0" aria-hidden="true" />{label}</>;
+  // Compact: below xl the header has no room for every word, so the icon stands in (the name stays for readers and tooltips)
+  const content = <><Icon size={iconSize} className="shrink-0" aria-hidden="true" />{compact ? <span className="hidden xl:inline">{label}</span> : label}</>;
+  const name = compact ? ariaLabel ?? label : ariaLabel;
   return onSelect
-    ? <button type="button" aria-label={ariaLabel} onClick={onSelect} className={className}>{content}</button>
-    : <a href="#modos" className={className}>{content}</a>;
+    ? <button type="button" aria-label={name} title={compact ? label : undefined} onClick={onSelect} className={className}>{content}</button>
+    : <a href="#modos" aria-label={name} title={compact ? label : undefined} className={className}>{content}</a>;
 };
 
 export const HeaderNav: React.FC<SiteNavProps> = (props) => (
   <nav aria-label="Principal" className="hidden items-center gap-1 lg:flex">
     {navItems(props).map((item) => (
-      <NavEntry key={item.label} item={item} iconSize={16}
-        className="flex min-h-11 cursor-pointer items-center gap-2 rounded-lg px-3 text-sm font-semibold text-ink-200 transition hover:bg-ink-800 hover:text-amp-300" />
+      <NavEntry key={item.label} item={item} iconSize={16} compact
+        className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-lg px-2 text-sm font-semibold text-ink-200 transition hover:bg-ink-800 hover:text-amp-300 xl:px-2.5" />
     ))}
   </nav>
 );
@@ -74,7 +78,7 @@ export const TabBar: React.FC<SiteNavProps> = (props) => {
     : { label: 'Conectar', ariaLabel: 'Conectar áudio', icon: PlugZap, onSelect: props.onAudio };
   return (
     <nav aria-label="Principal" className="fixed inset-x-0 bottom-0 z-40 flex border-t border-ink-700 bg-ink-950/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
-      {[...items.filter((item) => item.label !== 'Ranking' && item.label !== 'Modos'), audio, ...items.filter((item) => item.label === 'Ranking')].map((item) => (
+      {[...items.filter((item) => item.label !== 'Ranking' && item.label !== 'Modos' && item.label !== 'Trilha'), audio, ...items.filter((item) => item.label === 'Ranking')].map((item) => (
         <NavEntry key={item.label} item={item} iconSize={20}
           className="flex min-h-14 min-w-0 flex-1 cursor-pointer flex-col items-center justify-center gap-0.5 text-[11px] font-semibold text-ink-200 transition hover:text-amp-300" />
       ))}

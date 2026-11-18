@@ -1,8 +1,10 @@
 import { isAcervoEnabled } from './services/acervoFlag';
+import { TRAIL_STEP_COUNT } from './services/trail';
 import React, { lazy, Suspense, useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   Music,
   Play,
+  Route,
   Search,
   Sliders,
   ArrowRight,
@@ -69,6 +71,7 @@ import { useRoom } from './context/useRoom';
 
 const AppearanceScreen = lazy(() => import('./components/AppearanceScreen').then((module) => ({ default: module.AppearanceScreen })));
 const ProgressScreen = lazy(() => import('./components/ProgressScreen').then((module) => ({ default: module.ProgressScreen })));
+const TrailScreen = lazy(() => import('./components/TrailScreen').then((module) => ({ default: module.TrailScreen })));
 const RepertoireLibrary = lazy(() => import('./components/RepertoireLibrary').then((module) => ({ default: module.RepertoireLibrary })));
 
 const supportUrl = import.meta.env.VITE_SUPPORT_URL?.trim();
@@ -225,6 +228,7 @@ const AppContent: React.FC = () => {
   const [isRepertoireOpen, setIsRepertoireOpen] = useState(false);
   const [isAppearanceOpen, setIsAppearanceOpen] = useState(false);
   const [isProgressOpen, setIsProgressOpen] = useState(false);
+  const [isTrailOpen, setIsTrailOpen] = useState(false);
   const [libraryView, setLibraryView] = useState<LibraryView>({ categoryId: EXERCISE_CATEGORIES[0].id, key: 9, patterns: {} });
   const [onlineSession, setOnlineSession] = useState<{ part: GamePart; partnerName: string; startAtMs: number; sessionKey: number } | null>(null);
 
@@ -256,8 +260,8 @@ const AppContent: React.FC = () => {
 
   const screen = onlineSession ? 'sala' : isFreePlayOpen ? 'play_free' : session ? 'jogo' : 'inicio';
   const isPlayScreen = screen !== 'inicio';
-  const isOnScreen = isPlayScreen || isLibraryOpen || isRepertoireOpen || isAppearanceOpen || isProgressOpen;
-  const isOverLibrary = isPlayScreen && (isLibraryOpen || isRepertoireOpen);
+  const isOnScreen = isPlayScreen || isLibraryOpen || isRepertoireOpen || isAppearanceOpen || isProgressOpen || isTrailOpen;
+  const isOverLibrary = isPlayScreen && (isLibraryOpen || isRepertoireOpen || isTrailOpen);
 
   // Duo is a session mode: leaving it restores the input channel saved in the preferences
   const soloChannelMode = () => channelMode === 'duo' ? readPreferences().channelMode : channelMode;
@@ -303,6 +307,7 @@ const AppContent: React.FC = () => {
   // Each layer closes only its own screen: a jump back in the browser's list can close both in one go
   const closeBottomScreen = useEffectEvent(() => {
     if (isProgressOpen) setIsProgressOpen(false);
+    else if (isTrailOpen) setIsTrailOpen(false);
     else if (isAppearanceOpen) setIsAppearanceOpen(false);
     else if (isRepertoireOpen) setIsRepertoireOpen(false);
     else if (isLibraryOpen) setIsLibraryOpen(false);
@@ -343,6 +348,12 @@ const AppContent: React.FC = () => {
   const handleOpenAppearance = () => setIsAppearanceOpen(true);
 
   const handleOpenProgress = () => setIsProgressOpen(true);
+
+  const handleOpenTrail = () => {
+    songSelectionVersion.current += 1;
+    setRestoreError(null);
+    setIsTrailOpen(true);
+  };
 
   const handleOpenRepertoire = () => {
     songSelectionVersion.current += 1;
@@ -483,6 +494,7 @@ const AppContent: React.FC = () => {
   const navProps = {
     isAudioRunning,
     onExercises: () => handleOpenLibrary(),
+    onTrail: handleOpenTrail,
     onRepertoire: handleOpenRepertoire,
     onSearch: isAcervoEnabled() ? handleOpenSearch : null,
     onAudio: handleOpenAudio,
@@ -490,7 +502,7 @@ const AppContent: React.FC = () => {
   };
 
   const latencyAdjustMs = Math.round(((audioOptions.inputLatencySamples + audioOptions.outputLatencySamples) / (audioEngine.getEngineInfo()?.sampleRate ?? 48000)) * 1000);
-  const pageName = onlineSession ? 'Dupla online' : isFreePlayOpen ? 'Play Free' : session ? sessionParts[0].tab.title : isProgressOpen ? 'Meu progresso' : isAppearanceOpen ? 'Aparência' : isRepertoireOpen ? 'Repertório do PRGB' : isLibraryOpen ? 'Exercícios' : legalRoute?.document.title;
+  const pageName = onlineSession ? 'Dupla online' : isFreePlayOpen ? 'Play Free' : session ? sessionParts[0].tab.title : isProgressOpen ? 'Meu progresso' : isTrailOpen ? 'Trilha de evolução' : isAppearanceOpen ? 'Aparência' : isRepertoireOpen ? 'Repertório do PRGB' : isLibraryOpen ? 'Exercícios' : legalRoute?.document.title;
 
   return (
     <div className="h-dvh w-full overflow-hidden bg-ink-950 font-sans text-ink-100">
@@ -576,6 +588,10 @@ const AppContent: React.FC = () => {
       ) : isProgressOpen ? (
         <Suspense fallback={<p role="status" className="p-5">Carregando progresso…</p>}>
           <ProgressScreen onExit={() => setIsProgressOpen(false)} onOpenExercises={() => { setIsProgressOpen(false); handleOpenLibrary(); }} />
+        </Suspense>
+      ) : isTrailOpen ? (
+        <Suspense fallback={<p role="status" className="p-5">Carregando a trilha…</p>}>
+          <TrailScreen onPlay={handlePlayExercise} onExit={() => setIsTrailOpen(false)} />
         </Suspense>
       ) : isAppearanceOpen ? (
         <Suspense fallback={<p role="status" className="p-5">Carregando aparência…</p>}>
@@ -669,8 +685,11 @@ const AppContent: React.FC = () => {
 
             <section aria-labelledby="pick-title" className="mx-auto max-w-7xl px-5 pb-10 sm:px-8 lg:px-12 lg:pb-14">
               <h2 id="pick-title" className="font-display text-2xl font-bold tracking-tight">O que você quer tocar?</h2>
-              <p className="mt-1 text-sm text-ink-300">Três caminhos, do mais guiado ao mais livre.</p>
+              <p className="mt-1 text-sm text-ink-300">Siga uma ordem sugerida ou escolha por conta própria.</p>
               <div className={`mt-4 grid gap-3 ${isAcervoEnabled() ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
+                <div className="md:col-span-full">
+                  <ActionRow icon={Route} tone={AMP_TONE} title="Trilha de evolução" description={`${TRAIL_STEP_COUNT} exercícios em ordem, do primeiro som ao material mais difícil. Nada fica bloqueado.`} onClick={handleOpenTrail} />
+                </div>
                 <ActionRow icon={Dumbbell} tone={AMP_TONE} title="Exercícios" description="Escalas, acordes e técnicas, em qualquer tom. Funciona sem internet." onClick={() => handleOpenLibrary()} />
                 <ActionRow icon={Music} tone={SIGNAL_TONE} title="Repertório do PRGB" description="Peças de domínio público e originais, com ranking nas liberadas." onClick={handleOpenRepertoire} />
                 {isAcervoEnabled() && (

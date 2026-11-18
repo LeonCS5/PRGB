@@ -2,6 +2,12 @@
 
 O histórico detalhado, com dono e status de cada item, fica em [AGENTS.md](AGENTS.md) › Problemas Conhecidos. Este arquivo resume cada rodada. As versões passam a ser marcadas com tags (`v0.N.0`, uma por rodada) a partir da rodada 13.
 
+## Rodada 15 — trilha de evolução e landing
+
+- Trilha de evolução: 148 passos em 15 etapas, do primeiro som ao material mais difícil, com estrelas e "Continue daqui"; nada fica bloqueado. A pesquisa e os critérios estão em `docs/trilha.md`.
+- 58 exercícios novos (a biblioteca passou de 96 para 154 e de 1.891 para 3.339 variantes).
+- Busca no acervo na primeira tela e no menu; landing reorganizada em "O que você quer tocar?".
+
 ## Rodada 14 — repertório próprio, progresso, acervo experimental e aparência
 
 - Peças novas no repertório (Greensleeves, Minueto em Sol, Brilha brilha estrelinha e seis originais), marcadas "Em revisão" até alguém tocar.

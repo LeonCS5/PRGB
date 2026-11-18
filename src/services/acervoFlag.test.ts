@@ -30,7 +30,7 @@ const noop = () => undefined;
 
 describe('acervo entry points', () => {
   it.each([HeaderNav, TabBar])('shows the catalog search in the menu only when the catalog is on, and always keeps the PRGB repertoire', (component) => {
-    const base = { isAudioRunning: false, onExercises: noop, onRepertoire: noop, onAudio: noop, onRanking: noop };
+    const base = { isAudioRunning: false, onExercises: noop, onTrail: noop, onRepertoire: noop, onAudio: noop, onRanking: noop };
     const on = renderToStaticMarkup(createElement(component, { ...base, onSearch: noop }));
     expect(on).toContain('Buscar');
     expect(on).toContain('Repertório');

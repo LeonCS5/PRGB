@@ -98,6 +98,7 @@ PRGB/
 │   │   ├── GameHud.tsx              # HUD do jogo: score, combo, accuracy, indicadores de run ranqueado
 │   │   ├── hudGlow.ts               # Estilo do brilho do COMBO no HUD (função pura, só com o efeito ligado)
 │   │   ├── gameEffects.ts           # Efeitos opcionais do canvas (pulso, faíscas, brilho do combo, fundo reativo), com pools fixos
+│   │   ├── TrailScreen.tsx          # Trilha de evolução (lazy): etapas, passos com estrelas, "Continue daqui"; só lê o progresso local
 │   │   ├── RepertoireLibrary.tsx    # Tela do repertório próprio: porta de entrada das músicas; o acervo externo fica dentro, como extra experimental
 │   │   ├── AppearanceScreen.tsx     # Tela Aparência (lazy): categorias, preview ao vivo, presets; controles em components/appearance/
 │   │   ├── ProgressSummary.tsx      # Estrelas, palhetas, ensaio da semana e nível, no resultado e no repertório
@@ -135,6 +136,7 @@ PRGB/
 │   │   ├── demoSong.ts              # Exercício original offline (pentatônica de Lá menor), sem direitos de terceiros; é o único que vale para o ranking
 │   │   ├── exerciseIds.ts           # Ids dos exercícios (negativos, nunca renumerar: recordes e desafios guardam esses ids)
 │   │   ├── exercises.ts             # Catálogo de exercícios: gerado por regras, vira tablatura e passa pelo mesmo parser
+│   │   ├── trail.ts                 # Trilha de evolução: 15 etapas e 148 passos (exercício + tom + jeito de tocar), em ordem de dificuldade, e o resumo do progresso
 │   │   ├── musicTheory.ts           # Escalas, posições no braço e formas de acorde (lógica pura)
 │   │   ├── nickname.ts              # Validação, normalização e filtro de apelidos (look-alikes, blocklist, NFKD)
 │   │   ├── noteTrail.ts             # Histórico das notas tocadas no Play Free (lógica pura)
@@ -176,7 +178,8 @@ PRGB/
 │       └── roomRealtime.test.ts     # Testes de integração das policies e RPCs das salas online
 │
 ├── docs/
-│   └── operacao.md                  # Operação: inventário, plano de incidente, backup, rotação de chaves
+│   ├── operacao.md                  # Operação: inventário, plano de incidente, backup, rotação de chaves
+│   └── trilha.md                    # Trilha de evolução: pesquisa, critérios, etapas e como estender
 ├── scripts/
 │   └── backup-db.sh                 # Backup local do banco (o plano gratuito não tem backup)
 ├── .github/                         # CI (lint, build, testes, npm audit) e Dependabot
@@ -449,6 +452,11 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 - [x] **Orçamento de bundle** — `npm run check:bundle` no CI falha se o JS gzip passar dos limites de `scripts/check-bundle-size.mjs` (@claude)
 - [x] **register-part somente leitura (A6)** — publicada no Supabase em 2026-11-17 (versão 3, `verify_jwt` mantido, pelo CLI)
 - [x] **Semear a Ode no ranking (B3)** — migration `20261117120000_seed_repertoire.sql` rodada em produção em 2026-11-17 (linha conferida: 62 notas, 53333 ms, 32700 pontos) e `rankable.ts` na `main`. **Não testado**: uma partida ranqueada da Ode no site publicado (precisa de conta e microfone)
+
+### Rodada 15 — trilha de evolução e busca em destaque (em `claude/trilha`)
+- [x] **Busca no acervo em destaque** — botão "Buscar uma música" na primeira tela, item "Buscar" no menu e cartão na seção "O que você quer tocar?"; some com `VITE_ACERVO_ENABLED=false`. Sem o nome do provedor na interface. Aumenta a exposição ao maior risco legal do projeto (ver Pendências) (@claude; já publicado na `main`; não testado: Firefox, Safari, celular real, busca com rede real)
+- [x] **Mais exercícios** — 58 exercícios novos: primeira posição, aranha, palhetada em semicolcheias, trinado, slides, pentatônicas emendadas e frases, três notas por corda (posições 2 a 7), acordes abertos e de pestana, progressões, ritmo e funk. Biblioteca: 154 exercícios, 3.339 variantes, todas conferidas pelos testes (@claude)
+- [x] **Trilha de evolução** — `trail.ts` e `TrailScreen`: 15 etapas, 148 passos, do mais fácil ao mais difícil, com estrelas e "Continue daqui"; nada bloqueado e sem texto de perda ou urgência (um teste confere). Pesquisa e critérios em `docs/trilha.md`. Testada no Edge em 1280, 390 e 320 px (abrir pela landing, Voltar, tocar um passo). **Não testado**: a ordem com quem toca, guitarra real, Firefox, Safari, celular físico, leitor de tela (@claude)
 
 ### Pendências conhecidas (sem dono)
 - [ ] **Permissão do provedor de tablaturas** — os termos dele proíbem transmitir, reutilizar e baixar o conteúdo sem autorização escrita. É o maior risco legal do projeto; depende de decisão do humano.
