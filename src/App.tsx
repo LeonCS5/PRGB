@@ -1,8 +1,14 @@
 import { isAcervoEnabled } from './services/acervoFlag';
 import { TRAIL_STEP_COUNT } from './services/trail';
+import {
+  advance, FIRST_LEAD_IN_MS, isLastItem, itemPart, NEXT_LEAD_IN_MS, startQueue, withResult,
+  type PracticeQueue, type SessionItem, type SessionResult
+} from './services/practiceSession';
+import type { SessionMode } from './components/SessionScreen';
 import React, { lazy, Suspense, useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   Music,
+  ListChecks,
   Play,
   Route,
   Search,
@@ -71,6 +77,7 @@ import { useRoom } from './context/useRoom';
 
 const AppearanceScreen = lazy(() => import('./components/AppearanceScreen').then((module) => ({ default: module.AppearanceScreen })));
 const ProgressScreen = lazy(() => import('./components/ProgressScreen').then((module) => ({ default: module.ProgressScreen })));
+const SessionScreen = lazy(() => import('./components/SessionScreen').then((module) => ({ default: module.SessionScreen })));
 const TrailScreen = lazy(() => import('./components/TrailScreen').then((module) => ({ default: module.TrailScreen })));
 const RepertoireLibrary = lazy(() => import('./components/RepertoireLibrary').then((module) => ({ default: module.RepertoireLibrary })));
 
@@ -229,6 +236,9 @@ const AppContent: React.FC = () => {
   const [isAppearanceOpen, setIsAppearanceOpen] = useState(false);
   const [isProgressOpen, setIsProgressOpen] = useState(false);
   const [isTrailOpen, setIsTrailOpen] = useState(false);
+  const [isSessionOpen, setIsSessionOpen] = useState(false);
+  const [sessionPreset, setSessionPreset] = useState<{ mode?: SessionMode; stageId?: string }>({});
+  const [queue, setQueue] = useState<PracticeQueue | null>(null);
   const [libraryView, setLibraryView] = useState<LibraryView>({ categoryId: EXERCISE_CATEGORIES[0].id, key: 9, patterns: {} });
   const [onlineSession, setOnlineSession] = useState<{ part: GamePart; partnerName: string; startAtMs: number; sessionKey: number } | null>(null);
 
@@ -260,8 +270,8 @@ const AppContent: React.FC = () => {
 
   const screen = onlineSession ? 'sala' : isFreePlayOpen ? 'play_free' : session ? 'jogo' : 'inicio';
   const isPlayScreen = screen !== 'inicio';
-  const isOnScreen = isPlayScreen || isLibraryOpen || isRepertoireOpen || isAppearanceOpen || isProgressOpen || isTrailOpen;
-  const isOverLibrary = isPlayScreen && (isLibraryOpen || isRepertoireOpen || isTrailOpen);
+  const isOnScreen = isPlayScreen || isLibraryOpen || isRepertoireOpen || isAppearanceOpen || isProgressOpen || isTrailOpen || isSessionOpen;
+  const isOverLibrary = isPlayScreen && (isLibraryOpen || isRepertoireOpen || isTrailOpen || isSessionOpen);
 
   // Duo is a session mode: leaving it restores the input channel saved in the preferences
   const soloChannelMode = () => channelMode === 'duo' ? readPreferences().channelMode : channelMode;
@@ -290,6 +300,7 @@ const AppContent: React.FC = () => {
   const leaveGame = () => {
     songSelectionVersion.current += 1;
     if (session?.mode === 'duo') exitDuoAudio();
+    setQueue(null);
     setSession(null);
   };
 
@@ -307,6 +318,7 @@ const AppContent: React.FC = () => {
   // Each layer closes only its own screen: a jump back in the browser's list can close both in one go
   const closeBottomScreen = useEffectEvent(() => {
     if (isProgressOpen) setIsProgressOpen(false);
+    else if (isSessionOpen) setIsSessionOpen(false);
     else if (isTrailOpen) setIsTrailOpen(false);
     else if (isAppearanceOpen) setIsAppearanceOpen(false);
     else if (isRepertoireOpen) setIsRepertoireOpen(false);
@@ -348,6 +360,38 @@ const AppContent: React.FC = () => {
   const handleOpenAppearance = () => setIsAppearanceOpen(true);
 
   const handleOpenProgress = () => setIsProgressOpen(true);
+
+  const handleOpenSession = (preset: { mode?: SessionMode; stageId?: string } = {}) => {
+    songSelectionVersion.current += 1;
+    setRestoreError(null);
+    setSessionPreset(preset);
+    setIsSessionOpen(true);
+  };
+
+  // A practice session plays its exercises one after the other: the queue says which, and each one is a solo game
+  const handleStartSession = (items: SessionItem[]) => {
+    const first = items.length > 0 ? itemPart(items[0]) : null;
+    if (!first) return;
+    songSelectionVersion.current += 1;
+    setRestoreError(null);
+    ensureSoloAudio();
+    setQueue(startQueue(items, Date.now()));
+    setSession(soloSession(first));
+  };
+
+  const handleSessionNext = () => {
+    if (!queue || isLastItem(queue)) return;
+    const advanced = advance(queue);
+    const part = itemPart(advanced.items[advanced.index]);
+    if (!part) return;
+    songSelectionVersion.current += 1;
+    setQueue(advanced);
+    setSession(soloSession(part));
+  };
+
+  const handleSessionResult = (result: SessionResult) => setQueue((current) => (current ? withResult(current, result) : current));
+
+  const handleEndSession = () => leaveGame();
 
   const handleOpenTrail = () => {
     songSelectionVersion.current += 1;
@@ -502,7 +546,7 @@ const AppContent: React.FC = () => {
   };
 
   const latencyAdjustMs = Math.round(((audioOptions.inputLatencySamples + audioOptions.outputLatencySamples) / (audioEngine.getEngineInfo()?.sampleRate ?? 48000)) * 1000);
-  const pageName = onlineSession ? 'Dupla online' : isFreePlayOpen ? 'Play Free' : session ? sessionParts[0].tab.title : isProgressOpen ? 'Meu progresso' : isTrailOpen ? 'Trilha de evolução' : isAppearanceOpen ? 'Aparência' : isRepertoireOpen ? 'Repertório do PRGB' : isLibraryOpen ? 'Exercícios' : legalRoute?.document.title;
+  const pageName = onlineSession ? 'Dupla online' : isFreePlayOpen ? 'Play Free' : session ? sessionParts[0].tab.title : isProgressOpen ? 'Meu progresso' : isSessionOpen ? 'Sessão de prática' : isTrailOpen ? 'Trilha de evolução' : isAppearanceOpen ? 'Aparência' : isRepertoireOpen ? 'Repertório do PRGB' : isLibraryOpen ? 'Exercícios' : legalRoute?.document.title;
 
   return (
     <div className="h-dvh w-full overflow-hidden bg-ink-950 font-sans text-ink-100">
@@ -583,15 +627,28 @@ const AppContent: React.FC = () => {
             onOpenAmpRack={() => setIsAmpRackOpen(true)}
             rankedStart={session.mode === 'solo' ? session.rankedStart : null}
             onRankedTabOutdated={session.mode === 'solo' ? () => reloadOutdatedPart(session) : undefined}
+            session={session.mode === 'solo' && queue ? {
+              queue,
+              autoStart: queue.index > 0,
+              leadInMs: queue.index > 0 ? NEXT_LEAD_IN_MS : FIRST_LEAD_IN_MS,
+              onRunFinished: handleSessionResult,
+              onNext: handleSessionNext,
+              onEnd: handleEndSession
+            } : null}
           />
         </>
       ) : isProgressOpen ? (
         <Suspense fallback={<p role="status" className="p-5">Carregando progresso…</p>}>
           <ProgressScreen onExit={() => setIsProgressOpen(false)} onOpenExercises={() => { setIsProgressOpen(false); handleOpenLibrary(); }} />
         </Suspense>
+      ) : isSessionOpen ? (
+        <Suspense fallback={<p role="status" className="p-5">Carregando as sessões…</p>}>
+          <SessionScreen onStart={handleStartSession} onExit={() => setIsSessionOpen(false)} initialMode={sessionPreset.mode} initialStageId={sessionPreset.stageId} />
+        </Suspense>
       ) : isTrailOpen ? (
         <Suspense fallback={<p role="status" className="p-5">Carregando a trilha…</p>}>
-          <TrailScreen onPlay={handlePlayExercise} onExit={() => setIsTrailOpen(false)} />
+          <TrailScreen onPlay={handlePlayExercise} onExit={() => setIsTrailOpen(false)}
+            onSession={(stageId) => handleOpenSession(stageId ? { mode: 'etapa', stageId } : { mode: 'tempo' })} />
         </Suspense>
       ) : isAppearanceOpen ? (
         <Suspense fallback={<p role="status" className="p-5">Carregando aparência…</p>}>
@@ -602,7 +659,7 @@ const AppContent: React.FC = () => {
           <RepertoireLibrary onPlay={handlePlayRepertoire} onSearch={handleOpenSearch} onExit={() => setIsRepertoireOpen(false)} />
         </Suspense>
       ) : isLibraryOpen ? (
-        <ExerciseLibrary view={libraryView} onViewChange={setLibraryView} onPlay={handlePlayExercise} onExit={() => setIsLibraryOpen(false)} />
+        <ExerciseLibrary view={libraryView} onViewChange={setLibraryView} onPlay={handlePlayExercise} onExit={() => setIsLibraryOpen(false)} onSession={() => handleOpenSession({ mode: 'minha' })} />
       ) : legalRoute ? (
         <LegalPage document={legalRoute.document} sectionId={legalRoute.sectionId} />
       ) : (
@@ -687,8 +744,9 @@ const AppContent: React.FC = () => {
               <h2 id="pick-title" className="font-display text-2xl font-bold tracking-tight">O que você quer tocar?</h2>
               <p className="mt-1 text-sm text-ink-300">Siga uma ordem sugerida ou escolha por conta própria.</p>
               <div className={`mt-4 grid gap-3 ${isAcervoEnabled() ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
-                <div className="md:col-span-full">
+                <div className="grid gap-3 md:col-span-full md:grid-cols-2">
                   <ActionRow icon={Route} tone={AMP_TONE} title="Trilha de evolução" description={`${TRAIL_STEP_COUNT} exercícios em ordem, do primeiro som ao material mais difícil. Nada fica bloqueado.`} onClick={handleOpenTrail} />
+                  <ActionRow icon={ListChecks} tone={SIGNAL_TONE} title="Sessão de prática" description="Vários exercícios em sequência, por etapa, por tempo ou montada por você." onClick={() => handleOpenSession()} />
                 </div>
                 <ActionRow icon={Dumbbell} tone={AMP_TONE} title="Exercícios" description="Escalas, acordes e técnicas, em qualquer tom. Funciona sem internet." onClick={() => handleOpenLibrary()} />
                 <ActionRow icon={Music} tone={SIGNAL_TONE} title="Repertório do PRGB" description="Peças de domínio público e originais, com ranking nas liberadas." onClick={handleOpenRepertoire} />

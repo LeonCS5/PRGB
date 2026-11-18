@@ -14,13 +14,16 @@ import {
   Trophy,
   UserRound,
   MessageSquareWarning,
-  Repeat
+  Repeat,
+  SkipForward,
+  X
 } from 'lucide-react';
 import { BrandMark } from './BrandMark';
 import { GameMoreSheet } from './GameMoreSheet';
 import { ModalFrame } from './ModalFrame';
 import { DuoHud, LiveTuner, SoloHud } from './GameHud';
 import { ResultPanel } from './ResultPanel';
+import { SessionStrip } from './SessionStrip';
 import type { GameDevPreset } from './devScenes';
 import {
   buildNoteGraphics,
@@ -43,7 +46,7 @@ import type { NoteEvent } from '../services/tabsApi';
 import type { DetectedPitch, PlayerSlot } from '../services/audioEngine';
 import type { Challenge } from '../services/challenge';
 import { useAudioSession } from '../context/AudioSessionContext';
-import { DEFAULT_PLAYER_NAMES, type GamePart, type PersonalBestOutcome, type RankedStart, type RunSummary } from '../context/gameSession';
+import { DEFAULT_PLAYER_NAMES, type GamePart, type PersonalBestOutcome, type RankedStart, type RunSummary, type SessionRunProps } from '../context/gameSession';
 import { useRanking } from '../context/ranking';
 import type { RankedPhase } from '../context/rankedRun';
 import { useRankedRun } from '../context/useRankedRun';
@@ -98,6 +101,7 @@ interface PracticeGameProps {
   onRankedTabOutdated?: () => Promise<string | null>;
   devPreset?: GameDevPreset | null;
   online?: OnlineRun | null;
+  session?: SessionRunProps | null; // set while a practice session runs: solo exercises only
 }
 
 interface Lane {
@@ -151,6 +155,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   onRankedTabOutdated,
   devPreset = null,
   online = null,
+  session = null,
 }) => {
   const isOnline = online != null;
   const { audioEngine, getLatestPitch, isAudioRunning, startAudio, channelMode } = useAudioSession();
@@ -453,6 +458,8 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
       playedMs: playedMsRef.current
     }, Date.now());
     setRunSummary({ ...summary, personalBest, progress });
+    // The session keeps what this exercise earned, to show it at the end
+    if (!isDuo) session?.onRunFinished({ title: lanes[0].part.tab.title, stars: progress?.report.stars ?? 0, accuracy: accuracyPercent(finalScores[0]), score: finalScores[0].score });
     // The server can only see a run that was too fast, so a slower one must never be sent
     if (!isDuo) ranked.controller.submitRun(finalScores[0], { jumped, speedChanged: speedChanged || speed !== 1 });
   };
@@ -708,11 +715,18 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   // Only a run from the very start counts in: resuming, or starting after a seek, goes straight on
   const startPlaying = (rate = speed) => {
     if (!runStartedRef.current && positionRef.current === 0) {
-      positionRef.current = -LEAD_IN_MS * rate;
+      positionRef.current = -(session?.leadInMs ?? LEAD_IN_MS) * rate;
       setCurrentTimeMs(positionRef.current);
     }
     setIsPlaying(true);
   };
+
+  // Every exercise of a session after the first starts by itself, with the shorter count-in
+  const shouldAutoStart = useRef(session?.autoStart ?? false);
+  const autoStart = useEffectEvent(() => startPlaying());
+  useEffect(() => {
+    if (shouldAutoStart.current) autoStart();
+  }, []);
 
   const skipLeadIn = () => {
     positionRef.current = 0;
@@ -842,7 +856,16 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
           {isDuo
             ? <div className="hidden shrink-0 gap-2 sm:flex"><LiveTuner player={0} label="J1" /><LiveTuner player={1} label="J2" /></div>
             : <LiveTuner />}
-          {!isOnline && (
+          {session && (
+            <>
+              <span className="hidden shrink-0 font-mono text-xs text-signal-300 sm:inline">Sessão {session.queue.index + 1}/{session.queue.items.length}</span>
+              {session.queue.index < session.queue.items.length - 1 && (
+                <button onClick={session.onNext} aria-label="Pular para o próximo exercício da sessão" className={toolClass}><SkipForward size={17} /><span className="hidden lg:inline">Pular</span></button>
+              )}
+              <button onClick={session.onEnd} aria-label="Encerrar a sessão" className={toolClass}><X size={17} /><span className="hidden lg:inline">Encerrar</span></button>
+            </>
+          )}
+          {!isOnline && !session && (
             <button onClick={onOpenSearch} aria-label={changeLabel} className={toolClass}><Search size={17} /><span className="hidden lg:inline">{changeLabel}</span></button>
           )}
         </div>
@@ -903,9 +926,10 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
         )}
       </footer>
       {runSummary && <ModalFrame titleId="practice-result" onClose={() => resetRun(false)} selfOpened className={(isDuo ? 'max-w-xl' : 'max-w-md') + ' overflow-y-auto text-center'}>
+        {session && <SessionStrip queue={session.queue} onNext={session.onNext} onEnd={session.onEnd} />}
         <ResultPanel titleId="practice-result" summary={runSummary} parts={lanes.map((lane) => lane.part)} names={isDuo ? names : null}
           challenge={challenge} initialShareOpen={devPreset?.shareOpen} ranked={ranked.submission} onRetryRanked={ranked.controller.retrySubmission}
-          onPlayAgain={restartRun} onChooseSong={() => { resetRun(false); onOpenSearch(); }} />
+          onPlayAgain={restartRun} onChooseSong={() => { resetRun(false); if (session) session.onEnd(); else onOpenSearch(); }} />
       </ModalFrame>}
     </div>
   );

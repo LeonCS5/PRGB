@@ -3,6 +3,7 @@ import type { Challenge } from '../services/challenge';
 import type { RunResult } from '../services/records';
 import type { ScoreState } from '../services/scoring';
 import type { NormalizedSongTab } from '../services/tabsApi';
+import type { PracticeQueue, SessionResult } from '../services/practiceSession';
 import type { RunProgress } from './progressStore';
 
 // A loaded part of a song. The tab doesn't carry its source partId, which records and challenges need,
@@ -33,6 +34,16 @@ export interface DuoSession {
 }
 
 export type GameSession = SoloSession | DuoSession;
+
+// What the game needs to take part in a practice session: the queue, how to start, and how to move on
+export interface SessionRunProps {
+  queue: PracticeQueue;
+  autoStart: boolean; // every exercise after the first starts by itself
+  leadInMs: number; // the count-in before the first note
+  onRunFinished: (result: SessionResult) => void;
+  onNext: () => void;
+  onEnd: () => void;
+}
 
 export interface PersonalBestOutcome {
   isNew: boolean;

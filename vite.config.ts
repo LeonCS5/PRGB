@@ -23,7 +23,7 @@ export default defineConfig({
       // open them shouldn't download them, and the game doesn't need them offline. The exception is our own lazy
       // content: the repertoire screen, its pieces (src/content/songs) and the appearance screen. They are
       // recognised by source path, so a new piece or a renamed chunk is covered without touching this list.
-      const ownLazyContent = /[\\/]src[\\/](content[\\/]songs[\\/]|components[\\/](RepertoireLibrary|AppearanceScreen|ProgressScreen|TrailScreen|appearance[\\/]|progress[\\/]))/
+      const ownLazyContent = /[\\/]src[\\/](content[\\/]songs[\\/]|components[\\/](RepertoireLibrary|AppearanceScreen|ProgressScreen|TrailScreen|SessionScreen|SessionStrip|appearance[\\/]|progress[\\/]))/
       const assets = Object.values(bundle).filter((file) => (
         file.fileName.startsWith('assets/') && !file.fileName.startsWith('assets/nam-')
         && !(file.type === 'chunk' && file.isDynamicEntry && !(file.facadeModuleId && ownLazyContent.test(file.facadeModuleId)))

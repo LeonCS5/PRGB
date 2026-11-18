@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Play, Route, Star } from 'lucide-react';
+import { ArrowLeft, ListChecks, Play, Route, Star } from 'lucide-react';
 import { LEVEL_NAMES, type Exercise, type ExercisePattern } from '../services/exercises';
 import { loadProgress, MAX_STARS } from '../services/progress';
 import { summarizeTrail, TRAIL_STEP_COUNT, type ResolvedStep, type StageSummary, type TrailSummary } from '../services/trail';
@@ -12,6 +12,7 @@ export interface TrailViewProps {
   summary: TrailSummary;
   onPlay: (exercise: Exercise, key: number, pattern?: ExercisePattern) => void;
   onExit: () => void;
+  onSession?: (stageId?: string) => void; // opens the session builder, on a stage when one is given
 }
 
 const card = 'rounded-2xl border border-ink-700 bg-ink-900';
@@ -56,7 +57,7 @@ const StepRow: React.FC<{ item: StageSummary['steps'][number]; isNext: boolean; 
   );
 };
 
-export const TrailView: React.FC<TrailViewProps> = ({ summary, onPlay, onExit }) => {
+export const TrailView: React.FC<TrailViewProps> = ({ summary, onPlay, onExit, onSession }) => {
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => { heading.current?.focus(); }, []);
   const { next, withStars, totalStars, maxStars } = summary;
@@ -92,6 +93,11 @@ export const TrailView: React.FC<TrailViewProps> = ({ summary, onPlay, onExit })
           ) : (
             <p className="mt-4 text-sm text-ink-200">Você já tem estrela em todos os exercícios da trilha. Volte a qualquer um deles para melhorar a precisão.</p>
           )}
+          {onSession && (
+            <button type="button" onClick={() => onSession()} className="mt-4 flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-ink-600 px-4 text-sm font-semibold text-ink-100 hover:bg-ink-800">
+              <ListChecks size={16} className="text-signal-300" aria-hidden="true" /> Montar uma sessão de prática
+            </button>
+          )}
         </section>
 
         <div className="mt-5 grid gap-3">
@@ -106,6 +112,11 @@ export const TrailView: React.FC<TrailViewProps> = ({ summary, onPlay, onExit })
               </summary>
               <div className="px-4 pb-4">
                 <p className="text-sm leading-6 text-ink-300">{item.stage.stage.goal}</p>
+                {onSession && (
+                  <button type="button" onClick={() => onSession(item.stage.stage.id)} className="mt-3 flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-signal-500/40 px-3 text-sm font-semibold text-signal-300 hover:bg-signal-500/10">
+                    <ListChecks size={16} aria-hidden="true" /> Tocar a etapa em sequência
+                  </button>
+                )}
                 <ol aria-label={`Exercícios da etapa ${stageIndex + 1}`} className="mt-3 grid gap-2">
                   {item.steps.map((row) => <StepRow key={row.step.index} item={row} isNext={next?.index === row.step.index} onPlay={onPlay} />)}
                 </ol>
@@ -121,9 +132,10 @@ export const TrailView: React.FC<TrailViewProps> = ({ summary, onPlay, onExit })
 export interface TrailScreenProps {
   onPlay: TrailViewProps['onPlay'];
   onExit: () => void;
+  onSession?: TrailViewProps['onSession'];
 }
 
-export const TrailScreen: React.FC<TrailScreenProps> = ({ onPlay, onExit }) => {
+export const TrailScreen: React.FC<TrailScreenProps> = ({ onPlay, onExit, onSession }) => {
   const [summary] = useState(() => summarizeTrail(loadProgress()));
-  return <TrailView summary={summary} onPlay={onPlay} onExit={onExit} />;
+  return <TrailView summary={summary} onPlay={onPlay} onExit={onExit} onSession={onSession} />;
 };

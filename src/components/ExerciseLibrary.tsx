@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { ArrowLeft, AudioWaveform, Compass, Drum, Flame, Grid3x3, Hand, Info, Pentagon, Play, Repeat, TrendingUp, type LucideIcon } from 'lucide-react';
+import { ArrowLeft, AudioWaveform, Compass, ListChecks, Drum, Flame, Grid3x3, Hand, Info, Pentagon, Play, Repeat, TrendingUp, type LucideIcon } from 'lucide-react';
 import { BrandMark } from './BrandMark';
 import {
   EXERCISE_CATEGORIES,
@@ -27,6 +27,7 @@ export interface ExerciseLibraryProps {
   onViewChange: (view: LibraryView) => void;
   onPlay: (exercise: Exercise, key: number, pattern?: ExercisePattern) => void;
   onExit: () => void;
+  onSession?: () => void; // opens the practice session builder
 }
 
 const CATEGORY_ICONS: Record<ExerciseCategoryId, LucideIcon> = {
@@ -133,7 +134,7 @@ const Controls: React.FC<{ category: ExerciseCategory; view: LibraryView; onView
   );
 };
 
-export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ view, onViewChange, onPlay, onExit }) => {
+export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ view, onViewChange, onPlay, onExit, onSession }) => {
   const category = EXERCISE_CATEGORIES.find((item) => item.id === view.categoryId) ?? EXERCISE_CATEGORIES[0];
   const pattern = view.patterns[category.id] ?? category.patterns[0];
   const hasKeys = category.groups.some((group) => group.exercises.some((exercise) => exercise.keyed));
@@ -146,6 +147,11 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ view, onViewCh
             <ArrowLeft size={18} aria-hidden="true" /><BrandMark size={28} className="[&>span]:hidden [&>span]:text-lg sm:[&>span]:inline" />
           </button>
           <h1 className="font-display text-xl font-bold tracking-tight">Exercícios</h1>
+          {onSession && (
+            <button type="button" onClick={onSession} className="ml-auto flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-ink-600 px-3 text-sm font-semibold text-ink-100 hover:bg-ink-800">
+              <ListChecks size={16} className="text-signal-300" aria-hidden="true" /><span>Montar sessão</span>
+            </button>
+          )}
         </div>
       </header>
 
