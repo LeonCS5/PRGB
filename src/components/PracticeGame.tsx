@@ -457,7 +457,9 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
       laps,
       playedMs: playedMsRef.current
     }, Date.now());
-    setRunSummary({ ...summary, personalBest, progress });
+    // In a session only the last exercise shows a result: the others hand over to the next one at once
+    const hasNextInSession = !isDuo && session !== null && session.queue.index < session.queue.items.length - 1;
+    if (!hasNextInSession) setRunSummary({ ...summary, personalBest, progress });
     // The session keeps what this exercise earned, to show it at the end
     if (!isDuo) session?.onRunFinished({ title: lanes[0].part.tab.title, stars: progress?.report.stars ?? 0, accuracy: accuracyPercent(finalScores[0]), score: finalScores[0].score });
     // The server can only see a run that was too fast, so a slower one must never be sent
@@ -929,7 +931,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
         )}
       </footer>
       {runSummary && <ModalFrame titleId="practice-result" onClose={() => resetRun(false)} selfOpened className={(isDuo ? 'max-w-xl' : 'max-w-md') + ' overflow-y-auto text-center'}>
-        {session && <SessionStrip queue={session.queue} onNext={session.onNext} onEnd={session.onEnd} />}
+        {session && <SessionStrip queue={session.queue} onEnd={session.onEnd} />}
         <ResultPanel titleId="practice-result" summary={runSummary} parts={lanes.map((lane) => lane.part)} names={isDuo ? names : null}
           challenge={challenge} initialShareOpen={devPreset?.shareOpen} ranked={ranked.submission} onRetryRanked={ranked.controller.retrySubmission}
           onPlayAgain={restartRun} onChooseSong={() => { resetRun(false); if (session) session.onEnd(); else onOpenSearch(); }} />

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ArrowLeft, AudioWaveform, Compass, ListChecks, Drum, Flame, Grid3x3, Hand, Info, Pentagon, Play, Repeat, TrendingUp, type LucideIcon } from 'lucide-react';
 import { BrandMark } from './BrandMark';
 import {
@@ -15,7 +15,7 @@ import {
 } from '../services/exercises';
 import { KEYS } from '../services/musicTheory';
 import { getPersonalBest } from '../services/records';
-import { expandItem, formatMinutes, sessionDurationMs, type SessionItem } from '../services/practiceSession';
+import { expandItem, formatMinutes, KEY_CYCLES, sessionDurationMs, type KeyCycle, type SessionItem } from '../services/practiceSession';
 
 export interface LibraryView {
   categoryId: ExerciseCategoryId;
@@ -89,9 +89,10 @@ interface ExerciseCardProps {
   showsKey: boolean; // the category has keys, so a card without them must say so
   onPlay: () => void;
   onPlayAll?: (items: SessionItem[]) => void;
+  keys: KeyCycle; // how many keys "play all" goes through
 }
 
-const ExerciseCard: React.FC<ExerciseCardProps> = ({ exercise, keyIndex, pattern, showsKey, onPlay, onPlayAll }) => {
+const ExerciseCard: React.FC<ExerciseCardProps> = ({ exercise, keyIndex, pattern, showsKey, onPlay, onPlayAll, keys }) => {
   const { seconds, best } = useMemo(() => {
     const tab = buildExerciseTab(exercise, keyIndex, pattern);
     return {
@@ -100,8 +101,8 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({ exercise, keyIndex, pattern
     };
   }, [exercise, keyIndex, pattern]);
 
-  // Every key (a fourth apart) and every way to play it, one after the other
-  const variations = useMemo(() => expandItem({ code: exercise.code, key: keyIndex }, { keys: 12, allPatterns: true }), [exercise, keyIndex]);
+  // The chosen number of keys (a fourth apart) and every way to play each, one after the other
+  const variations = useMemo(() => expandItem({ code: exercise.code, key: keyIndex }, { keys, allPatterns: true }), [exercise, keyIndex, keys]);
   const variationsMinutes = useMemo(() => formatMinutes(sessionDurationMs(variations)), [variations]);
 
   return (
@@ -131,7 +132,9 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({ exercise, keyIndex, pattern
   );
 };
 
-const Controls: React.FC<{ category: ExerciseCategory; view: LibraryView; onViewChange: (view: LibraryView) => void; pattern?: ExercisePattern }> = ({ category, view, onViewChange, pattern }) => {
+const KEY_CYCLE_LABELS: Record<KeyCycle, string> = { 1: 'Só este tom', 3: '3 tons', 6: '6 tons', 12: '12 tons' };
+
+const Controls: React.FC<{ category: ExerciseCategory; view: LibraryView; onViewChange: (view: LibraryView) => void; pattern?: ExercisePattern; keys?: KeyCycle; onKeysChange?: (keys: KeyCycle) => void }> = ({ category, view, onViewChange, pattern, keys, onKeysChange }) => {
   const hasKeys = category.groups.some((group) => group.exercises.some((exercise) => exercise.keyed));
   if (!hasKeys && category.patterns.length === 0) return null;
   return (
@@ -140,6 +143,11 @@ const Controls: React.FC<{ category: ExerciseCategory; view: LibraryView; onView
         <ChipGroup legend="Tom" name="exercise-key" value={String(view.key)}
           options={KEYS.map((name, index) => ({ value: String(index), label: name }))}
           onChange={(value) => onViewChange({ ...view, key: Number(value) })} />
+      )}
+      {hasKeys && keys !== undefined && onKeysChange && (
+        <ChipGroup legend="Tons ao tocar todas as variações" name="exercise-cycle" value={String(keys)}
+          options={KEY_CYCLES.map((count) => ({ value: String(count), label: KEY_CYCLE_LABELS[count] }))}
+          onChange={(value) => onKeysChange(Number(value) as KeyCycle)} />
       )}
       {category.patterns.length > 0 && pattern && (
         <ChipGroup legend="Como tocar" name="exercise-pattern" value={pattern}
@@ -154,6 +162,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ view, onViewCh
   const category = EXERCISE_CATEGORIES.find((item) => item.id === view.categoryId) ?? EXERCISE_CATEGORIES[0];
   const pattern = view.patterns[category.id] ?? category.patterns[0];
   const hasKeys = category.groups.some((group) => group.exercises.some((exercise) => exercise.keyed));
+  const [keys, setKeys] = useState<KeyCycle>(3);
 
   return (
     <div className="h-full overflow-y-auto overflow-x-hidden">
@@ -198,14 +207,14 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ view, onViewCh
           {category.note && (
             <p className="mt-3 flex max-w-2xl gap-2 text-sm leading-6 text-signal-300"><Info size={16} className="mt-1 shrink-0" aria-hidden="true" /> {category.note}</p>
           )}
-          <Controls category={category} view={view} onViewChange={onViewChange} pattern={pattern} />
+          <Controls category={category} view={view} onViewChange={onViewChange} pattern={pattern} keys={onPlayAll ? keys : undefined} onKeysChange={onPlayAll ? setKeys : undefined} />
           {category.groups.map((group) => (
             <section key={group.title} aria-label={group.title} className="mt-8">
               <h3 className="font-display text-lg font-bold">{group.title}</h3>
               <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {group.exercises.map((exercise) => (
                   <ExerciseCard key={exercise.code} exercise={exercise} keyIndex={view.key} pattern={pattern} showsKey={hasKeys}
-                    onPlay={() => onPlay(exercise, view.key, pattern)} onPlayAll={onPlayAll} />
+                    onPlay={() => onPlay(exercise, view.key, pattern)} onPlayAll={onPlayAll} keys={keys} />
                 ))}
               </div>
             </section>

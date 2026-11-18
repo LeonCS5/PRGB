@@ -5,9 +5,9 @@ Um exercício dura de uns 10 a 45 segundos: foi feito para uma volta completa, e
 ## Como funciona
 
 - Uma sessão é uma fila de itens `{ code, key, pattern? }`: um exercício, um tom e, onde há mais de um, um jeito de tocar. Cada item vira uma partida solo comum, então estrelas, recordes pessoais e o ensaio da semana funcionam como sempre. **Nada novo é gravado no navegador**: a fila vive na tela enquanto a sessão dura. Sessões não valem para o ranking.
-- Ao terminar um exercício aparece o resultado de sempre, com uma faixa em cima: "A seguir: X", uma contagem de 10 s (Seguir agora, Pausar contagem, Encerrar sessão) e uma barra do andamento. O exercício seguinte começa sozinho, com contagem de 3 s em vez de 5 s.
+- Ao terminar um exercício, o seguinte começa na hora, com contagem de 3 s em vez de 5 s: nenhum resultado nem menu no meio. Estrelas e recordes continuam sendo gravados a cada exercício; os resultados só aparecem no fim.
 - Durante o jogo o cabeçalho mostra "Sessão 2/8", com Pular e Encerrar. Voltar (a seta ou o botão do navegador) encerra a sessão.
-- No último exercício, a faixa vira um resumo: exercícios feitos, tempo, estrelas e precisão média. Tocar de novo o mesmo exercício substitui o resultado dele, em vez de contar duas vezes.
+- No último exercício, o resultado de sempre vem com uma faixa de resumo: exercícios feitos, tempo, estrelas, precisão média e o resultado de cada exercício. Tocar de novo o mesmo exercício substitui o resultado dele, em vez de contar duas vezes.
 
 ## Três jeitos de montar
 

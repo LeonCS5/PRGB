@@ -390,7 +390,19 @@ const AppContent: React.FC = () => {
     setSession(soloSession(part));
   };
 
-  const handleSessionResult = (result: SessionResult) => setQueue((current) => (current ? withResult(current, result) : current));
+  // A finished exercise goes straight to the next one: the results wait for the end of the session
+  const handleSessionResult = (result: SessionResult) => {
+    if (!queue) return;
+    const recorded = withResult(queue, result);
+    const part = isLastItem(recorded) ? null : itemPart(recorded.items[recorded.index + 1]);
+    if (!part) {
+      setQueue(recorded);
+      return;
+    }
+    songSelectionVersion.current += 1;
+    setQueue(advance(recorded));
+    setSession(soloSession(part));
+  };
 
   const handleEndSession = () => leaveGame();
 

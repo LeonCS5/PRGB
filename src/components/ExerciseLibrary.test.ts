@@ -20,6 +20,13 @@ describe('ExerciseLibrary: play every variation', () => {
     expect(html).toMatch(/\d+ min/);
   });
 
+  it('lets the player choose how many keys the sequence goes through', () => {
+    const html = render({ categoryId: scales!.id, key: 0, patterns: {} }, true);
+    for (const text of ['Tons ao tocar todas as variações', 'Só este tom', '3 tons', '6 tons', '12 tons']) expect(html).toContain(text);
+    expect(html).toMatch(/<input[^>]*name="exercise-cycle"(?=[^>]*value="3")(?=[^>]*checked)/);
+    expect(html).toContain(`Tocar as ${scales!.patterns.length * 3} variações em sequência`);
+  });
+
   it('has no such button when the caller does not handle it', () => {
     const html = render({ categoryId: scales!.id, key: 0, patterns: {} }, false);
     expect(html).not.toContain('variações em sequência');

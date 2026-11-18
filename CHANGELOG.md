@@ -4,6 +4,7 @@ O histórico detalhado, com dono e status de cada item, fica em [AGENTS.md](AGEN
 
 ## Rodada 18 — todas as variações de um exercício
 
+- Na sessão, um exercício vai direto para o próximo (contagem de 3 s), sem resultado nem menu no meio; os resultados aparecem no fim, com a lista de cada exercício. O botão de variações da biblioteca tem escolha de tons: só este, 3, 6 ou 12 (padrão 3).
 - Cada cartão da biblioteca de exercícios ganhou "Tocar as N variações em sequência": os 12 tons (de quarta em quarta, a partir do tom escolhido) e todos os jeitos de tocar, um depois do outro, sem voltar ao menu. Usa a sessão de prática; só aparece quando o exercício tem mais de uma variação.
 
 ## Rodada 17 — primeira carga menor e ranking automático

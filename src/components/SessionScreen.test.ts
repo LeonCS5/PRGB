@@ -57,40 +57,30 @@ describe('SessionView', () => {
 
 describe('SessionStrip', () => {
   const items: SessionItem[] = [{ code: 188, key: 0 }, { code: 10, key: 0 }, { code: 60, key: 7 }];
-  const strip = (queue: ReturnType<typeof startQueue>): string => renderToStaticMarkup(createElement(SessionStrip, { queue, onNext: noop, onEnd: noop }));
-
-  it('in the middle of a session: where it is, what comes next, and how to go on or stop', () => {
-    const html = strip(startQueue(items, NOW));
-    expect(html).toContain('Sessão · exercício 1 de 3');
-    expect(html).toContain('A seguir: Aranha');
-    expect(html).toContain('Seguir agora');
-    expect(html).toContain('Pausar contagem');
-    expect(html).toContain('Encerrar sessão');
-    expect(html).toContain('role="progressbar"');
-    expect(html).toContain('aria-valuenow="1"');
-    expect(html).toContain('Começa em');
-  });
-
-  it('names the next exercise with its key', () => {
-    expect(strip(advance(startQueue(items, NOW)))).toContain('A seguir: Escala maior em G');
-  });
-
-  it('at the end: closes the session with what was played, and offers no next exercise', () => {
+  const strip = (queue: ReturnType<typeof startQueue>): string => renderToStaticMarkup(createElement(SessionStrip, { queue, onEnd: noop }));
+  const finished = () => {
     let queue = startQueue(items, NOW);
-    queue = withResult(queue, { title: 'a', stars: 3, accuracy: 98, score: 1 });
-    queue = withResult(advance(queue), { title: 'b', stars: 1, accuracy: 72, score: 1 });
-    queue = withResult(advance(queue), { title: 'c', stars: 2, accuracy: 90, score: 1 });
-    const html = strip(queue);
+    queue = withResult(queue, { title: 'Cordas soltas', stars: 3, accuracy: 98, score: 1 });
+    queue = withResult(advance(queue), { title: 'Aranha', stars: 1, accuracy: 72, score: 1 });
+    return withResult(advance(queue), { title: 'Escala maior em G', stars: 2, accuracy: 90, score: 1 });
+  };
+
+  it('closes the session with what was played, and the result of each exercise', () => {
+    const html = strip(finished());
     expect(html).toContain('Sessão concluída');
     expect(html).toContain('3 de 3 exercícios');
     expect(html).toContain('6 de 9 estrelas');
     expect(html).toContain('precisão média 87%');
     expect(html).toContain('Terminar sessão');
-    expect(html).not.toContain('A seguir');
-    expect(html).not.toContain('Seguir agora');
+    for (const text of ['Cordas soltas', 'Aranha', 'Escala maior em G', '3★ · 98%']) expect(html).toContain(text);
+  });
+
+  it('has no count-down or next-exercise prompt: exercises go straight into each other', () => {
+    const html = strip(finished());
+    for (const text of ['A seguir', 'Seguir agora', 'Pausar contagem', 'Começa em']) expect(html).not.toContain(text);
   });
 
   it('never talks about loss, urgency or lack', () => {
-    expect(textOf(strip(startQueue(items, NOW)))).not.toMatch(FORBIDDEN);
+    expect(textOf(strip(finished()))).not.toMatch(FORBIDDEN);
   });
 });

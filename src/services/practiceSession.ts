@@ -28,10 +28,9 @@ export const DEFAULT_EXPAND: ExpandOptions = { keys: 1, allPatterns: false };
 
 export const MAX_SESSION_ITEMS = 120;
 
-// Before each exercise the game counts in, and after each one the player sees the result before the next begins
+// Before each exercise the game counts in; one exercise goes straight into the next, with no result in between
 export const FIRST_LEAD_IN_MS = 5000;
 export const NEXT_LEAD_IN_MS = 3000;
-export const TRANSITION_MS = 10000;
 
 const FOURTH = 5;
 
@@ -69,11 +68,11 @@ export function itemDurationMs(item: SessionItem): number {
   return known;
 }
 
-/** About how long the whole session takes, count-ins and the pauses between exercises included. */
+/** About how long the whole session takes, count-ins included. */
 export function sessionDurationMs(items: readonly SessionItem[]): number {
   if (items.length === 0) return 0;
   const playing = items.reduce((total, item) => total + itemDurationMs(item), 0);
-  return playing + FIRST_LEAD_IN_MS + (items.length - 1) * (NEXT_LEAD_IN_MS + TRANSITION_MS);
+  return playing + FIRST_LEAD_IN_MS + (items.length - 1) * NEXT_LEAD_IN_MS;
 }
 
 export const formatMinutes = (ms: number): string => {
@@ -148,7 +147,7 @@ export function timedSession(minutes: SessionMinutes, progress: Progress, option
     let ms = 0;
     const add = (step: ResolvedStep): number => {
       const items = expandItem(toItem(step), options);
-      const cost = sessionDurationMs(items) - FIRST_LEAD_IN_MS + NEXT_LEAD_IN_MS + TRANSITION_MS;
+      const cost = sessionDurationMs(items) - FIRST_LEAD_IN_MS + NEXT_LEAD_IN_MS;
       chosen.push(...items);
       taken.add(step.index);
       ms += cost;
