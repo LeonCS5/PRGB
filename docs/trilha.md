@@ -4,19 +4,19 @@ A trilha é uma ordem sugerida para a biblioteca de exercícios: do primeiro som
 
 ## De onde veio a ordem
 
-A pesquisa foi uma leitura de programas de ensino de violão e guitarra e de guias de prática. **É uma síntese editorial, não equivale a nenhum exame**, e nenhuma das fontes valida a ordem exata das nossas 15 etapas. As fontes abertas que a embasam:
+A pesquisa foi uma leitura de programas de ensino de violão e guitarra e de guias de prática. **É uma síntese editorial, não equivale a nenhum exame**, e nenhuma das fontes valida a ordem exata das nossas 15 etapas. Fontes abertas consultadas em 2026-11-18, descritas sem nomes nem links de terceiros. Elas inspiraram a ordem, não a certificam nem têm relação com o PRGB:
 
 | Ideia aplicada | Fonte |
 |---|---|
-| Escalas e arpejos crescem de uma oitava para duas e depois para mais; a velocidade pedida sobe nos graus finais | [Trinity, violão acústico](https://www.trinitycollege.com/resource?id=8898) e [programa de graus de violão, ABRSM](https://www.abrsm.org/sites/default/files/2023-10/Guitar%20Practical%20Grade%20Syllabus_0.pdf) |
-| Escalas em intervalos (terças e sextas), cromática e sétimas dominantes só nos graus avançados | o mesmo programa da ABRSM |
-| Tríades primeiro, depois acordes de quatro notas, depois arpejos | [Berklee, aula particular nível 1](https://online.berklee.edu/courses/private-guitar-lesson-level-1) e [nível 2](https://online.berklee.edu/courses/private-guitar-lesson-level-2) |
-| Escalas de três notas por corda, com os padrões de dedos 1-2-3, 1-2-4 e 1-3-4 | [guia de aprendizado do braço](https://www.guitarlessonworld.com/?p=1785) |
-| Dois ou quatro acordes abertos bem treinados antes de ampliar; troca medida em trocas limpas por minuto (de 20 a 30 como meta de iniciante, 40 como confortável) | [guia de prática de acordes](https://guitargearfinder.com/lessons/how-to-practice-guitar-chords/) e [exercício de trocas em um minuto](https://guitarwiz.app/articles/one-minute-chord-changes-guitar/) |
-| Aumentar o andamento aos poucos (cerca de 5 bpm depois de várias repetições limpas), ou trocar a subdivisão sem mexer no metrônomo | [rajadas de velocidade](https://www.premierguitar.com/lessons/beginner/speed-burst-guitar) e [método com metrônomo](https://ericbeaty.com/the-best-method-for-increasing-picking-speed-using-a-metronome/) |
-| Palhetada econômica e saltos de corda como técnica à parte, depois do alternado | [exercícios de palhetada](https://www.guitarchalk.com/economy-picking-exercises/) |
+| Escalas e arpejos crescem de uma oitava para duas e depois para mais; a velocidade pedida sobe nos graus finais | programa de exames de violão acústico de uma instituição britânica e programa de graus de violão de outra instituição de exames |
+| Escalas em intervalos (terças e sextas), cromática e sétimas dominantes só nos graus avançados | o segundo desses programas |
+| Tríades primeiro, depois acordes de quatro notas, depois arpejos | ementa de aula particular, nível 1, de uma escola de música e nível 2 da mesma ementa |
+| Escalas de três notas por corda, com os padrões de dedos 1-2-3, 1-2-4 e 1-3-4 | guia de aprendizado do braço |
+| Dois ou quatro acordes abertos bem treinados antes de ampliar; troca medida em trocas limpas por minuto (de 20 a 30 como meta de iniciante, 40 como confortável) | guia de prática de acordes e exercício de trocas em um minuto |
+| Aumentar o andamento aos poucos (cerca de 5 bpm depois de várias repetições limpas), ou trocar a subdivisão sem mexer no metrônomo | artigo sobre rajadas de velocidade e artigo sobre ganho de velocidade com metrônomo |
+| Palhetada econômica e saltos de corda como técnica à parte, depois do alternado | exercícios de palhetada |
 
-O que **não** ficou provado: os números de "trocas por minuto" e de "bpm a cada rodada" são convenções de professores, sem estudo controlado nas fontes encontradas; o programa da RGT e o currículo completo da Berklee não foram obtidos em detalhe. Ninguém testou a ordem com alunos.
+O que **não** ficou provado: os números de "trocas por minuto" e de "bpm a cada rodada" são convenções de professores, sem estudo controlado nas fontes encontradas; o programa de uma entidade de exames de guitarra elétrica e a ementa completa da escola de música não foram obtidos em detalhe. Ninguém testou a ordem com alunos.
 
 ## Critérios
 
