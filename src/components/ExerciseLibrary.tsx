@@ -15,6 +15,7 @@ import {
 } from '../services/exercises';
 import { KEYS } from '../services/musicTheory';
 import { getPersonalBest } from '../services/records';
+import { expandItem, formatMinutes, sessionDurationMs, type SessionItem } from '../services/practiceSession';
 
 export interface LibraryView {
   categoryId: ExerciseCategoryId;
@@ -28,6 +29,7 @@ export interface ExerciseLibraryProps {
   onPlay: (exercise: Exercise, key: number, pattern?: ExercisePattern) => void;
   onExit: () => void;
   onSession?: () => void; // opens the practice session builder
+  onPlayAll?: (items: SessionItem[]) => void; // plays every variation of one exercise in a row
 }
 
 const CATEGORY_ICONS: Record<ExerciseCategoryId, LucideIcon> = {
@@ -86,9 +88,10 @@ interface ExerciseCardProps {
   pattern?: ExercisePattern;
   showsKey: boolean; // the category has keys, so a card without them must say so
   onPlay: () => void;
+  onPlayAll?: (items: SessionItem[]) => void;
 }
 
-const ExerciseCard: React.FC<ExerciseCardProps> = ({ exercise, keyIndex, pattern, showsKey, onPlay }) => {
+const ExerciseCard: React.FC<ExerciseCardProps> = ({ exercise, keyIndex, pattern, showsKey, onPlay, onPlayAll }) => {
   const { seconds, best } = useMemo(() => {
     const tab = buildExerciseTab(exercise, keyIndex, pattern);
     return {
@@ -97,9 +100,14 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({ exercise, keyIndex, pattern
     };
   }, [exercise, keyIndex, pattern]);
 
+  // Every key (a fourth apart) and every way to play it, one after the other
+  const variations = useMemo(() => expandItem({ code: exercise.code, key: keyIndex }, { keys: 12, allPatterns: true }), [exercise, keyIndex]);
+  const variationsMinutes = useMemo(() => formatMinutes(sessionDurationMs(variations)), [variations]);
+
   return (
+    <div className="flex flex-col">
     <button type="button" onClick={onPlay}
-      className="group flex min-h-32 w-full cursor-pointer flex-col rounded-2xl border border-ink-700 bg-ink-900 p-4 text-left transition hover:border-amp-500/60 hover:bg-ink-800">
+      className={'group flex min-h-32 w-full flex-1 cursor-pointer flex-col border border-ink-700 bg-ink-900 p-4 text-left transition hover:border-amp-500/60 hover:bg-ink-800 ' + (onPlayAll && variations.length > 1 ? 'rounded-t-2xl' : 'rounded-2xl')}>
       <span className="flex items-start justify-between gap-3">
         <span className="font-display text-base font-bold leading-snug text-ink-100">{exercise.title}</span>
         <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-ink-800 text-amp-300 transition group-hover:bg-amp-400 group-hover:text-ink-950"><Play size={15} className="fill-current" aria-hidden="true" /></span>
@@ -112,6 +120,14 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({ exercise, keyIndex, pattern
         {best !== null && <span className="font-mono text-amp-300">Recorde {formatPoints(best)}</span>}
       </span>
     </button>
+    {onPlayAll && variations.length > 1 && (
+      <button type="button" onClick={() => onPlayAll(variations)}
+        className="flex min-h-11 w-full cursor-pointer items-center justify-between gap-2 rounded-b-2xl border border-t-0 border-ink-700 bg-ink-900 px-4 text-left text-xs font-semibold text-signal-300 transition hover:border-signal-500/60 hover:bg-ink-800">
+        <span className="flex items-center gap-2"><ListChecks size={15} aria-hidden="true" /><span>Tocar as {variations.length} variações em sequência</span></span>
+        <span className="font-mono font-normal text-ink-300">{variationsMinutes}</span>
+      </button>
+    )}
+    </div>
   );
 };
 
@@ -134,7 +150,7 @@ const Controls: React.FC<{ category: ExerciseCategory; view: LibraryView; onView
   );
 };
 
-export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ view, onViewChange, onPlay, onExit, onSession }) => {
+export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ view, onViewChange, onPlay, onExit, onSession, onPlayAll }) => {
   const category = EXERCISE_CATEGORIES.find((item) => item.id === view.categoryId) ?? EXERCISE_CATEGORIES[0];
   const pattern = view.patterns[category.id] ?? category.patterns[0];
   const hasKeys = category.groups.some((group) => group.exercises.some((exercise) => exercise.keyed));
@@ -189,7 +205,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ view, onViewCh
               <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {group.exercises.map((exercise) => (
                   <ExerciseCard key={exercise.code} exercise={exercise} keyIndex={view.key} pattern={pattern} showsKey={hasKeys}
-                    onPlay={() => onPlay(exercise, view.key, pattern)} />
+                    onPlay={() => onPlay(exercise, view.key, pattern)} onPlayAll={onPlayAll} />
                 ))}
               </div>
             </section>

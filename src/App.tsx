@@ -664,7 +664,7 @@ const AppContent: React.FC = () => {
           <RepertoireLibrary onPlay={handlePlayRepertoire} onSearch={handleOpenSearch} onExit={() => setIsRepertoireOpen(false)} />
         </Suspense>
       ) : isLibraryOpen ? (
-        <ExerciseLibrary view={libraryView} onViewChange={setLibraryView} onPlay={handlePlayExercise} onExit={() => setIsLibraryOpen(false)} onSession={() => handleOpenSession({ mode: 'minha' })} />
+        <ExerciseLibrary view={libraryView} onViewChange={setLibraryView} onPlay={handlePlayExercise} onPlayAll={handleStartSession} onExit={() => setIsLibraryOpen(false)} onSession={() => handleOpenSession({ mode: 'minha' })} />
       ) : legalRoute ? (
         <LegalPage document={legalRoute.document} sectionId={legalRoute.sectionId} />
       ) : (

@@ -2,6 +2,10 @@
 
 O histórico detalhado, com dono e status de cada item, fica em [AGENTS.md](AGENTS.md) › Problemas Conhecidos. Este arquivo resume cada rodada. As versões passam a ser marcadas com tags (`v0.N.0`, uma por rodada) a partir da rodada 13.
 
+## Rodada 18 — todas as variações de um exercício
+
+- Cada cartão da biblioteca de exercícios ganhou "Tocar as N variações em sequência": os 12 tons (de quarta em quarta, a partir do tom escolhido) e todos os jeitos de tocar, um depois do outro, sem voltar ao menu. Usa a sessão de prática; só aparece quando o exercício tem mais de uma variação.
+
 ## Rodada 17 — primeira carga menor e ranking automático
 
 - O jogo, o Play Free, a dupla online e os modais (áudio, amp, busca, latência, relato, ranking) saíram do pacote de entrada e carregam ao abrir; seguem no cache offline. Primeira carga (entrada + React): 186 kB para 126 kB gzip. O orçamento agora limita a primeira carga (140 kB) e a entrada (75 kB); o total (340 kB) só vale para o cache offline.
