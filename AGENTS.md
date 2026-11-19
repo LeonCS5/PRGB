@@ -12,7 +12,7 @@
 Um app web (React + TypeScript + Vite) de prática de guitarra gratuito:
 - Captura áudio da guitarra real via interface USB (Web Audio API, 48kHz, sem processamento do OS)
 - Processa o som em tempo real com o motor **PRGB Amp** (amplificador + gabinete + reverb + noise gate)
-- Carrega tablaturas de 1M+ músicas de um provedor externo
+- Oferece exercícios, trilha de evolução, repertório próprio e sessões de prática; a busca em um acervo externo de tablaturas é um extra experimental
 - Renderiza um jogo de prática estilo "rails" em Canvas 2D com detecção de pitch e scoring
 
 **Sem servidor próprio.** O jogo roda 100% no navegador, sem conta e até offline. Ranking e salas online (opcionais, 18+, com consentimento) usam **Supabase** gerenciado na região São Paulo (Auth anônimo, RPC security definer, Edge Function, Realtime).
@@ -54,9 +54,9 @@ PRGB/
 │   │
 │   ├── content/
 │   │   ├── legal.ts                 # Cópia legal (LGPD): Política de Privacidade, Termos de Uso, LEGAL_VERSION, ConsentCopy
-│   │   └── songs/                   # Repertório próprio (domínio público): catálogo em index.ts e uma peça por arquivo, em chunk lazy
+│   │   └── songs/                   # Repertório próprio (domínio público): catálogo em index.ts (catalog-classic, catalog-folk, catalog-originals) e uma peça por arquivo (ode-a-alegria, greensleeves, minueto-em-sol, estrelinha, riffs e progressões originais), em chunk lazy
 │   │
-│   ├── appearance/                  # Aparência: tipos e padrões (types, defaults), validação e persistência (validate, useAppearance), temas e presets, aplicação no <html> (apply) e script de boot (bootScript)
+│   ├── appearance/                  # Aparência: tipos e padrões (types, defaults), validação e persistência (validate, useAppearance), temas e presets, aplicação no <html> (apply) e script de boot (bootScript); também `useGamePalette` (paleta do canvas a partir da aparência) e `testHelpers` (armazenamento em memória para os testes)
 │   │
 │   ├── vendor/nam-engine/           # Motor neural de terceiros, sem alterações: módulo, worklet e wasm (não editar)
 │   │
@@ -67,6 +67,8 @@ PRGB/
 │   │   ├── legalRoute.ts            # Roteamento por hash (#privacidade / #termos) sem biblioteca de router
 │   │   ├── localData.ts             # Exportar/apagar dados locais (records, prefs, progresso e aparência); flag de sessão de ranking
 │   │   ├── ModalsContext.tsx        # Estado aberto/fechado dos modais
+│   │   ├── progressStore.ts         # Camada fina entre o jogo e services/progress.ts: carrega, aplica e salva (só neste navegador; só partida solo conta)
+│   │   ├── useTheme.ts              # Reexporta useGamePalette (PracticeGame e FreePlay mantêm esse caminho)
 │   │   ├── preferences.ts           # localStorage versionado (prgb:prefs:v1): device, canal, PRGB Amp, última música
 │   │   ├── rankedRun.ts             # RankedRunController: máquina de estados de um run ranqueado (sem React)
 │   │   ├── ranking.ts               # RankingContext, RankingApi type, RankingValue; RankingProvider está em RankingProvider.tsx
@@ -99,7 +101,7 @@ PRGB/
 │   │   ├── hudGlow.ts               # Estilo do brilho do COMBO no HUD (função pura, só com o efeito ligado)
 │   │   ├── gameEffects.ts           # Efeitos opcionais do canvas (pulso, faíscas, brilho do combo, fundo reativo), com pools fixos
 │   │   ├── SessionScreen.tsx        # Sessão de prática (lazy): monta a lista por etapa, por tempo ou à mão, com tons e jeitos de tocar
-│   │   ├── SessionStrip.tsx         # Faixa sobre o resultado numa sessão: "A seguir", contagem de 10 s e resumo final
+│   │   ├── SessionStrip.tsx         # Resumo final da sessão (exercícios, tempo, estrelas, precisão média) sobre o resultado do último exercício; os anteriores vão direto para o próximo, com contagem de 3 s
 │   │   ├── TrailScreen.tsx          # Trilha de evolução (lazy): etapas, passos com estrelas, "Continue daqui"; só lê o progresso local
 │   │   ├── RepertoireLibrary.tsx    # Tela do repertório próprio: porta de entrada das músicas; o acervo externo fica dentro, como extra experimental
 │   │   ├── AppearanceScreen.tsx     # Tela Aparência (lazy): categorias, preview ao vivo, presets; controles em components/appearance/
@@ -122,7 +124,20 @@ PRGB/
 │   │   ├── ResultPanel.tsx          # Painel de resultado após o fim de uma música
 │   │   ├── SiteNav.tsx              # Menu superior, estado do áudio e barra de abas do celular
 │   │   ├── SongSearchModal.tsx      # Modal: busca no acervo + seleção de faixa
-│   │   └── AmpRack.tsx      # Modal: rack completo do amp modeler
+│   │   ├── AmpRack.tsx      # Modal: rack completo do amp modeler
+│   │   ├── OnDemand.tsx             # Monta um modal ou tela só depois da primeira abertura (lazy + Suspense)
+│   │   ├── ProgressScreen.tsx       # Tela Meu progresso (lazy): nível, ensaio da semana, palhetas e conteúdo tocado
+│   │   ├── progress/viewModel.ts    # O que mostrar em Meu progresso, a partir do progresso salvo (lógica pura)
+│   │   ├── appearance/              # Peças da tela Aparência: GameplayPreviewCanvas, PreviewPanel, controls, options, sections, useReducedMotion
+│   │   ├── practiceLanes.ts         # Ajudantes do canvas do jogo: geometria das pistas, camada estática em cache, notas e efeitos de acerto
+│   │   ├── noteStyles.ts            # Estilos de nota do canvas (`classic` é o original; os outros só mudam forma, cor e contorno)
+│   │   ├── gameplayLook.ts          # O que o canvas desenha, resolvido a partir do tema e da aparência (uma vez por mudança, nunca por quadro)
+│   │   ├── gameplayPalette.ts       # Cores do canvas que dependem da aparência: esquemas de cordas, intensidade e contraste (funções puras)
+│   │   ├── gameplayPreview.ts       # Imagem estática do jogo para a tela Aparência, desenhada com as mesmas funções do jogo
+│   │   ├── useGameplayLook.ts       # Hook que junta aparência, paleta e estilo de nota para o canvas
+│   │   ├── rankingStyles.ts         # Classes Tailwind compartilhadas dos botões e modais do ranking
+│   │   ├── devScenes.ts / devRanking.ts  # Só em DEV (`?tela=...`): atalhos para telas difíceis de alcançar e um ranking fictício; fora do build de produção
+│   │   └── testCanvas.ts            # Ajudante de teste: contexto 2D que grava cada chamada, para comparar um desenho instrução por instrução
 │   │
 │   ├── services/                    # Cada service tem um *.test.ts (Vitest) ao lado
 │   │   ├── songs.ts / songIds.ts    # Motor do repertório (notação compacta, carga lazy) e ids das peças (a partir de -200000, nunca renumerar)
@@ -141,6 +156,8 @@ PRGB/
 │   │   ├── practiceSession.ts       # Sessão de prática (lógica pura): itens, expansão por tons e jeitos, três montagens, fila e resumo
 │   │   ├── trail.ts                 # Trilha de evolução: 15 etapas e 148 passos (exercício + tom + jeito de tocar), em ordem de dificuldade, e o resumo do progresso
 │   │   ├── musicTheory.ts           # Escalas, posições no braço e formas de acorde (lógica pura)
+│   │   ├── achievements.ts          # Palhetas (conquistas): dados e regras puras, ids estáveis salvos no navegador (nunca renomear)
+│   │   ├── textSafety.ts            # Filtro de texto de outro jogador (caracteres de controle e bidi, links, termos bloqueados); usado pelas mensagens da sala
 │   │   ├── nickname.ts              # Validação, normalização e filtro de apelidos (look-alikes, blocklist, NFKD)
 │   │   ├── noteTrail.ts             # Histórico das notas tocadas no Play Free (lógica pura)
 │   │   ├── records.ts               # Recordes pessoais locais: armazenamento, consulta e exportação (localStorage)
@@ -267,7 +284,7 @@ Guitarra → USB Interface → getUserMedia(48kHz, raw, sem noise suppress)
 ### Styling
 - Tailwind CSS 4 exclusivo — sem CSS-in-JS, sem CSS Modules, sem styled-components
 - Use **só os tokens PRGB** de `src/index.css` (nada de `slate`/`cyan`/`rose` crus):
-  - superfícies `ink-950…ink-100`; primária `amp-*` (laranja "válvula"); secundária `signal-*` (ciano: notas, afinação)
+  - superfícies `ink-950…ink-100`; primária `amp-*` (laranja (ação principal)); secundária `signal-*` (ciano: notas, afinação)
   - feedback `hit` (Perfeito), `near` (Bom), `miss` (Errou); sombras `shadow-glow-amp`, `shadow-glow-signal`, `shadow-panel`
   - fontes `font-display` (Space Grotesk, títulos), `font-sans` (Inter), `font-mono` (JetBrains Mono, números/HUD)
 
@@ -275,7 +292,7 @@ Guitarra → USB Interface → getUserMedia(48kHz, raw, sem noise suppress)
 - Nome: **PRGB**. Não usar nomes de produtos de terceiros em UI, código ou comentários.
 - O conteúdo vem de um provedor externo de tablaturas: o rodapé precisa manter o aviso de não afiliação, e a Política precisa continuar dizendo que ele existe e o que recebe.
 - Sem nomes de artistas, músicas ou marcas em chamadas, exemplos, presets e textos do site: nomes de terceiros só aparecem nos resultados que o jogador buscar. Exceção, liberada pelo dono: o nome do autor de uma peça de domínio público do repertório (`src/content/songs/`), como crédito de autoria na própria peça.
-- Alegações só com prova: nada de números de acervo, "baixa latência" ou "válvulas". O PRGB Amp é um simulador.
+- Alegações só com prova: nada de números de acervo, "baixa latência", "válvulas" ou "emulação". O PRGB Amp é um simulador.
 - Licenças de terceiros não são uso de marca: `public/nam/`, `src/vendor/nam-engine/` e `/fonts` mantêm os avisos originais, como a licença exige. O código em `src/vendor/` não se edita.
 - O nome desse provedor só aparece onde é funcional: hosts em `vercel.json`, `vite.config.ts` e `handler.ts`, o código de erro devolvido pela função já publicada e as migrations congeladas.
 - Projeto gratuito; o único "monetizar" é o link "Apoie o projeto" (`VITE_SUPPORT_URL`, com fallback para estrela no GitHub).
@@ -457,20 +474,28 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 - [x] **register-part somente leitura (A6)** — publicada no Supabase em 2026-11-17 (versão 3, `verify_jwt` mantido, pelo CLI)
 - [x] **Semear a Ode no ranking (B3)** — migration `20261117120000_seed_repertoire.sql` rodada em produção em 2026-11-17 (linha conferida: 62 notas, 53333 ms, 32700 pontos) e `rankable.ts` na `main`. **Não testado**: uma partida ranqueada da Ode no site publicado (precisa de conta e microfone)
 
-### Rodada 15 — trilha de evolução e busca em destaque (em `claude/trilha`)
+### Rodada 15 — trilha de evolução e busca em destaque (em `main`)
 - [x] **Busca no acervo em destaque** — botão "Buscar uma música" na primeira tela, item "Buscar" no menu e cartão na seção "O que você quer tocar?"; some com `VITE_ACERVO_ENABLED=false`. Sem o nome do provedor na interface. Aumenta a exposição ao maior risco legal do projeto (ver Pendências) (@claude; já publicado na `main`; não testado: Firefox, Safari, celular real, busca com rede real)
 - [x] **Mais exercícios** — 58 exercícios novos: primeira posição, aranha, palhetada em semicolcheias, trinado, slides, pentatônicas emendadas e frases, três notas por corda (posições 2 a 7), acordes abertos e de pestana, progressões, ritmo e funk. Biblioteca: 154 exercícios, 3.339 variantes, todas conferidas pelos testes (@claude)
 - [x] **Trilha de evolução** — `trail.ts` e `TrailScreen`: 15 etapas, 148 passos, do mais fácil ao mais difícil, com estrelas e "Continue daqui"; nada bloqueado e sem texto de perda ou urgência (um teste confere). Pesquisa e critérios em `docs/trilha.md`. Testada no Edge em 1280, 390 e 320 px (abrir pela landing, Voltar, tocar um passo). **Não testado**: a ordem com quem toca, guitarra real, Firefox, Safari, celular físico, leitor de tela (@claude)
 
-### Rodada 16 — sessões de prática (em `claude/sessao`)
-- [x] **Sessão de prática** — fila de exercícios tocados em sequência, sem voltar ao menu: faixa "A seguir" com contagem de 10 s (pausar, pular, encerrar), início automático dos seguintes com contagem de 3 s, resumo final (exercícios, tempo, estrelas, precisão média). Três jeitos de montar (etapa da trilha, por tempo de 10/15/20 min, à mão) e duas formas de alongar (rodar 3/6/12 tons de quarta em quarta; todos os jeitos de tocar). Estrelas, recordes e ensaio da semana contam como em qualquer partida; não vale para o ranking e nada novo é gravado. Detalhes em `docs/sessoes.md` (@claude; testada no Edge em 1280, 390 e 320 px com microfone sintético: montar, tocar duas peças, pausar a contagem, avanço automático, resumo, Voltar. **Não testado**: sessão longa de verdade, guitarra real, Firefox, Safari, celular físico, leitor de tela; a ordem e as fatias do "por tempo" não foram validadas com quem toca)
+### Rodada 16 — sessões de prática (em `main`)
+- [x] **Sessão de prática** — fila de exercícios tocados em sequência, sem voltar ao menu: faixa "A seguir" com contagem de 10 s (pausar, pular, encerrar) na versão original, **substituída na Rodada 18**: os exercícios seguem direto, com contagem de 3 s, e o resumo vem só no fim (exercícios, tempo, estrelas, precisão média). Três jeitos de montar (etapa da trilha, por tempo de 10/15/20 min, à mão) e duas formas de alongar (rodar 3/6/12 tons de quarta em quarta; todos os jeitos de tocar). Estrelas, recordes e ensaio da semana contam como em qualquer partida; não vale para o ranking e nada novo é gravado. Detalhes em `docs/sessoes.md` (@claude; testada no Edge em 1280, 390 e 320 px com microfone sintético: montar, tocar duas peças, pausar a contagem, avanço automático, resumo, Voltar. **Não testado**: sessão longa de verdade, guitarra real, Firefox, Safari, celular físico, leitor de tela; a ordem e as fatias do "por tempo" não foram validadas com quem toca)
 
-### Rodada 17 — primeira carga menor e ranking automático (em `claude/bundle-ranking`)
+### Rodada 17 — primeira carga menor e ranking automático (em `main`)
 - [x] **Primeira carga** — `App.tsx` carrega o jogo, o Play Free, a dupla online e os modais por `lazy` (`OnDemand` só monta depois da primeira abertura); os chunks entram no precache por caminho em `vite.config.ts`. Entrada 120,6 para 59,8 kB gzip; entrada + React 186 para 126 kB. `check:bundle` limita a primeira carga e a entrada; o total só protege o cache offline. Não feito: separar `PRIVACY_POLICY`/`TERMS_OF_USE` de `legal.ts` (a rota por hash resolve as seções de forma síncrona) (@claude; testado no Edge com o build: jogo, modal de áudio e entrada do ranking abrem; offline com o service worker não retestado)
 - [x] **Ranking automático** — com conta, a partida de conteúdo rankeável já nasce valendo (velocidade 1× e sem saltos, como antes); sem conta, botão "Crie uma conta para valer no ranking" abre a entrada, e criar a conta com o jogo aberto liga o ranking. A chave "Valer para o ranking" foi removida; se a checagem falhar, aparece "Tentar o ranking de novo" (@claude; testado em DEV com as cenas `ranking-automatico` e `ranking-sem-conta`; **não testado**: partida ranqueada real com conta e Supabase)
 
-### Rodada 18 — todas as variações de um exercício (em `claude/todas-variacoes`)
-- [x] **Tocar todas as variações** — botão no cartão do exercício que monta uma sessão com os 12 tons e todos os jeitos de tocar (`expandItem`), com a contagem e o tempo estimado; Encerrar sessão a qualquer hora com escolha de tons (só este, 3, 6 ou 12; padrão 3). O modo é escolhido no topo da biblioteca ("Ao tocar um cartão"), não por botão em cada cartão. Na sessão, um exercício vai direto para o próximo (terminando 800 ms depois da última nota) e os resultados só aparecem no fim, com a lista de cada exercício (@claude; testado no Edge com o build: 6 variações, passou do 1º para o 2º sozinho em ~17 s sem modal e o 2º começou a tocar; **não testado**: sessão longa inteira, guitarra real)
+### Rodada 18 — todas as variações de um exercício (em `main`)
+- [x] **Tocar todas as variações** — o modo "Todas as variações em sequência", escolhido no topo da biblioteca, monta uma sessão com os 12 tons e todos os jeitos de tocar (`expandItem`), com a contagem e o tempo estimado; escolha de tons (só este, 3, 6 ou 12; padrão 3) e Encerrar sessão a qualquer hora. Não há botão extra em cada cartão. Na sessão, um exercício vai direto para o próximo (terminando 800 ms depois da última nota) e os resultados só aparecem no fim, com a lista de cada exercício (@claude; testado no Edge com o build: 6 variações, passou do 1º para o 2º sozinho em ~17 s sem modal e o 2º começou a tocar; **não testado**: sessão longa inteira, guitarra real)
+
+### Rodada 19 — revisão crítica (em `claude/revisao`, correções em seis branches `claude/fix-*`)
+- [x] **Revisão crítica** — seis revisores independentes, só leitura: 89 achados, nenhum de segurança crítico ou alto. Relatório com dono e plano de correção em `docs/revisao-critica.md` (@claude)
+- [x] **Segurança e documentação (F6)** — backup local com 7 dias e sem `play_sessions` (SEG-02); `image` do meta validado em `tabsApi.ts` e `tabNormalizer.ts` (SEG-05); textos do anfitrião na sala filtrados por `textSafety.ts` (SEG-06); riscos aceitos e procedimentos (moderação por SQL, cotas, rate limit, origens) em `docs/operacao.md` seção 11 (SEG-01/03/04/08/10); README, mapas do AGENTS.md e do CLAUDE.md, CHANGELOG, metadados do `index.html`, documentos de identidade como histórico e nomes de terceiros fora de comentários e fixtures (ENG-05, CONT-04/07/08/10/11/17/18) (@claude; testado só por testes e build)
+- [ ] **Limite por tentativa falha (SEG-03)** — `update_nickname`, `create_profile` e `join_room` só contam chamadas bem-sucedidas; decisão de não entregar migration agora e a alternativa estão em `docs/operacao.md` seção 11.2 (@claude, decisão do humano)
+- [ ] **Imagem de compartilhamento (CONT-01)** — `public/og-image.png` ainda diz "amp valvulado"; regerar com "simulador de amplificador" (humano)
+- [ ] **Rate limit no Vercel Firewall (SEG-08)** e **texto legal sobre o backup local e o envio automático ao ranking (SEG-02, SEG-07b)** — ações e decisões do humano; `LEGAL_VERSION` não foi alterado
+<!-- rodada 19: outros agentes -->
 
 ### Pendências conhecidas (sem dono)
 - [ ] **Permissão do provedor de tablaturas** — os termos dele proíbem transmitir, reutilizar e baixar o conteúdo sem autorização escrita. É o maior risco legal do projeto; depende de decisão do humano.
@@ -518,7 +543,7 @@ Landing Page → Clica "Tocar" ou "Buscar" → getUserMedia() → PRGB Amp Ativo
 | NSDF | Normalized Square Difference Function — algoritmo de pitch detection |
 | Cab Sim | Cabinet Simulation — filtros que emulam alto-falantes de guitarra |
 | Tone Stack | EQ de 4 bandas (Bass 110Hz, Mid 750Hz, Treble 2.8kHz, Presence 4.5kHz) |
-| WaveShaper | Web Audio node para distorção não-linear (emulação de clipping de válvula) |
+| WaveShaper | Web Audio node para distorção não-linear (simulação de clipping não linear) |
 | Acervo | Provedor externo de tablaturas (API não oficial) |
 | Rails | Linhas horizontais coloridas onde notas scrollam (cada corda = 1 cor) |
 | Hit Window | Janela de tolerância para acertar nota: Good de 150 ms antes a 260 ms depois da linha, Perfect de 70 ms antes a 110 ms depois |

@@ -15,7 +15,7 @@
 
 1. **Conectar sua guitarra real** via interface de áudio USB
 2. **Ouvir o som processado** em tempo real pelo motor DSP **PRGB Amp** (simulador de amplificador, gabinete, noise gate, reverb)
-3. **Tocar junto com tablaturas** baixadas de um provedor externo (1M+ músicas), com detecção de pitch e gamificação (score, combo, acertos Perfect/Good/Miss)
+3. **Praticar com exercícios, trilha de evolução, repertório próprio e sessões**, com detecção de pitch e gamificação (score, combo, acertos Perfect/Good/Miss); a busca em um acervo externo de tablaturas é um extra experimental
 
 **Sem servidor próprio.** O jogo roda 100% no navegador (todo o áudio via Web Audio API, nunca enviado); ranking e salas online, opcionais e só com consentimento 18+, usam Supabase gerenciado (Auth anônimo, RPC security definer, Edge Function, Realtime — região São Paulo). Regras em AGENTS.md › Regras INVIOLÁVEIS 1 e 11.
 
@@ -57,9 +57,9 @@ src/
 │
 ├── content/
 │   ├── legal.ts                     # Cópia legal (LGPD): Política de Privacidade, Termos, LEGAL_VERSION
-│   └── songs/                       # Repertório próprio (domínio público), uma peça por arquivo, carga lazy
+│   └── songs/                       # Repertório próprio (domínio público): catálogo em index.ts (catalog-classic, catalog-folk, catalog-originals), uma peça por arquivo, carga lazy
 │
-├── appearance/                      # Aparência: tipos, padrões, validação, temas, presets, hook e script de boot (docs/aparencia.md)
+├── appearance/                      # Aparência: tipos, padrões, validação, temas, presets, hook e script de boot (apply, bootScript, defaults, presets, themes, types, useAppearance, useGamePalette, validate; docs/aparencia.md)
 │
 ├── context/
 │   ├── AudioSessionContext.tsx      # AudioEngine, PRGB Amp, device/canal, erros; pitch via useLatestPitch
@@ -68,6 +68,8 @@ src/
 │   ├── legalRoute.ts                # Roteamento por hash (#privacidade / #termos) sem router library
 │   ├── localData.ts                 # Exportar/apagar dados locais (inclui progresso e aparência); flag de sessão de ranking
 │   ├── ModalsContext.tsx            # Estado aberto/fechado dos modais
+│   ├── progressStore.ts             # Camada entre o jogo e services/progress.ts (só neste navegador)
+│   ├── useTheme.ts                  # Reexporta useGamePalette
 │   ├── preferences.ts               # Persistência em localStorage (prgb:prefs:v1)
 │   ├── rankedRun.ts                 # RankedRunController: máquina de estados de um run ranqueado
 │   ├── ranking.ts                   # RankingContext, RankingApi type, RankingValue
@@ -104,7 +106,19 @@ src/
 │   ├── ResultPanel.tsx              # Painel de resultado após a música
 │   ├── SiteNav.tsx                  # Menu superior, estado do áudio e barra de abas do celular
 │   ├── SongSearchModal.tsx          # Modal de busca de músicas no acervo
-│   └── AmpRack.tsx          # Modal do rack completo do amp modeler PRGB Amp
+│   ├── AmpRack.tsx          # Modal do rack completo do amp modeler PRGB Amp
+│   ├── AppearanceScreen.tsx         # Tela Aparência (lazy); peças em components/appearance/ (GameplayPreviewCanvas, PreviewPanel, controls, options, sections, useReducedMotion)
+│   ├── AudioRoutePanel.tsx / AudioRouting.tsx / NeuralAmpSection.tsx  # Rota de áudio, medidor de entrada e modelo neural do jogador
+│   ├── ErrorBoundary.tsx / NotFound.tsx / StorageNotice.tsx / FeedbackModal.tsx  # Recuperação de erro, 404, aviso de armazenamento e "Reportar problema"
+│   ├── OnDemand.tsx                 # Monta modais e telas só depois da primeira abertura (lazy + Suspense)
+│   ├── ProgressScreen.tsx / ProgressSummary.tsx / progress/viewModel.ts  # Meu progresso e resumo de estrelas e palhetas
+│   ├── RepertoireLibrary.tsx        # Porta de entrada do repertório próprio (o acervo externo fica dentro, como extra)
+│   ├── SessionScreen.tsx / SessionStrip.tsx  # Sessão de prática (lazy) e o resumo final sobre o último resultado
+│   ├── TrailScreen.tsx              # Trilha de evolução (lazy)
+│   ├── gameEffects.ts / hudGlow.ts  # Efeitos opcionais do canvas e brilho do COMBO
+│   ├── gameplayLook.ts / gameplayPalette.ts / gameplayPreview.ts / useGameplayLook.ts / noteStyles.ts / practiceLanes.ts  # O que o canvas desenha: aparência resolvida, paleta, estilos de nota, pistas
+│   ├── rankingStyles.ts             # Classes Tailwind dos botões do ranking
+│   └── devScenes.ts / devRanking.ts / testCanvas.ts  # Só DEV e testes (`?tela=...`, ranking fictício, canvas que grava chamadas)
 │
 ├── services/
 │   ├── audioOutput.ts               # Saída de áudio: direta no Chromium, por <audio> no Firefox
@@ -114,6 +128,13 @@ src/
 │   ├── exerciseIds.ts               # Ids dos exercícios (nunca renumerar)
 │   ├── exercises.ts                 # Catálogo de exercícios gerado por regras de teoria
 │   ├── musicTheory.ts               # Escalas, posições no braço e formas de acorde
+│   ├── trail.ts                     # Trilha de evolução: etapas e passos (exercício + tom + jeito de tocar)
+│   ├── practiceSession.ts           # Sessão de prática (lógica pura): fila, expansão por tons e jeitos, resumo
+│   ├── progress.ts / achievements.ts  # Progresso local (estrelas, palhetas, ensaio da semana) e as palhetas
+│   ├── songs.ts / songIds.ts / rankable.ts  # Motor do repertório, ids das peças e o que vale para o ranking
+│   ├── acervoFlag.ts                # VITE_ACERVO_ENABLED=false esconde todo caminho para o acervo externo
+│   ├── audioDevices.ts / neuralAmp.ts  # Escolha de entrada e saída; validação dos modelos .nam
+│   ├── textSafety.ts                # Filtro de texto de outro jogador (controle/bidi, links, termos bloqueados)
 │   ├── latencyTest.ts               # Lógica do teste de latência (pura)
 │   ├── nickname.ts                  # Validação, normalização e filtro de apelidos
 │   ├── noteTrail.ts                 # Histórico das notas tocadas no Play Free (lógica pura)
@@ -125,6 +146,7 @@ src/
 │   ├── ampEngine.ts               # ⭐ DSP engine: preamp, waveshaper, tone stack, cab sim, reverb
 │   ├── *.test.ts                    # Testes Vitest de cada service
 │   └── backend/
+│       ├── feedbackApi.ts           # Relatos da caixa "Reportar problema"
 │       ├── rankingApi.ts            # RPCs do ranking (createProfile, submitScore, getLeaderboard, etc.)
 │       ├── roomChannel.ts           # Salas online via Supabase Realtime
 │       └── supabaseClient.ts        # Cliente Supabase lazy; lê VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY
