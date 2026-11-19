@@ -137,7 +137,7 @@ describe('validateNickname', () => {
   it('accepts names and words that hold a blocked term', () => {
     for (const nickname of ['Cássio', 'Assis', 'Scunthorpe', 'Analice', 'Ana L', 'Computador', 'Deputado', 'Disputa',
       'Reputação', 'Enviado', 'Analista', 'Fagundes', 'Fagote', 'Bichano', 'Desviado', 'Badminton', 'Nigéria', 'Bostaph',
-      'Shiitake', 'Nazareth', 'Spice Girls', 'Ponta Porã', 'Pica-Pau', 'Kkkkk', 'Joao 1990', 'Guitar 5150']) {
+      'Shiitake', 'Nazareth', 'Spice Mix', 'Ponta Porã', 'Pica-Pau', 'Kkkkk', 'Joao 1990', 'Guitar 5150']) {
       expect(validateNickname(nickname), nickname).toEqual({ ok: true, value: nickname });
     }
   });
@@ -253,7 +253,7 @@ describe('containsBlockedTerm', () => {
       'Scunthorpe', // cunt
       'Analice', 'Ana L', 'Canal', 'Analógico', 'Analista', // anal
       'Curitiba', 'Escudo', // cu
-      'Spice Girls', // spic
+      'Spice Mix', // spic
       'Fagote', 'Fagundes', // fagot (the bassoon, in a music app), fag
       'Bichano', // bicha
       'Desviado', 'Enviado', // viado

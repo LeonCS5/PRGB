@@ -236,7 +236,7 @@ describe('nickname rules match src/services/nickname.ts', () => {
     'Bucetinha', 'Viadinho', 'Merdinha', 'Cuzinho', 'Nazismo', 'Pornstar', 'AdminPRGB', 'PRGBAdmin', 'OficialPRGB',
     'PRGBteam', 'Cássio', 'Assis', 'Scunthorpe', 'Analice', 'Ana L', 'Computador', 'Deputado', 'Disputa', 'Reputação',
     'Enviado', 'Analista', 'Fagundes', 'Fagote', 'Bichano', 'Desviado', 'Badminton', 'Nigéria', 'Bostaph', 'Shiitake',
-    'Nazareth', 'Spice Girls', 'Ponta Porã', 'Pica-Pau', 'Kkkkk', 'Joao 1990', 'Guitar 5150',
+    'Nazareth', 'Spice Mix', 'Ponta Porã', 'Pica-Pau', 'Kkkkk', 'Joao 1990', 'Guitar 5150',
     'ÁÉÍÓÚ Çãõ', 'İstanbul', '@dm1n$', 'P0RR4 M3RD4', '5h17', '𝐟𝐮𝐜𝐤', 'ｆｕｃｋ', 'Joao_da-Silva.2', 'f.u.c.k',
     'A B C Banda', 'FUUUUCK', 'kkkkk', '\u0131ĸłħŧđŋ', 'ð', 'ŒUVRE Æther Ølsen Þor', 'ŁĐØ', 'ÉdsonÁvila', '4dm1n', 'PuTa',
     'puta', 'Pút4', 'p.u.t.a', 'Filho da Puta', 'C4r4lh0', 'Caralhada', 'b.u.c.e.t.a', 'ｐｕｔａ', 'Foda-se', 'Fodase',

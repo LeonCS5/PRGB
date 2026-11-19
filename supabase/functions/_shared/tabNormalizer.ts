@@ -214,7 +214,7 @@ export function normalizeTab(rawTab: any, songMeta: SongMeta, trackIndex: number
           const rawString = typeof rawNote.string === 'number' ? rawNote.string : 0;
           const stringNum = rawString + 1;
 
-          // Bend tone follows Guitar Pro units: 100 = full step (2 semitones)
+          // Bend tone follows the source format's units: 100 = full step (2 semitones)
           const bendTone = typeof rawNote.bend?.tone === 'number' ? rawNote.bend.tone : 0;
           const bendSemitones = bendTone > 0 ? bendTone / 50 : undefined;
           const vibrato = !!(rawNote.leftHandVibrato || rawNote.vibrato || beat.vibrato);

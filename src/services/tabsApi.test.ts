@@ -190,11 +190,11 @@ describe('shared tab normalizer (also used by the register-part Edge Function)',
   it('only ever calls same-origin proxies, even when they fail', async () => {
     const fetchMock = vi.fn(async (_url: string) => new Response('nope', { status: 404 }));
     vi.stubGlobal('fetch', fetchMock);
-    await expect(TabsApi.searchSongs('metallica')).rejects.toThrow('Search failed: 404');
+    await expect(TabsApi.searchSongs('exemplo')).rejects.toThrow('Search failed: 404');
     await expect(TabsApi.getSongMeta(7)).rejects.toThrow('Meta fetch failed: 404');
     await expect(TabsApi.getTrackTabJson(7, 99, 'img', 0)).rejects.toThrow('Failed to load track tab');
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
-      '/api/tabs/songs?pattern=metallica',
+      '/api/tabs/songs?pattern=exemplo',
       '/api/tabs/meta/7',
       '/cdn/tabs/7/99/img/0.json',
       '/cdn2/tabs/7/99/img/0.json'

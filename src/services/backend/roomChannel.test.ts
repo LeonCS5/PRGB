@@ -286,7 +286,7 @@ describe('parseRoomMessage', () => {
     for (const bad of [
       { title: 'abc‮def' }, { artist: 'a b' }, { trackName: 'a​b' },
       { title: 'visite golpe.com' }, { artist: 'https://x.y' }, { trackName: 'a@b' },
-      { title: 'Puta' }, { artist: 'pаta' }
+      { title: 'Puta' }, { artist: 'filho da Puta' }
     ]) {
       expect(parseRoomMessage(song(bad)), JSON.stringify(bad)).toBeNull();
     }

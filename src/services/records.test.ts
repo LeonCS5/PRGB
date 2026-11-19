@@ -41,9 +41,9 @@ const blockedStorage = (): Storage => {
 const run = (overrides: Partial<RunResult> = {}): RunResult => ({
   songId: 123,
   partId: 0,
-  title: 'Master of Puppets',
-  artist: 'Metallica',
-  trackName: 'James Hetfield',
+  title: 'Música Exemplo',
+  artist: 'Artista Exemplo',
+  trackName: 'Guitarra Exemplo',
   score: 1000,
   accuracy: 90,
   maxCombo: 20,

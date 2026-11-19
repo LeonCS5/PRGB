@@ -53,7 +53,7 @@ export const BLOCKED_TERMS: readonly BlockedTerm[] = Object.freeze([
   ...word('viado', 'bicha', 'fag', 'fagot'), // "Desviado", "Bichano", "Fagundes", "Fagote"
   // Racist slurs and hate
   ...part('nazi', 'hitler'),
-  ...word('niger', 'niga', 'chink', 'spic'), // "Nigéria", "Spice Girls"
+  ...word('niger', 'niga', 'chink', 'spic'), // "Nigéria", "Spice Mix"
   // Ableist slurs
   ...part('retardad', 'retarded', 'mongoloide'),
   // Sexual violence
@@ -65,7 +65,7 @@ export const BLOCKED_TERMS: readonly BlockedTerm[] = Object.freeze([
 export const MODERATION_ALLOWLIST: readonly string[] = Object.freeze([
   'computa', 'deputa', 'diputa', 'disputa', 'reputa', 'imputa', 'amputa', // puta
   'badminton', // admin
-  'bostaph', // bosta (Paul Bostaph, Slayer's drummer)
+  'bostaph', // bosta (a drummer's surname)
   'shitake', // shit ("shiitake" folds to "shitake")
   'nazir', 'nazim' // nazi (Arabic and Turkish names)
 ]);
