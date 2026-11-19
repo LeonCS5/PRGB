@@ -233,8 +233,8 @@ describe('decodeChallenge strictness', () => {
   });
 
   it('keeps song text with dots, abbreviations and words that only look like terms', () => {
-    for (const text of ["Sgt. Pepper's", 'Vol. 1', 'St. Anger', 'AC/DC', 'Mr. Big', 'Disputa', 'Spice Girls',
-      'Bostaph', 'The Com Truise', 'Brasil.Rock']) {
+    for (const text of ["Sgt. Exemplo", 'Vol. 1', 'St. Exemplo', 'AB/CD', 'Mr. Exemplo', 'Disputa', 'Spice Mix',
+      'Bostaph', 'The Com Band', 'Brasil.Rock']) {
       expect(decodeChallenge(codeFor(JSON.stringify(tuple({ 3: text }))))?.title, text).toBe(text);
     }
   });

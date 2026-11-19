@@ -5,6 +5,7 @@
 
 import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 import { validateNickname } from '../nickname';
+import { isSafePeerText } from '../textSafety';
 import { getServerTime as fetchServerTime, toRankingError, type ServerTime } from './rankingApi';
 import { getSupabaseClient } from './supabaseClient';
 
@@ -176,7 +177,9 @@ export function normalizeRoomCode(input: string): string | null {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 const isCount = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
-const isText = (value: unknown): value is string => typeof value === 'string' && value.length <= TEXT_MAX;
+// Host-controlled text reaches the guest's screen: besides the size, apply the challenge links' filter
+const isText = (value: unknown): value is string =>
+  typeof value === 'string' && value.length <= TEXT_MAX && isSafePeerText(value);
 
 /** A clean copy of a valid message, or null. Unknown fields are dropped. */
 export function parseRoomMessage(value: unknown): RoomMessage | null {

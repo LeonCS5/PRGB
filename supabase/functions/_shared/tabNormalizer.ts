@@ -2,6 +2,18 @@
 // the server counts notes and song length exactly like the game. Pure TypeScript: no Deno or DOM APIs,
 // relative imports only and with the .ts extension (the Edge Function bundler only ships supabase/functions).
 
+/** The provider answered, but not in the shape the app reads. Not a connectivity problem. */
+export class TabsFormatError extends Error {
+  constructor(what: string) {
+    super(`Unexpected response format: ${what}`);
+    this.name = 'TabsFormatError';
+  }
+}
+
+/** The meta `image` goes straight into the CDN path: only a plain token, never a path or a query. */
+export const isSafeImageSegment = (image: unknown): image is string =>
+  typeof image === 'string' && /^[A-Za-z0-9_-]+$/.test(image);
+
 export interface SongMeta {
   songId: number;
   revisionId: number;
@@ -106,6 +118,7 @@ export function soundingMidi(openMidi: number, fret: number, harmonic?: string, 
  * `any` on purpose: the JSON is reverse-engineered and untyped; fields are checked where they are read.
  */
 export function normalizeSongMeta(data: any): SongMeta {
+  if (!isSafeImageSegment(data.image)) throw new TabsFormatError('meta with unsafe image');
   return {
     songId: data.songId,
     revisionId: data.revisionId || data.latestRevisionId,
@@ -201,7 +214,7 @@ export function normalizeTab(rawTab: any, songMeta: SongMeta, trackIndex: number
           const rawString = typeof rawNote.string === 'number' ? rawNote.string : 0;
           const stringNum = rawString + 1;
 
-          // Bend tone follows Guitar Pro units: 100 = full step (2 semitones)
+          // Bend tone follows the source format's units: 100 = full step (2 semitones)
           const bendTone = typeof rawNote.bend?.tone === 'number' ? rawNote.bend.tone : 0;
           const bendSemitones = bendTone > 0 ? bendTone / 50 : undefined;
           const vibrato = !!(rawNote.leftHandVibrato || rawNote.vibrato || beat.vibrato);

@@ -7,7 +7,7 @@
 #   scripts/backup-db.sh
 #
 # The dump holds nicknames and scores (personal data): keep it encrypted, never commit it, and let the
-# script delete copies older than 30 days (the retention the privacy policy promises).
+# script delete copies older than 7 days (play_sessions is left out of the data dump: the policy keeps it for 7 days only).
 # Needs the Supabase CLI (`supabase`) on PATH. Not tested against the real project yet: see docs/operacao.md.
 set -euo pipefail
 
@@ -22,9 +22,9 @@ fi
 
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 supabase db dump --db-url "$SUPABASE_DB_URL" -f "$BACKUP_DIR/schema-$stamp.sql"
-supabase db dump --db-url "$SUPABASE_DB_URL" --data-only -f "$BACKUP_DIR/data-$stamp.sql"
+supabase db dump --db-url "$SUPABASE_DB_URL" --data-only -x public.play_sessions -f "$BACKUP_DIR/data-$stamp.sql"
 
-# Retention: 30 days, only files this script created
-find "$BACKUP_DIR" -maxdepth 1 -type f \( -name 'schema-*.sql' -o -name 'data-*.sql' \) -mtime +30 -delete
+# Retention: 7 days, only files this script created
+find "$BACKUP_DIR" -maxdepth 1 -type f \( -name 'schema-*.sql' -o -name 'data-*.sql' \) -mtime +7 -delete
 
 echo "Backup written to $BACKUP_DIR ($stamp). Encrypt it before storing."

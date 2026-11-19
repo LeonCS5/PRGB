@@ -280,6 +280,21 @@ describe('room codes', () => {
 });
 
 describe('parseRoomMessage', () => {
+  it('drops host text with control or bidi characters, links and blocked terms', () => {
+    const song = (over: Record<string, unknown>) =>
+      ({ type: 'select_song', songId: 7, partId: 0, title: 'T', artist: 'A', trackName: 'L', ...over });
+    for (const bad of [
+      { title: 'abc‮def' }, { artist: 'a b' }, { trackName: 'a​b' },
+      { title: 'visite golpe.com' }, { artist: 'https://x.y' }, { trackName: 'a@b' },
+      { title: 'Puta' }, { artist: 'filho da Puta' }
+    ]) {
+      expect(parseRoomMessage(song(bad)), JSON.stringify(bad)).toBeNull();
+    }
+    expect(parseRoomMessage({ type: 'select_part', partId: 1, trackName: 'x‮y' })).toBeNull();
+    expect(parseRoomMessage({ ...HELLO, trackName: 'www.golpe' })).toBeNull();
+    expect(parseRoomMessage(song({ title: 'Ode à Alegria', artist: 'Beethoven' }))).not.toBeNull();
+  });
+
   it('keeps valid messages and drops unknown fields', () => {
     expect(parseRoomMessage({ ...HELLO, partId: 2, trackName: 'Lead', extra: 'x' }))
       .toEqual({ type: 'hello', nickname: 'Ana Lima', partId: 2, trackName: 'Lead', ready: false });

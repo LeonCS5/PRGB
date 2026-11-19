@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <strong>Toque guitarra real direto no navegador com processamento DSP em tempo real, detecção de pitch e jogo de prática com pontuação.</strong>
+  <strong>Toque guitarra real direto no navegador: exercícios, trilha de evolução, repertório próprio e sessões de prática, com detecção de pitch, pontuação e um simulador de amplificador.</strong>
 </p>
 
 <p align="center">
@@ -24,14 +24,17 @@
 
 ## 📖 Visão Geral
 
-O **PRGB** (*Play Real Guitar in Browser*) é uma aplicação web completa e gratuita que transforma o navegador em uma plataforma de treino e jogo interativo para guitarra:
+O **PRGB** (*Play Real Guitar in Browser*) é uma aplicação web gratuita para praticar guitarra com a guitarra de verdade, sem instalar nada. O jogo toca no navegador e lê a nota que você toca pela interface de áudio USB:
 
-1. **Conexão Direta:** Conecte sua guitarra elétrica por uma interface de áudio USB.
-2. **Amplificador Virtual PRGB Amp:** Ouça seu instrumento por um simulador de amplificador feito em software, com saturação não-linear, tone stack de 4 bandas, simulação de gabinete (Cab Sim), noise gate e reverb espacial.
-3. **Acervo de Músicas:** Carregue tablaturas de um provedor externo com suporte a faixas individuais (Guitarra Solo, Base, Baixo) e técnicas avançadas (bends, ligaduras, grace notes, tapping, harmônicos).
-4. **Game Engine em Canvas 2D:** Trilhos (*rails*) coloridos por corda, notas temporizadas, detecção de pitch em tempo real (NSDF/MPM), julgamento de precisão (*Perfect / Good / Miss*), contadores de combo e efeitos visuais a 60 FPS com suporte a High-DPI.
-5. **Metrônomo de Alta Precisão:** Cliques agendados diretamente no relógio de hardware da Web Audio API (`AudioContext.currentTime`), com suporte a compassos compostos, anacruse e mudanças de andamento via `beatGrid`.
-6. **Sem Conta para Tocar & PWA:** O áudio é processado no navegador. O ranking e a dupla online são opcionais e usam o Supabase. Inclui PWA (Progressive Web App) com cache do app shell.
+1. **Exercícios:** uma biblioteca de exercícios gerados por regras de teoria (escalas, arpejos, acordes, ritmo, técnica), em qualquer tom e de vários jeitos de tocar, que funciona offline.
+2. **Trilha de evolução:** etapas em ordem de dificuldade, com estrelas por passo e "Continue daqui". Nada fica bloqueado.
+3. **Repertório próprio:** peças de domínio público e originais, escritas em notação compacta e carregadas sob demanda.
+4. **Sessões de prática:** uma fila de exercícios tocados em sequência, montada por etapa da trilha, por tempo ou à mão.
+5. **Progresso e aparência:** estrelas, palhetas e ensaio da semana guardados só no seu navegador, e temas, estilos de nota e tipografias para personalizar.
+6. **Jogo em Canvas 2D:** trilhos coloridos por corda, detecção de pitch em tempo real (NSDF/MPM), julgamento *Perfect / Good / Miss*, combo e pontuação, com suporte a telas de alta densidade.
+7. **PRGB Amp:** um simulador de amplificador feito em software (noise gate, saturação, tone stack de 4 bandas, simulação de gabinete e reverb) para ouvir a guitarra enquanto toca.
+8. **Sem conta para tocar & PWA:** o áudio é processado no navegador e nunca é enviado. Ranking e dupla online são opcionais e usam o Supabase. O app pode ser instalado e guarda o essencial em cache para uso offline.
+9. **Extra experimental:** a busca em um acervo externo de tablaturas, de terceiros, sem afiliação com o PRGB. Pode ser desligada por configuração (`VITE_ACERVO_ENABLED=false`) e não vale para o ranking.
 
 ---
 
@@ -39,27 +42,27 @@ O **PRGB** (*Play Real Guitar in Browser*) é uma aplicação web completa e gra
 
 ### 🔊 Rack de Modelagem de Amplificador — PRGB Amp
 Motor DSP construído com a Web Audio API, um simulador que não reproduz com exatidão nenhum equipamento real:
-- **Noise Gate:** Threshold e release ajustáveis com atenuação suave para eliminar ruídos de captadores single-coil.
+- **Noise Gate:** Threshold e release ajustáveis com atenuação suave para reduzir o ruído de fundo.
 - **Preamp & WaveShaper:** Curva de transferência não-linear que aplica saturação suave (*soft clipping*).
 - **Tone Stack (EQ de 4 Bandas):**
   - *Bass:* 110 Hz (Low-shelf)
   - *Mid:* 750 Hz (Peaking)
   - *Treble:* 2.8 kHz (High-shelf)
   - *Presence:* 4.5 kHz (Peaking)
-- **Cabinet Simulator (Cab Sim):** Filtro multi-estágio passa-altas, passa-baixas e ressonância que replica a curva acústica de alto-falantes de 12" de guitarra.
+- **Cabinet Simulator (Cab Sim):** Filtro multi-estágio passa-altas, passa-baixas e ressonância que aproxima a resposta de um gabinete de guitarra (simulação, não uma réplica de equipamento real).
 - **Reverb Convolucional Sintético:** Controle Wet/Dry para profundidade e espacialização sonora natural.
-- **Presets Integrados:** *Clean*, *Crunch*, *Lead*, *Metal* e *Acoustic*.
+- **Presets Integrados:** seis presets prontos, escolhidos no rack do PRGB Amp.
 
 ### 🎯 Detecção de Pitch & Afinador Cromático
-- **Algoritmo NSDF (Normalized Square Difference Function):** Implementação baseada no McLeod Pitch Method (MPM) para identificação rápida e precisa da nota fundamental, imune a transientes e ruídos harmônicos.
-- **Afinador Integrado:** Medição precisa de frequência em Hertz e desvio em cents (-50 a +50 cents) com indicação visual para afinar antes de tocar.
+- **Algoritmo NSDF (Normalized Square Difference Function):** Implementação baseada no McLeod Pitch Method (MPM) para identificar a nota fundamental. É monofônico: num acorde batido, devolve em geral só a tônica.
+- **Afinador Integrado:** Medição de frequência em Hertz e desvio em cents (-50 a +50 cents) com indicação visual para afinar antes de tocar.
 - **Suporte a Afinações Alternativas:** Standard (E A D G B E), Drop D, D Standard, Half Step Down e afinações personalizadas detectadas diretamente da tablatura.
 - **Estimativa de Posição:** Rastreamento inteligente de corda e traste estimado (`stringEstimate` / `fretEstimate`).
 
 ### 🎮 Jogo de Prática (Canvas Game Engine)
 - Trilhos horizontais coloridos representando cada corda da guitarra.
 - Notas em cascata com indicador de traste (*fret*) e duração.
-- Camada estática de rails em cache via `OffscreenCanvas` / `Path2D` para máxima performance a 60 FPS.
+- Camada estática de rails em cache via `OffscreenCanvas` / `Path2D` para reduzir o custo de desenho.
 - Renderização adaptada à densidade de pixels da tela (`devicePixelRatio`).
 - **Janela de Tolerância de Acerto:**
   - **Perfect:** de 70 ms antes a 110 ms depois da linha.
@@ -69,10 +72,10 @@ Motor DSP construído com a Web Audio API, um simulador que não reproduz com ex
   - *Bends:* Aceita tanto a nota base quanto a nota alvo do bend.
   - *Dead & Ghost Notes:* Notas percussivas ou abafadas sem penalidade injusta de pontuação.
   - *Ties & Grace Notes:* Ligaduras e notas de ornamento preservadas e sincronizadas.
-- **Prática:** Ajuste de velocidade (0.25x até 1.5x), metrônomo visual/sonoro e repetição em loop.
+- **Prática:** Ajuste de velocidade (0,5×, 0,75× e 1×), metrônomo sonoro e modo treino, que repete o exercício sem parar.
 
 ### ⏱️ Metrônomo com Agendamento no AudioContext
-- Elimina o atraso e a imprecisão temporal do loop de eventos do JavaScript (`setTimeout`/`setInterval`).
+- Evita o atraso e a imprecisão temporal do loop de eventos do JavaScript (`setTimeout`/`setInterval`).
 - Agendamento antecipado de cliques de áudio via relógio nativo do `AudioContext`.
 - Sistema `beatGrid` inteligente que processa mudanças de andamento (BPM), compassos complexos e compassos de anacruse (*pickup bars*).
 
@@ -86,7 +89,7 @@ Motor DSP construído com a Web Audio API, um simulador que não reproduz com ex
 
 ### 📱 Progressive Web App (PWA)
 - Instalável no desktop (Chrome/Edge) ou dispositivos móveis como aplicativo nativo.
-- Service Worker (`sw.js`) com cache do app shell para inicialização instantânea e operação offline da interface.
+- Service Worker (`sw.js`) com cache do app shell para abrir a interface sem rede. Tablaturas do acervo externo nunca vão para o cache.
 
 ### 🔔 Tratamento de Erros Amigável (`ErrorNotice`)
 - Avisos de erro acessíveis (`role="alert"`) com mensagens claras em Português Brasileiro (pt-BR).

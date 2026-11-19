@@ -2,6 +2,8 @@
 // The parser lives in supabase/functions/_shared so the ranking Edge Function counts notes like the game.
 
 import {
+  TabsFormatError,
+  isSafeImageSegment,
   normalizeSongMeta,
   normalizeTab as normalizeRawTab,
   type NormalizedSongTab,
@@ -9,6 +11,7 @@ import {
 } from '../../supabase/functions/_shared/tabNormalizer.ts';
 
 export {
+  TabsFormatError,
   midiToFrequency,
   midiToNoteName,
   soundingMidi,
@@ -45,14 +48,6 @@ const REMOVED_SONG_IDS: ReadonlySet<number> = new Set<number>([]);
 
 export const isSongRemoved = (songId: number, removed: ReadonlySet<number> = REMOVED_SONG_IDS): boolean => removed.has(songId);
 
-/** The provider answered, but not in the shape the app reads. Not a connectivity problem. */
-export class TabsFormatError extends Error {
-  constructor(what: string) {
-    super(`Unexpected response format: ${what}`);
-    this.name = 'TabsFormatError';
-  }
-}
-
 /** The provider refused the access (HTTP 403 or 429). Persistent, so it is not retried and calls pause for a while. */
 export class TabsBlockedError extends Error {
   readonly status: number;
@@ -87,6 +82,7 @@ const assertSongMeta = (data: unknown): void => {
     throw new TabsFormatError('meta without revision');
   }
   if (typeof data.image !== 'string') throw new TabsFormatError('meta without image');
+  if (!isSafeImageSegment(data.image)) throw new TabsFormatError('meta with unsafe image');
   if (!Array.isArray(data.tracks)) throw new TabsFormatError('meta without tracks');
   if (data.tracks.some((track) => !isRecord(track))) throw new TabsFormatError('meta with invalid track');
 };
@@ -233,6 +229,7 @@ export class TabsApi {
     partId: number,
     signal?: AbortSignal
   ): Promise<unknown> {
+    if (!isSafeImageSegment(image)) throw new TabsFormatError('unsafe image segment');
     const cdnPath = `/${songId}/${revisionId}/${image}/${partId}.json`;
     let lastError: unknown = null;
     for (const [index, base] of this.CDN_BASES.entries()) {

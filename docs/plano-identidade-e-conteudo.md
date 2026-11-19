@@ -1,10 +1,12 @@
 # Plano: acervo experimental, conteúdo original, gamificação e identidade visual
 
-Rascunho para aprovação. Nada aqui foi implementado. Cada item termina em uma tarefa que um agente pode pegar sozinho, com arquivos próprios e critério de pronto.
+> **Documento histórico, parcialmente aplicado.** Escrito em 2026-11-16 como rascunho: boa parte já foi implementada (acervo experimental, repertório próprio, progresso, trilha, aparência). O estado atual está no backlog do `AGENTS.md`, não aqui.
+
+Rascunho original para aprovação. Cada item termina em uma tarefa que um agente pode pegar sozinho, com arquivos próprios e critério de pronto.
 
 ## 1. Decisões que já estão tomadas
 
-- **Acervo externo = experimental.** A Songsterr respondeu que não pode autorizar a exibição das tablaturas (as editoras é que podem) e que o acesso automatizado pode ser barrado. O ranking com músicas baixadas fica fora do plano: não vamos tentar driblar o bloqueio.
+- **Acervo externo = experimental.** O provedor externo respondeu que não pode autorizar a exibição das tablaturas (as editoras é que podem) e que o acesso automatizado pode ser barrado. O ranking com músicas baixadas fica fora do plano: não vamos tentar driblar o bloqueio.
 - **Ranking só com conteúdo nosso**, validado pelo servidor como hoje (partes semeadas por migration).
 - **Conteúdo novo = domínio público + arranjo nosso.** Nunca a edição moderna de alguém.
 
