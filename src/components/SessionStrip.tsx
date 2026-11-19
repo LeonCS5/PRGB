@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ListChecks, Star } from 'lucide-react';
 import { summarizeQueue, type PracticeQueue, type SessionResult } from '../services/practiceSession';
+import { formatElapsed } from './sessionFormat';
 
 // Shown over the result of the last exercise of a practice session: what the whole session came to. The exercises
 // before it go straight into the next one, so this is the only place their results appear.
@@ -9,11 +10,6 @@ export interface SessionStripProps {
   queue: PracticeQueue;
   onEnd: () => void;
 }
-
-export const formatElapsed = (ms: number): string => {
-  const total = Math.floor(Math.max(0, ms) / 1000);
-  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
-};
 
 export const SessionStrip: React.FC<SessionStripProps> = ({ queue, onEnd }) => {
   const [now] = useState(() => Date.now());

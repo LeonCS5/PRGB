@@ -22,7 +22,7 @@ const navItems = ({ onExercises, onTrail, onRepertoire, onSearch, onRanking }: S
   { label: 'Exercícios', icon: Dumbbell, onSelect: onExercises },
   { label: 'Trilha', icon: Route, onSelect: onTrail },
   { label: 'Repertório', icon: Music, onSelect: onRepertoire },
-  ...(onSearch ? [{ label: 'Buscar', ariaLabel: 'Buscar músicas no acervo', icon: Search, onSelect: onSearch }] : []),
+  ...(onSearch ? [{ label: 'Buscar', ariaLabel: 'Buscar músicas', icon: Search, onSelect: onSearch }] : []),
   { label: 'Modos', icon: LayoutGrid },
   ...(onRanking ? [{ label: 'Ranking', icon: Trophy, onSelect: onRanking }] : [])
 ];
@@ -57,15 +57,15 @@ export const AudioChip: React.FC<Pick<SiteNavProps, 'isAudioRunning' | 'onAudio'
 
 // Opens the progress screen. Same size and breakpoint rule as the appearance button
 export const ProgressButton: React.FC<{ onOpen: () => void }> = ({ onOpen }) => (
-  <button type="button" onClick={onOpen} aria-label="Meu progresso"
+  <button type="button" onClick={onOpen} aria-label="Meu progresso" title="Meu progresso"
     className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-lg px-2 text-sm font-semibold text-ink-200 transition hover:bg-ink-800 hover:text-amp-300">
-    <Award size={18} className="shrink-0 text-amp-400" aria-hidden="true" /><span className="hidden 2xl:inline">Progresso</span>
+    <Award size={18} className="shrink-0 text-amp-400" aria-hidden="true" /><span className="hidden 2xl:inline">Meu progresso</span>
   </button>
 );
 
 // Opens the appearance screen. Icon-only below xl (the tab bar of phones has no room for a sixth tab)
 export const AppearanceButton: React.FC<{ onOpen: () => void }> = ({ onOpen }) => (
-  <button type="button" onClick={onOpen} aria-label="Aparência"
+  <button type="button" onClick={onOpen} aria-label="Aparência" title="Aparência"
     className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-lg px-2 text-sm font-semibold text-ink-200 transition hover:bg-ink-800 hover:text-amp-300">
     <Palette size={18} className="shrink-0 text-amp-400" aria-hidden="true" /><span className="hidden 2xl:inline">Aparência</span>
   </button>
