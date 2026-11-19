@@ -880,7 +880,11 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   // An account made while the game is open puts the run in the ranking right away
   const hadAccountRef = useRef(hasAccount);
   useEffect(() => {
-    if (hasAccount && !hadAccountRef.current && ranked.isAvailable && !ranked.isOn) void toggleRanked();
+    if (hasAccount && !hadAccountRef.current && ranked.isAvailable && !ranked.isOn) {
+      // With a finished run on screen, only get the ranking ready for the next one: resetting would wipe the result
+      if (runSummary === null) void toggleRanked();
+      else void ranked.controller.turnOn();
+    }
     hadAccountRef.current = hasAccount;
   });
 
