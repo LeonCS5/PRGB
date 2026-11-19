@@ -23,8 +23,8 @@ export const CLASSIC_CATALOG: readonly SongEntry[] = [
     info: {
       code: 7,
       title: 'Brilha, brilha, estrelinha',
-      composer: 'Mozart',
-      composerDeathYear: 1791,
+      composer: 'Tradicional',
+      composerDeathYear: null,
       arranger: 'PRGB',
       level: 1,
       bpm: 84,

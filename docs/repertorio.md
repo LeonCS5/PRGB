@@ -9,7 +9,7 @@ Regra de entrada: o compositor morreu até 1955 (`PUBLIC_DOMAIN_LAST_DEATH_YEAR`
 | 1 | Ode à Alegria (tema do último movimento da Sinfonia nº 9) | Beethoven | 1827 | Melodia do tema, de memória do agente; **jogada e aprovada pelo dono em 2026-11-17** (funciona bem tocando); não conferida contra partitura | PRGB | dono (jogou) | 2026-11-17 |
 | 2 | Greensleeves (estrofe do verso, Mi menor) | Tradicional | n/a | Melodia tradicional, de memória do agente (65 a 75%); a cadência final (C#, D#) e o andamento são os pontos de dúvida | PRGB | pendente | 2026-11-17 |
 | 6 | Minueto em Sol (primeira seção, duas vezes) | Petzold (atribuído a Bach) | 1733 | De memória do agente (80%), uma oitava abaixo da partitura de piano; compassos 7 e 8 menos seguros | PRGB | pendente | 2026-11-17 |
-| 7 | Brilha, brilha, estrelinha | Mozart (tema tradicional francês das variações) | 1791 | Melodia tradicional, de memória (99%) | PRGB | pendente | 2026-11-17 |
+| 7 | Brilha, brilha, estrelinha | Tradicional (melodia francesa; Mozart só escreveu variações sobre ela) | — | Melodia tradicional, de memória (99%) | PRGB | pendente | 2026-11-17 |
 | 10 | Riff de rock em Mi menor (pentatônica) | Original | n/a | Composição original do PRGB, escrita pelo agente | PRGB | pendente | 2026-11-17 |
 | 11 | Riff de blues em Lá | Original | n/a | Composição original do PRGB (swing em tercinas) | PRGB | pendente | 2026-11-17 |
 | 12 | Riff funk em Ré menor (pentatônica) | Original | n/a | Composição original do PRGB (semicolcheias sincopadas; pode pedir andamento menor) | PRGB | pendente | 2026-11-17 |
