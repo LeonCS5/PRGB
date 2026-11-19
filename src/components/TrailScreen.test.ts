@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { contentKey, createProgress, type Progress } from '../services/progress';
+import { contentKey, createProgress, STAR_ACCURACY, type Progress } from '../services/progress';
 import { RESOLVED_TRAIL, summarizeTrail, TRAIL, TRAIL_STEP_COUNT } from '../services/trail';
 import { TrailView } from './TrailScreen';
 
@@ -20,9 +20,16 @@ const played = (count: number, stars: number): Progress => ({
 });
 
 describe('TrailView', () => {
+  it('states how stars and accuracy work, with the real thresholds, and shows each step description on any screen', () => {
+    const html = render(createProgress());
+    expect(textOf(html)).toContain(`1 com ${STAR_ACCURACY.one}% de precisão, 2 com ${STAR_ACCURACY.two}%, 3 com ${STAR_ACCURACY.three}%`);
+    expect(textOf(html)).toContain('Precisão é a porcentagem das notas acertadas');
+    expect(html).not.toMatch(/hidden[^"]*sm:block[^>]*>[^<]*<\/span>/);
+  });
+
   it('shows every stage, with its title and goal, and the first step as the place to begin', () => {
     const html = render(createProgress());
-    expect(html).toContain('Trilha de evolução');
+    expect(html).toContain('Trilha</h1>');
     for (const [index, stage] of TRAIL.entries()) {
       expect(html).toContain(`Etapa ${index + 1}: ${stage.title}`);
       expect(html).toContain(stage.goal);

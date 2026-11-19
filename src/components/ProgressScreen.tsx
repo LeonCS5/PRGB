@@ -10,6 +10,7 @@ import type { Option } from './appearance/options';
 import {
   CONTENT_PAGE_SIZE, contentTitle, formatDate, hasProgress, playedContents, plural, starsText, weekDays
 } from './progress/viewModel';
+import { ACCURACY_TEXT, PICKS_TEXT, STARS_RULE_TEXT } from './progress/starRules';
 
 // Everything here is read from this browser. The wording says what the player did, never what is missing.
 
@@ -59,6 +60,7 @@ export const ProgressView: React.FC<ProgressViewProps> = ({ progress, now, onGoa
         </button>
         <h1 ref={heading} tabIndex={-1} className="mt-4 font-display text-3xl font-bold">Meu progresso</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-300">Estrelas, palhetas e dias de ensaio ficam guardados só neste navegador.</p>
+        <p className="mt-2 max-w-2xl text-xs leading-5 text-ink-300">{STARS_RULE_TEXT} {ACCURACY_TEXT}</p>
         <p role="status" className="sr-only">{announcement}</p>
 
         <div className="mt-5 grid gap-5 lg:grid-cols-2">
@@ -83,8 +85,8 @@ export const ProgressView: React.FC<ProgressViewProps> = ({ progress, now, onGoa
                 <li key={day.key} className={`flex min-w-0 flex-col items-center gap-1 rounded-lg border px-0.5 py-2 text-xs sm:px-1 ${day.done ? 'border-amp-400 bg-amp-500/10 text-amp-300' : 'border-ink-700 text-ink-200'}`}>
                   <span aria-hidden="true" className="font-semibold">{day.label}</span>
                   <span className="sr-only">{day.name}: {day.done ? 'ensaiou' : 'sem ensaio'}{day.isToday ? ', hoje' : ''}</span>
-                  {day.done ? <Check size={16} aria-hidden="true" /> : <Circle size={16} className="text-ink-500" aria-hidden="true" />}
-                  <span aria-hidden="true" className="h-3 text-[10px] leading-3 text-ink-300">{day.isToday ? 'hoje' : ''}</span>
+                  {day.done ? <Check size={16} aria-hidden="true" /> : <Circle size={16} className="text-ink-400" aria-hidden="true" />}
+                  <span aria-hidden="true" className="h-3 text-xs leading-3 text-ink-300">{day.isToday ? 'hoje' : ''}</span>
                 </li>
               ))}
             </ol>
@@ -127,7 +129,7 @@ export const ProgressView: React.FC<ProgressViewProps> = ({ progress, now, onGoa
                         <span className="flex items-center gap-1">
                           <span aria-hidden="true" className="flex">
                             {Array.from({ length: MAX_STARS }, (_, index) => (
-                              <Star key={index} size={14} className={index < content.stars ? 'fill-amp-300 text-amp-300' : 'text-ink-500'} />
+                              <Star key={index} size={14} className={index < content.stars ? 'fill-amp-300 text-amp-300' : 'text-ink-400'} />
                             ))}
                           </span>
                           {starsText(content.stars)}
@@ -151,7 +153,7 @@ export const ProgressView: React.FC<ProgressViewProps> = ({ progress, now, onGoa
 
         <section aria-labelledby="progress-picks" className={`${card} mt-5`}>
           <h2 id="progress-picks" className={sectionTitle}>Palhetas</h2>
-          <p className="mt-1 text-sm text-ink-300">{unlockedCount} de {ACHIEVEMENTS.length} palhetas conquistadas.</p>
+          <p className="mt-1 text-sm text-ink-300">{unlockedCount} de {ACHIEVEMENTS.length} palhetas conquistadas. {PICKS_TEXT}</p>
           <ul className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {ACHIEVEMENTS.map((item) => {
               const at = progress.achievements[item.id];
@@ -159,7 +161,7 @@ export const ProgressView: React.FC<ProgressViewProps> = ({ progress, now, onGoa
               return (
                 <li key={item.id} className={`rounded-xl border p-3 ${got ? 'border-amp-400/60 bg-amp-500/10' : 'border-ink-700 bg-ink-850'}`}>
                   <p className={`flex items-center gap-2 text-sm font-bold ${got ? 'text-amp-300' : 'text-ink-100'}`}>
-                    {got ? <Check size={16} className="shrink-0" aria-hidden="true" /> : <Circle size={16} className="shrink-0 text-ink-500" aria-hidden="true" />}
+                    {got ? <Check size={16} className="shrink-0" aria-hidden="true" /> : <Circle size={16} className="shrink-0 text-ink-400" aria-hidden="true" />}
                     {item.name}
                   </p>
                   <p className="mt-1 text-xs leading-5 text-ink-200">{item.description}</p>

@@ -4,6 +4,8 @@ import { SONG_CATALOG } from '../content/songs';
 import type { GamePart } from '../context/gameSession';
 import { isAcervoEnabled } from '../services/acervoFlag';
 import { getPersonalBest } from '../services/records';
+import { LEVEL_NAMES } from '../services/exercises';
+import { isRankableSongId } from '../services/rankable';
 import { songSongId } from '../services/songIds';
 import { findSongPart, ORIGINAL_COMPOSER } from '../services/songs';
 
@@ -45,7 +47,7 @@ export const RepertoireLibrary: React.FC<RepertoireLibraryProps> = ({ onPlay, on
         <button type="button" onClick={onExit} className="flex min-h-11 items-center gap-2 rounded-lg px-3 text-ink-200 hover:bg-ink-800">
           <ArrowLeft size={18} aria-hidden="true" /> Voltar ao início
         </button>
-        <h1 ref={heading} tabIndex={-1} className="mt-5 font-display text-3xl font-bold">Repertório do PRGB</h1>
+        <h1 ref={heading} tabIndex={-1} className="mt-5 font-display text-3xl font-bold">Repertório</h1>
         <p className="mt-2 text-sm leading-6 text-ink-300">Domínio público e originais — arranjo PRGB</p>
         {error && <p role="alert" className="mt-4 text-sm text-miss">{error}</p>}
         <p role="status" className="mt-3 text-sm text-ink-300">{loadingId !== null ? 'Carregando peça…' : ''}</p>
@@ -54,9 +56,9 @@ export const RepertoireLibrary: React.FC<RepertoireLibraryProps> = ({ onPlay, on
             <article key={info.code} className="min-w-0 rounded-2xl border border-ink-700 bg-ink-900 p-5">
               <h2 className="font-display text-xl font-bold">{info.title}</h2>
               <p className="mt-2 text-sm text-ink-200">{info.composer}</p>
-              <p className="mt-1 text-xs text-ink-300">{info.composerDeathYear === null ? (info.composer === ORIGINAL_COMPOSER ? 'Obra original do PRGB' : 'Melodia tradicional, domínio público') : `Falecimento do compositor: ${info.composerDeathYear}`}</p>
-              <p className="mt-3 text-sm text-ink-300">Nível {info.level} de 3 · {info.bpm} bpm</p>
-              {info.reviewed !== true && <p className="mt-1 text-xs text-near">Em revisão: a melodia ainda não foi conferida tocando.</p>}
+              <p className="mt-1 text-xs text-ink-300">{info.composerDeathYear === null ? (info.composer === ORIGINAL_COMPOSER ? 'Obra original do PRGB' : 'Melodia tradicional, domínio público') : `Domínio público (autor faleceu em ${info.composerDeathYear})`}</p>
+              <p className="mt-3 text-sm text-ink-300">{LEVEL_NAMES[info.level]} · {info.bpm} bpm</p>
+              {info.reviewed !== true && <p className="mt-1 text-xs text-near">Em revisão: podem existir notas erradas. Se achar uma, use Reportar problema.</p>}
               {info.parts.map((part) => {
                 const songId = songSongId(info.code, part.code);
                 const bests = [1, 0.75, 0.5].flatMap((speed) => {
@@ -65,6 +67,7 @@ export const RepertoireLibrary: React.FC<RepertoireLibraryProps> = ({ onPlay, on
                 });
                 return (
                   <div key={part.code} className="mt-4">
+                    <p className={`mb-2 text-xs font-semibold ${isRankableSongId(songId) ? 'text-hit' : 'text-ink-300'}`}>{isRankableSongId(songId) ? 'Vale para o ranking' : 'Só recorde pessoal'}</p>
                     {bests.map((best) => <p key={best.speed} className="mb-2 text-sm text-amp-300">Recorde a {best.speed.toLocaleString('pt-BR')}×: {best.score.toLocaleString('pt-BR')} pontos</p>)}
                     <button type="button" disabled={loadingId !== null} onClick={() => void play(songId)}
                       aria-label={`Tocar ${info.title} — ${part.name}`}
@@ -79,7 +82,7 @@ export const RepertoireLibrary: React.FC<RepertoireLibraryProps> = ({ onPlay, on
         </div>
         {isAcervoEnabled() && <button type="button" onClick={onSearch} disabled={loadingId !== null}
           className="mt-8 flex min-h-11 items-center gap-2 rounded-xl border border-ink-600 px-4 py-3 text-left text-sm text-ink-200 hover:bg-ink-800 disabled:opacity-70">
-          <Search size={18} className="shrink-0" aria-hidden="true" /> Buscar no acervo (experimental)
+          <Search size={18} className="shrink-0" aria-hidden="true" /> Buscar músicas (experimental)
         </button>}
       </div>
     </main>

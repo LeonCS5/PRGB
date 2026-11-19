@@ -5,6 +5,8 @@ import { SONG_CATALOG } from '../content/songs';
 import { ORIGINAL_COMPOSER } from '../services/songs';
 import { isAcervoEnabled } from '../services/acervoFlag';
 import { getPersonalBest, type RunResult } from '../services/records';
+import { LEVEL_NAMES } from '../services/exercises';
+import { isRankableSongId } from '../services/rankable';
 import { songSongId } from '../services/songIds';
 import { RepertoireLibrary } from './RepertoireLibrary';
 import { HeaderNav, TabBar } from './SiteNav';
@@ -27,28 +29,31 @@ describe('RepertoireLibrary', () => {
   it('lists metadata without loading scores or offering ranking', () => {
     const loads = SONG_CATALOG.map((entry) => vi.spyOn(entry, 'load'));
     const html = render();
-    expect(html).toContain('Repertório do PRGB');
+    expect(html).toContain('>Repertório</h1>');
     expect(html).toContain('Domínio público e originais — arranjo PRGB');
     for (const { info } of SONG_CATALOG) {
       expect(html).toContain(info.title);
       expect(html).toContain(info.composer);
-      expect(html).toContain(info.composerDeathYear === null ? (info.composer === ORIGINAL_COMPOSER ? 'Obra original do PRGB' : 'Melodia tradicional, domínio público') : `Falecimento do compositor: ${info.composerDeathYear}`);
-      expect(html).toContain(`Nível ${info.level} de 3 · ${info.bpm} bpm`);
+      expect(html).toContain(info.composerDeathYear === null ? (info.composer === ORIGINAL_COMPOSER ? 'Obra original do PRGB' : 'Melodia tradicional, domínio público') : `Domínio público (autor faleceu em ${info.composerDeathYear})`);
+      expect(html).toContain(`${LEVEL_NAMES[info.level]} · ${info.bpm} bpm`);
       for (const part of info.parts) expect(html).toContain(`Tocar ${info.title} — ${part.name}`);
     }
-    expect(html).not.toContain('ranking');
+    const rankable = SONG_CATALOG.flatMap(({ info }) => info.parts.map((part) => songSongId(info.code, part.code))).filter(isRankableSongId).length;
+    expect(html.split('Vale para o ranking').length - 1).toBe(rankable);
+    expect(html).toContain('Só recorde pessoal');
+    expect(html).not.toContain('Crie uma conta');
     loads.forEach((load) => { expect(load).not.toHaveBeenCalled(); load.mockRestore(); });
   });
 
   it('keeps repertoire available when the external catalog is disabled', () => {
     vi.mocked(isAcervoEnabled).mockReturnValue(false);
-    expect(render()).not.toContain('Buscar no acervo');
+    expect(render()).not.toContain('Buscar músicas');
     expect(render()).toContain('Tocar Melodia');
   });
 
   it('offers the external catalog only when enabled', () => {
     vi.mocked(isAcervoEnabled).mockReturnValue(true);
-    expect(render()).toContain('Buscar no acervo (experimental)');
+    expect(render()).toContain('Buscar músicas (experimental)');
     vi.mocked(isAcervoEnabled).mockReturnValue(false);
   });
 

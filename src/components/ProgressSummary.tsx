@@ -3,6 +3,7 @@ import { Star } from 'lucide-react';
 import { formatCountedTime, type RunProgress } from '../context/progressStore';
 import { ACHIEVEMENTS } from '../services/achievements';
 import { MAX_STARS } from '../services/progress';
+import { ACCURACY_TEXT, STARS_RULE_TEXT } from './progress/starRules';
 
 // Gentle wording on purpose: it says what the player did, never what they missed. No motion here.
 
@@ -35,14 +36,15 @@ export const ProgressSummary: React.FC<{ progress: RunProgress }> = ({ progress 
         <div className="mt-2">
           <p className="flex items-center gap-1" aria-hidden="true">
             {Array.from({ length: MAX_STARS }, (_, index) => (
-              <Star key={index} size={22} className={index < report.stars ? 'fill-amp-300 text-amp-300' : 'text-ink-500'} />
+              <Star key={index} size={22} className={index < report.stars ? 'fill-amp-300 text-amp-300' : 'text-ink-400'} />
             ))}
           </p>
           <p className="mt-1 text-sm text-ink-100">{starsText(progress)}</p>
+          <p className="mt-1 text-xs leading-5 text-ink-300">{STARS_RULE_TEXT} {ACCURACY_TEXT}</p>
         </div>
       )}
       <p className="mt-2 text-xs text-ink-300">Tempo contado: <span className="font-mono text-ink-100">{formatCountedTime(countedMs)}</span></p>
-      {!report.ownContent && <p className="mt-1 text-xs text-ink-300">Músicas do acervo externo contam o tempo de ensaio, sem estrelas.</p>}
+      {!report.ownContent && <p className="mt-1 text-xs text-ink-300">Músicas do banco de tablaturas externo contam o tempo de ensaio, sem estrelas.</p>}
       {unlocked.length > 0 && (
         <ul className="mt-3 space-y-2">
           {unlocked.map((item) => (
