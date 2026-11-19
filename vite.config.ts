@@ -13,6 +13,7 @@ export default defineConfig({
     generateBundle(_, bundle) {
       const publicFiles = [
         'favicon.svg', 'manifest.webmanifest', 'appearance-boot.js', 'icons/icon-192.png', 'icons/icon-512.png',
+        'icons/icon-maskable-512.png',
         'fonts/inter-latin-wght-normal.woff2', 'fonts/space-grotesk-latin-wght-normal.woff2',
         'fonts/jetbrains-mono-latin-wght-normal.woff2',
         // Typography "technical" (IBM Plex): a saved choice must still render offline
@@ -26,8 +27,19 @@ export default defineConfig({
       const ownLazyContent = /[\\/]src[\\/](content[\\/]songs[\\/]|components[\\/](RepertoireLibrary|AppearanceScreen|ProgressScreen|TrailScreen|SessionScreen|SessionStrip|PracticeGame|FreePlay|OnlinePracticeGame|RoomModal|SongSearchModal|AudioSettingsModal|AmpRack|LatencyTest|DuoSetupModal|FeedbackModal|RankingModals|appearance[\\/]|progress[\\/]))/
       const assets = Object.values(bundle).filter((file) => (
         file.fileName.startsWith('assets/') && !file.fileName.startsWith('assets/nam-')
+        && !(file.type === 'chunk' && file.name === 'supabase')
         && !(file.type === 'chunk' && file.isDynamicEntry && !(file.facadeModuleId && ownLazyContent.test(file.facadeModuleId)))
       ))
+      // The list above is written by hand: a new lazy screen or modal that nobody added to it would work online and
+      // open blank offline, so fail the build instead of finding out in the field.
+      const missing = Object.values(bundle).flatMap((file) => (
+        file.type === 'chunk' && file.isDynamicEntry && file.facadeModuleId
+          && /[\\/]src[\\/](components|content)[\\/]/.test(file.facadeModuleId) && !assets.includes(file)
+          ? [file.facadeModuleId] : []
+      ))
+      if (missing.length > 0) {
+        this.error(`Lazy chunk(s) of src/components or src/content missing from the offline precache: ${missing.join(', ')}. Add them to ownLazyContent in vite.config.ts.`)
+      }
       const shellFiles = ['index.html', ...assets.map((file) => file.fileName), ...publicFiles]
       const template = readFileSync(new URL('./public/sw.js', import.meta.url), 'utf8')
       const hash = createHash('sha256').update(template)
@@ -51,7 +63,13 @@ export default defineConfig({
     rolldownOptions: {
       output: {
         // React changes far less often than the app, so a new release doesn't download it again
-        codeSplitting: { groups: [{ name: 'react', test: /node_modules[/\\](react|react-dom|scheduler)[/\\]/ }] },
+        // The Supabase client gets a stable name so the bundle budget doesn't depend on a generated one
+        codeSplitting: {
+          groups: [
+            { name: 'react', test: /node_modules[/\\](react|react-dom|scheduler)[/\\]/ },
+            { name: 'supabase', test: /node_modules[/\\]@supabase[/\\]/ },
+          ],
+        },
       },
     },
   },
