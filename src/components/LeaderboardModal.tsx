@@ -14,7 +14,7 @@ const PERIODS: { id: LeaderboardPeriod; label: string }[] = [
   { id: 'week', label: 'Semana' }
 ];
 
-const MY_POSITION_LABEL = 'px-2 pt-3 pb-1 text-left text-[10px] font-semibold tracking-wider text-amp-300';
+const MY_POSITION_LABEL = 'px-2 pt-3 pb-1 text-left text-xs font-semibold tracking-wider text-amp-300';
 
 const dateFormat = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' });
 const formatDate = (iso: string) => dateFormat.format(new Date(iso));
@@ -32,9 +32,9 @@ const BoardRow: React.FC<{ entry: LeaderboardEntry }> = ({ entry }) => (
     <td className="px-2 py-2.5">
       <p className="flex items-center gap-2 font-semibold text-ink-100">
         <span className="min-w-0 truncate">{entry.nickname}</span>
-        {entry.isMe && <span className="shrink-0 rounded bg-amp-400 px-1.5 text-[10px] font-bold text-ink-950">VOCÊ</span>}
+        {entry.isMe && <span className="shrink-0 rounded bg-amp-400 px-1.5 text-xs font-bold text-ink-950">VOCÊ</span>}
       </p>
-      <p className="mt-0.5 font-mono text-[11px] text-ink-300 sm:hidden">{entry.accuracy}% · combo {entry.maxCombo} · {formatDate(entry.achievedAt)}</p>
+      <p className="mt-0.5 font-mono text-xs text-ink-300 sm:hidden">{entry.accuracy}% · combo {entry.maxCombo} · {formatDate(entry.achievedAt)}</p>
     </td>
     <td className="px-2 py-2.5 text-right font-mono font-bold text-amp-300">{entry.score.toLocaleString('pt-BR')}</td>
     <td className="hidden px-2 py-2.5 text-right font-mono text-hit sm:table-cell">{entry.accuracy}%</td>
@@ -99,7 +99,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ target }) =>
           <button key={id} type="button" role="tab" id={`leaderboard-tab-${id}`} aria-selected={period === id} aria-controls={PANEL_ID}
             tabIndex={period === id ? 0 : -1} ref={(element) => { tabRefs.current[id] = element; }}
             onClick={() => setPeriod(id)} onKeyDown={handleTabKey}
-            className={'min-h-10 cursor-pointer rounded-lg px-5 text-xs font-bold transition ' + (period === id ? 'bg-amp-400 text-ink-950' : 'text-ink-300 hover:text-ink-100')}>
+            className={'min-h-11 cursor-pointer rounded-lg px-5 text-xs font-bold transition ' + (period === id ? 'bg-amp-400 text-ink-950' : 'text-ink-300 hover:text-ink-100')}>
             {label}
           </button>
         ))}
@@ -118,7 +118,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({ target }) =>
         ) : (
           <table className="w-full table-fixed text-sm">
             <caption className="sr-only">{period === 'all' ? 'Ranking geral' : 'Ranking da semana'} de {target.title}, {target.trackName}</caption>
-            <thead className="sticky top-0 bg-ink-900 text-left text-[10px] tracking-wider text-ink-300">
+            <thead className="sticky top-0 bg-ink-900 text-left text-xs tracking-wider text-ink-300">
               <tr>
                 <th scope="col" className="w-12 px-2 py-2 text-right font-semibold">POS.</th>
                 <th scope="col" className="px-2 py-2 font-semibold">APELIDO</th>
