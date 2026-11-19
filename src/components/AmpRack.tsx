@@ -94,7 +94,7 @@ export const AmpRack: React.FC<AmpRackProps> = ({
                 </span>
               </div>
               <p className="text-xs text-ink-300">
-                Monitoramento da guitarra em tempo real com emulação de amplificador e gabinete
+                Monitoramento da guitarra em tempo real com simulação de amplificador e gabinete
               </p>
             </div>
           </div>
@@ -135,7 +135,7 @@ export const AmpRack: React.FC<AmpRackProps> = ({
         <div className="mt-4 flex items-center gap-2.5 rounded-xl border border-amp-500/20 bg-amp-500/5 px-3.5 py-2 text-xs text-amp-300/90">
           <ShieldAlert size={16} className="text-amp-400 shrink-0" />
           <span>
-            <strong>Dica de estúdio:</strong> Use fones de ouvido para tocar sem microfonia e com a melhor definição sonora.
+            <strong>Dica:</strong> Use fones de ouvido para tocar sem microfonia.
           </span>
         </div>
 
@@ -298,7 +298,7 @@ export const AmpRack: React.FC<AmpRackProps> = ({
           </div>
         </div>
 
-        {/* Rack Effects (Cabinet Simulation, Noise Gate, Studio Room Reverb) */}
+        {/* Rack Effects (Cabinet Simulation, Noise Gate, Room Reverb) */}
         <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
           {/* Cabinet Simulator */}
           <div className="p-3.5 rounded-2xl border border-ink-800 bg-ink-900/60">
@@ -313,9 +313,9 @@ export const AmpRack: React.FC<AmpRackProps> = ({
               className="w-full rounded-xl border border-ink-700 bg-ink-800 px-3 py-2 text-xs text-ink-100 focus:border-amp-500 focus:outline-none"
             >
               <option value="4x12_metal">4x12 Modern Metal</option>
-              <option value="4x12_vintage">4x12 American Lead</option>
-              <option value="2x12_british">2x12 British Crunch</option>
-              <option value="1x12_tweed">1x12 California Clean</option>
+              <option value="4x12_vintage">4x12 Gabinete brilhante</option>
+              <option value="2x12_british">2x12 Gabinete encorpado</option>
+              <option value="1x12_tweed">1x12 Gabinete limpo</option>
               <option value="bypass">Bypass Cab Sim (Sinal Direto)</option>
             </select>
           </div>
@@ -345,12 +345,12 @@ export const AmpRack: React.FC<AmpRackProps> = ({
             </p>
           </div>
 
-          {/* Studio Room Reverb */}
+          {/* Room Reverb */}
           <div className="p-3.5 rounded-2xl border border-ink-800 bg-ink-900/60">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-bold text-ink-200 flex items-center gap-1.5">
                 <Volume2 size={14} className="text-amp-400" />
-                Ambiência de Estúdio (Reverb)
+                Ambiência (Reverb)
               </span>
               <span className="text-xs font-mono text-amp-400">
                 {Math.round((settings?.reverbMix ?? 0.15) * 100)}%

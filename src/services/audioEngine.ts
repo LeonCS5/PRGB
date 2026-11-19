@@ -1,4 +1,4 @@
-// Professional Guitar/Bass Audio Engine for Real-Time Pitch Detection
+// Guitar/Bass audio engine for real-time pitch detection
 // Raw 48 kHz capture (no OS processing) feeding the PRGB Amp monitor and the PRGB game
 
 export interface DetectedPitch {
@@ -559,7 +559,7 @@ export class AudioEngine {
   }
 
   /**
-   * Start listening to the audio interface / microphone with raw studio settings
+   * Start listening to the audio interface / microphone with raw settings (no OS processing)
    */
   start(
     deviceId?: string,

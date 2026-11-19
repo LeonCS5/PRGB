@@ -1,6 +1,6 @@
-// PRGB Amp Low-Latency Guitar Amp Modeler & Monitoring DSP Engine
-// Provides real-time guitar sound with tube preamp emulation, multi-stage cabinet filtering,
-// 4-band tone stack EQ, downward expander noise gate, and studio room ambience.
+// PRGB Amp: guitar amp simulator and monitoring DSP engine
+// Provides real-time guitar sound with a preamp saturation simulation, multi-stage cabinet filtering,
+// 4-band tone stack EQ, downward expander noise gate, and a room reverb.
 
 import { dbToGain } from './audioDevices';
 
@@ -57,9 +57,9 @@ export const AMP_PRESETS: Record<AmpPresetId, {
     }
   },
   crunch: {
-    name: 'British Crunch',
+    name: 'Crunch clássico',
     tagline: 'Overdrive clássico com dinâmica rica para rock clássico e blues',
-    badge: '🔥 British Crunch',
+    badge: '🔥 Crunch',
     settings: {
       gain: 45,
       bass: 1.5,
@@ -72,7 +72,7 @@ export const AMP_PRESETS: Record<AmpPresetId, {
     }
   },
   clean: {
-    name: 'California Clean',
+    name: 'Limpo brilhante',
     tagline: 'Som cristalino, brilhante e quente com headroom amplo',
     badge: '🎸 Clean',
     settings: {
@@ -188,7 +188,7 @@ export class AmpEngine {
     this.preGainNode = this.ctx.createGain();
     this.preGainNode.gain.setValueAtTime(this.calculatePreGain(this.settings.gain), this.ctx.currentTime);
 
-    // 3. Tube Saturation / Non-Linear WaveShaper
+    // 3. Saturation / Non-Linear WaveShaper
     this.waveShaperNode = this.ctx.createWaveShaper();
     this.waveShaperNode.oversample = '4x';
     this.waveShaperNode.curve = this.createDistortionCurve(this.settings.gain, this.settings.preset);
@@ -257,7 +257,7 @@ export class AmpEngine {
     this.cabDryGainNode = this.ctx.createGain();
     this.cabDryGainNode.gain.setValueAtTime(0.0, this.ctx.currentTime);
 
-    // 6. Studio Room Ambience Reverb
+    // 6. Room Reverb
     this.reverbNode = this.ctx.createConvolver();
     this.reverbNode.buffer = this.buildRoomImpulseResponse(this.ctx);
 
@@ -558,7 +558,7 @@ export class AmpEngine {
   }
 
   /**
-   * Generates tube saturation transfer curves with realistic asymmetric harmonics
+   * Generates the saturation transfer curves for each preset (some with asymmetric clipping)
    */
   private createDistortionCurve(gain: number, preset: AmpPresetId, samples = 2048): Float32Array<ArrayBuffer> {
     const curve = new Float32Array(samples);
@@ -576,10 +576,10 @@ export class AmpEngine {
       const x = (i * 2) / samples - 1;
 
       if (preset === 'clean') {
-        // Soft tube compression & warmth (tanh)
+        // Soft compression (tanh)
         curve[i] = Math.tanh(x * (1.2 + amount * 0.15));
       } else if (preset === 'crunch') {
-        // Asymmetric clipping with 2nd order even harmonics (vintage tube feel)
+        // Asymmetric clipping with 2nd order even harmonics (asymmetric clipping)
         const biased = x + 0.12 * x * x;
         const k = amount * 1.5;
         curve[i] = ((2.5 + k) * biased * 25 * deg) / (Math.PI + k * Math.abs(biased));
@@ -601,7 +601,7 @@ export class AmpEngine {
   }
 
   /**
-   * Procedural impulse response for realistic studio room ambience
+   * Procedural impulse response for the room reverb
    */
   private buildRoomImpulseResponse(ctx: AudioContext): AudioBuffer {
     const sampleRate = ctx.sampleRate;
