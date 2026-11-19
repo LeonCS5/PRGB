@@ -72,6 +72,8 @@ export const AudioRouteNotice: React.FC = () => {
   const { activeInput, routeAlert } = useAudioSession();
   const message = routeAlert?.kind === 'moved'
     ? `A interface devolve o som para a própria entrada, o que vira microfonia. A saída mudou para ${routeAlert.outputName}. Se quiser outra, troque em Áudio.`
+    : routeAlert?.kind === 'unavailable'
+      ? 'Não foi possível usar essa saída. O som ficou fechado: escolha outra saída em Áudio.'
     : routeAlert?.kind === 'muted'
       ? 'Microfonia: o som da saída está voltando para a entrada, então o monitor foi silenciado. Escolha outra saída em Áudio.'
       : activeInput && !looksLikeInstrumentInput(activeInput.label)

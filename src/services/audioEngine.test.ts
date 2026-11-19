@@ -183,6 +183,8 @@ interface FakeTrack {
   label: string;
   stop: () => void;
   getSettings: () => MediaTrackSettings;
+  addEventListener: (type: string, listener: () => void) => void;
+  end: () => void; // what the browser does when the device disappears
 }
 
 interface FakeStream {
@@ -216,7 +218,14 @@ describe('AudioEngine lifecycle', () => {
       const deviceId = (audio.deviceId as ConstrainDOMStringParameters | undefined)?.exact as string | undefined;
       if (deviceId && missingDevices.has(deviceId)) throw new DOMException('gone', 'OverconstrainedError');
       const settings: MediaTrackSettings = trackChannels === undefined ? {} : { channelCount: trackChannels, groupId: trackGroup };
-      const track: FakeTrack = { label: 'Linha (USB-Audio)', stop: () => { stream.stopped = true; }, getSettings: () => settings };
+      const ended: (() => void)[] = [];
+      const track: FakeTrack = {
+        label: 'Linha (USB-Audio)',
+        stop: () => { stream.stopped = true; },
+        getSettings: () => settings,
+        addEventListener: (_type, listener) => { ended.push(listener); },
+        end: () => ended.forEach((listener) => listener())
+      };
       const stream: FakeStream = {
         deviceId,
         stopped: false,
@@ -636,6 +645,41 @@ describe('AudioEngine lifecycle', () => {
     expect(streams[0].stopped).toBe(true);
   });
 
+  it('stops and tells the listener when the interface disappears', async () => {
+    const engine = new AudioEngine();
+    const gone = vi.fn();
+    engine.setDisconnectListener(gone);
+    await engine.start('a');
+    streams[0].getTracks()[0].end();
+    await engine.stop();
+    expect(gone).toHaveBeenCalledTimes(1);
+    expect(streams[0].stopped).toBe(true);
+    expect(engine.getSignalReading().running).toBe(false);
+  });
+
+  it('does not report a disconnection for a stop or a restart on purpose', async () => {
+    const engine = new AudioEngine();
+    const gone = vi.fn();
+    engine.setDisconnectListener(gone);
+    await engine.start('a');
+    await engine.start('b');
+    streams[0].getTracks()[0].end();
+    await engine.stop();
+    streams[1].getTracks()[0].end();
+    await engine.stop();
+    expect(gone).not.toHaveBeenCalled();
+  });
+
+  it('releases the stream when the setup fails after getUserMedia', async () => {
+    const engine = new AudioEngine();
+    await engine.start('a');
+    await engine.stop();
+    vi.spyOn(contexts[0], 'createChannelSplitter').mockImplementationOnce(() => { throw new Error('boom'); });
+    await expect(engine.start('a')).rejects.toThrow('boom');
+    expect(streams[1].stopped).toBe(true);
+    expect(engine.getSignalReading().running).toBe(false);
+  });
+
   it('dispose closes the context and the next start builds a fresh one', async () => {
     const engine = new AudioEngine();
     await engine.start('a');
@@ -698,7 +742,14 @@ describe('AudioEngine lifecycle', () => {
     it('removes a DC offset before measuring the level and the pitch', async () => {
       const withOffset = sine(82.41).map((sample) => sample + 0.3);
       // The level is the sine's alone: amplitude / √2
-      expect(await detect(withOffset)).toMatchObject({ midiNote: 40, volume: 0.35 });
+      expect(await detect(withOffset)).toMatchObject({ midiNote: 40, volume: expect.closeTo(0.35, 1) });
+    });
+
+    it('keeps the level above the scoring floor instead of rounding it down to it', async () => {
+      // RMS 0.0249: rounded to two decimals it became 0.02 and the scoring floor (> 0.02) rejected it
+      const quiet = sine(82.41, 0.0249 * Math.SQRT2);
+      const pitch = await detect(quiet) as { volume: number } | null;
+      expect(pitch?.volume).toBeGreaterThan(0.02);
     });
 
     it('reports no pitch for noise', async () => {
