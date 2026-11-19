@@ -18,7 +18,7 @@ const RANKING_ERROR_MESSAGES: Record<RankingErrorCode, string> = {
   nickname_taken: 'Esse apelido já está em uso.',
   profile_exists: 'Este navegador já tem uma conta no ranking.',
   profile_required: 'Entre no ranking para continuar.',
-  part_unregistered: 'Esta faixa ainda não entrou no ranking. Tente novamente.',
+  part_unregistered: 'Esta música ainda não vale para o ranking. Você pode tocar e ver seu recorde pessoal.',
   revision_mismatch: 'A tablatura desta música mudou no acervo. Recarregue a música e tente de novo.',
   session_invalid: 'O ranking não encontrou esta partida. Toque de novo para valer.',
   session_too_short: 'A partida durou menos que a música, por isso não entrou no ranking.',
@@ -29,7 +29,7 @@ const RANKING_ERROR_MESSAGES: Record<RankingErrorCode, string> = {
   song_not_found: 'Esta música não foi encontrada no acervo.',
   part_not_found: 'Esta faixa não foi encontrada no acervo.',
   songsterr_unavailable: 'Esta música não pode valer para o ranking agora. O ranking vale para os exercícios e músicas do PRGB.',
-  tab_invalid: 'Esta tablatura não pode entrar no ranking.',
+  tab_invalid: 'Esta música ainda não vale para o ranking. Você pode tocar e ver seu recorde pessoal.',
   tab_empty: 'Esta faixa não tem notas para pontuar, por isso não pode entrar no ranking.'
 };
 
@@ -60,11 +60,11 @@ export const getAudioErrorMessage = (error: unknown): string => {
   const name = error instanceof Error ? error.name : '';
   switch (name) {
     case 'NotAllowedError':
-      return 'Acesso ao microfone negado. Permita o uso do microfone nas configurações do navegador e tente novamente.';
+      return 'Acesso ao microfone negado. Clique no cadeado ao lado do endereço do site, escolha Microfone e marque Permitir; depois recarregue a página.';
     case 'NotFoundError':
       return 'Nenhuma entrada de áudio encontrada. Conecte sua interface ou microfone e tente novamente.';
     case 'NotReadableError':
-      return 'A entrada de áudio está presa por outro programa. Feche os programas que usam ASIO, como amplificadores e jogos de guitarra para PC, e tente de novo: enquanto estão abertos, eles seguram a interface e, às vezes, a saída do computador.';
+      return 'A entrada de áudio está presa por outro programa. Feche os programas que usam ASIO (o modo de áudio dedicado de interfaces, usado por amplificadores e jogos de guitarra para PC) e tente de novo: enquanto estão abertos, eles seguram a interface e, às vezes, a saída do computador.';
     case 'OverconstrainedError':
       return 'A entrada selecionada não atende à configuração de áudio. Escolha outro dispositivo nas configurações de áudio.';
     default:

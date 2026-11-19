@@ -57,7 +57,7 @@ const PersonalBestBanner: React.FC<{ summary: RunSummary; score: number }> = ({ 
     return (
       <p className="mt-5 text-sm text-ink-200">
         Seu recorde{speedNote}: <span className="font-mono font-bold text-amp-300">{formatPoints(outcome.previous.score)}</span>
-        <span className="block text-xs text-ink-300">{gap === 0 ? 'Você igualou seu recorde.' : `Faltaram ${formatPoints(gap)} pontos para bater.`}</span>
+        <span className="block text-xs text-ink-300">{gap === 0 ? 'Você igualou seu recorde.' : `Faltam ${formatPoints(gap)} pontos para igualar o recorde.`}</span>
       </p>
     );
   }
@@ -75,7 +75,7 @@ const ChallengeVerdict: React.FC<{ challenge: Challenge; score: number; counts: 
     text = 'Empate! Mesma pontuação do desafio.';
     color = 'text-near';
   } else if (counts) {
-    text = `Faltaram ${formatPoints(challenge.score - score)} pontos.`;
+    text = `Faltam ${formatPoints(challenge.score - score)} pontos para igualar o desafio.`;
     color = 'text-miss';
   }
   return (
@@ -98,7 +98,7 @@ const RankedResult: React.FC<{ submission: RankedSubmission; onRetry: () => void
       <>
         <p className="text-sm text-ink-100">{submission.message}</p>
         <p className="mt-1 text-xs text-ink-300">Sua pontuação não foi perdida: o resultado acima continua valendo neste navegador.</p>
-        {submission.canRetry && <button type="button" onClick={onRetry} className="mt-2 min-h-10 cursor-pointer rounded-lg px-3 text-sm font-bold text-signal-300 underline hover:text-signal-200">Tentar enviar de novo</button>}
+        {submission.canRetry && <button type="button" onClick={onRetry} className="mt-2 min-h-11 cursor-pointer rounded-lg px-3 text-sm font-bold text-signal-300 underline hover:text-signal-200">Tentar enviar de novo</button>}
       </>
     );
   }
@@ -208,7 +208,7 @@ const DuoResult: React.FC<ResultPanelProps & { names: [string, string] }> = ({ t
   return (
     <>
       <p className="font-mono text-xs tracking-widest text-amp-300">DUPLA NO MESMO COMPUTADOR</p>
-      <h2 id={titleId} className="mt-3 font-display text-3xl font-bold">Fim da música</h2>
+      <h2 id={titleId} className="mt-3 font-display text-3xl font-bold">{isExerciseSongId(parts[0].tab.songId) ? 'Fim do exercício' : 'Fim da música'}</h2>
       <p className="mt-2 text-sm text-ink-300">{parts[0].tab.title}</p>
       {parts[0].tab.songId > 0 && <p className="mt-2 text-sm text-near">Música do acervo experimental: não vale para o ranking.</p>}
       <p className="mt-6 font-mono text-5xl font-bold text-amp-300">{formatPoints(team)}</p><p className="mt-2 text-xs text-ink-300">PLACAR DA EQUIPE</p>

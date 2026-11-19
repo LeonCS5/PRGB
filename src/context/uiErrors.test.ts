@@ -4,7 +4,7 @@ import { RankingError } from '../services/backend/rankingApi';
 import { NICKNAME_ERROR_MESSAGES } from '../services/nickname';
 import { RoomError } from '../services/backend/roomChannel';
 import { TabsApi, TabsBlockedError } from '../services/tabsApi';
-import { getRoomErrorMessage, getSearchErrorMessage, getSongMetadata } from './uiErrors';
+import { getAudioErrorMessage, getRoomErrorMessage, getSearchErrorMessage, getSongMetadata } from './uiErrors';
 import { getRankingErrorMessage } from './uiErrors';
 
 describe('getRankingErrorMessage', () => {
@@ -59,5 +59,24 @@ describe('tab provider and room messages', () => {
 
   it('explains a full Realtime service', () => {
     expect(getRoomErrorMessage(new RoomError('realtime_busy'))).toContain('lotadas');
+  });
+});
+
+describe('messages that say what to do', () => {
+  it('tells a part outside the ranking that retrying will not help', () => {
+    for (const code of ['part_unregistered', 'tab_invalid'] as const) {
+      const text = getRankingErrorMessage(new RankingError(code));
+      expect(text).toContain('não vale para o ranking');
+      expect(text).not.toContain('Tente novamente');
+    }
+  });
+
+  it('says where to click to allow the microphone, and what ASIO is', () => {
+    const denied = new Error('x');
+    denied.name = 'NotAllowedError';
+    expect(getAudioErrorMessage(denied)).toContain('cadeado');
+    const busy = new Error('x');
+    busy.name = 'NotReadableError';
+    expect(getAudioErrorMessage(busy)).toContain('ASIO (o modo de áudio dedicado');
   });
 });
