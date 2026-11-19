@@ -32,17 +32,19 @@ export const AmpRack: React.FC<AmpRackProps> = ({
   onClose,
   ampEngine
 }) => {
-  const [settings, setSettings] = useState<AmpSettings | null>(
-    ampEngine ? ampEngine.getSettings() : null
+  // Tied to the engine it was read from: a new engine is picked up while rendering, not in an effect
+  const [tracked, setTracked] = useState<{ engine: AmpEngine | null; settings: AmpSettings | null }>(
+    () => ({ engine: ampEngine, settings: ampEngine ? ampEngine.getSettings() : null })
   );
+  if (tracked.engine !== ampEngine) setTracked({ engine: ampEngine, settings: ampEngine ? ampEngine.getSettings() : null });
+  const settings = tracked.settings;
   const [outputLevel, setOutputLevel] = useState<number>(0);
 
   // Sync settings whenever ampEngine updates
   useEffect(() => {
     if (!ampEngine) return;
-    setSettings(ampEngine.getSettings());
     const unsubscribe = ampEngine.subscribe((newSettings) => {
-      setSettings(newSettings);
+      setTracked({ engine: ampEngine, settings: newSettings });
     });
     return () => unsubscribe();
   }, [ampEngine]);

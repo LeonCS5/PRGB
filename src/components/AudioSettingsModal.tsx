@@ -16,7 +16,7 @@ import { useModals } from '../context/ModalsContext';
 import { ErrorNotice } from './ErrorNotice';
 import { AudioRouteNotice, InputLevelMeter } from './AudioRouting';
 import { AdvancedAudioOptions, AudioRoutePanel, SignalControls } from './AudioRoutePanel';
-import { AMP_PRESETS, type AmpPresetId, type AmpSettings } from '../services/ampEngine';
+import { AMP_PRESETS, type AmpEngine, type AmpPresetId, type AmpSettings } from '../services/ampEngine';
 
 interface AudioSettingsModalProps {
   isOpen: boolean;
@@ -43,15 +43,17 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
   const { isAudioRunning, startAudio, audioError, dismissAudioError } = useAudioSession();
   const { setLatencyTestOpen } = useModals();
   const ampEngine = audioEngine.getAmp();
-  const [toneSettings, setToneSettings] = useState<AmpSettings | null>(
-    ampEngine ? ampEngine.getSettings() : null
+  // Tied to the engine it was read from: a new engine is picked up while rendering, not in an effect
+  const [tone, setTone] = useState<{ engine: AmpEngine | null; settings: AmpSettings | null }>(
+    () => ({ engine: ampEngine, settings: ampEngine ? ampEngine.getSettings() : null })
   );
+  if (tone.engine !== ampEngine) setTone({ engine: ampEngine, settings: ampEngine ? ampEngine.getSettings() : null });
+  const toneSettings = tone.settings;
 
   useEffect(() => {
-    if (!isOpen || !ampEngine) return;
-    setToneSettings(ampEngine.getSettings());
-    return ampEngine.subscribe((s) => setToneSettings(s));
-  }, [isOpen, ampEngine]);
+    if (!ampEngine) return;
+    return ampEngine.subscribe((s) => setTone({ engine: ampEngine, settings: s }));
+  }, [ampEngine]);
 
   if (!isOpen) return null;
 

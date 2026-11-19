@@ -19,6 +19,7 @@ import {
 } from '../services/audioDevices';
 import { askBrowserForOutput, canAskBrowserForOutput, canChooseAudioOutput } from '../services/audioOutput';
 import { SoundFX } from '../services/synthAudio';
+import type { AmpEngine } from '../services/ampEngine';
 
 export interface AudioRoutePanelProps {
   currentDeviceId: string;
@@ -195,7 +196,8 @@ export const AudioRoutePanel: React.FC<AudioRoutePanelProps> = ({ currentDeviceI
   }, [audioEngine]);
 
   useEffect(() => {
-    void refreshDevices();
+    // After the render, not inside it: the list arrives from the browser
+    void Promise.resolve().then(refreshDevices);
     const devices = navigator.mediaDevices;
     devices?.addEventListener?.('devicechange', refreshDevices);
     return () => devices?.removeEventListener?.('devicechange', refreshDevices);
@@ -262,12 +264,15 @@ export const AudioRoutePanel: React.FC<AudioRoutePanelProps> = ({ currentDeviceI
 
 export const SignalControls: React.FC = () => {
   const { ampEngine, audioOptions, changeAudioOptions } = useAudioSession();
-  const [gateDb, setGateDb] = useState(ampEngine?.getSettings().gateThreshold ?? -45);
+  const [tracked, setTracked] = useState<{ engine: AmpEngine | null; gateDb: number }>(
+    () => ({ engine: ampEngine, gateDb: ampEngine?.getSettings().gateThreshold ?? -45 })
+  );
+  if (tracked.engine !== ampEngine) setTracked({ engine: ampEngine, gateDb: ampEngine?.getSettings().gateThreshold ?? -45 });
+  const gateDb = tracked.gateDb;
 
   useEffect(() => {
     if (!ampEngine) return;
-    setGateDb(ampEngine.getSettings().gateThreshold);
-    return ampEngine.subscribe((settings) => setGateDb(settings.gateThreshold));
+    return ampEngine.subscribe((settings) => setTracked({ engine: ampEngine, gateDb: settings.gateThreshold }));
   }, [ampEngine]);
 
   return (
