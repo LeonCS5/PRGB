@@ -57,7 +57,7 @@ export const InputLevelMeter: React.FC = () => {
 
   return (
     <div>
-      <div className="h-2 overflow-hidden rounded-full bg-ink-700">
+      <div aria-hidden="true" className="h-2 overflow-hidden rounded-full bg-ink-700">
         <div className={'h-full rounded-full ' + LEVEL_COLORS[state].bar} style={{ width: `${fill}%` }} />
       </div>
       <p className="mt-1 flex items-center justify-between gap-1 whitespace-nowrap font-mono text-[10px] font-bold sm:text-xs">

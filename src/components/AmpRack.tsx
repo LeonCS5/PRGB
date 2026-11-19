@@ -73,7 +73,7 @@ export const AmpRack: React.FC<AmpRackProps> = ({
         <button
           onClick={onClose}
           aria-label="Fechar modal"
-          className="min-h-10 absolute right-3 top-3 flex size-10 items-center justify-center rounded-xl text-ink-300 transition hover:bg-ink-800 hover:text-ink-100 cursor-pointer"
+          className="min-h-11 absolute right-3 top-3 flex size-11 items-center justify-center rounded-xl text-ink-300 transition hover:bg-ink-800 hover:text-ink-100 cursor-pointer"
         >
           <X size={20} />
         </button>
@@ -381,7 +381,7 @@ export const AmpRack: React.FC<AmpRackProps> = ({
                 {Math.round(outputLevel * 100)}%
               </span>
             </div>
-            <div className="h-2.5 w-full overflow-hidden rounded-full bg-ink-800 p-0.5">
+            <div aria-hidden="true" className="h-2.5 w-full overflow-hidden rounded-full bg-ink-800 p-0.5">
               <div
                 className="h-full rounded-full transition-all duration-75 bg-gradient-to-r from-hit via-amp-400 to-amp-500"
                 style={{ width: `${Math.min(100, outputLevel * 160)}%` }}

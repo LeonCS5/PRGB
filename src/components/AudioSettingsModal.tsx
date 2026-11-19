@@ -66,7 +66,7 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
         <button
           onClick={onClose}
           aria-label="Fechar modal"
-          className="min-h-10 absolute right-3 top-3 flex size-10 items-center justify-center rounded-xl text-ink-300 transition hover:bg-ink-800 hover:text-ink-100 cursor-pointer"
+          className="min-h-11 absolute right-3 top-3 flex size-11 items-center justify-center rounded-xl text-ink-300 transition hover:bg-ink-800 hover:text-ink-100 cursor-pointer"
         >
           <X size={20} />
         </button>
@@ -114,7 +114,7 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
                     type="button"
                     onClick={() => onChannelModeChange('ch1')}
                     disabled={isDuoMode}
-                    className={`rounded-xl py-2.5 px-3 text-xs font-semibold border transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
+                    className={`min-h-11 rounded-xl py-2.5 px-3 text-xs font-semibold border transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
                       currentChannelMode === 'ch1'
                         ? 'border-amp-500 bg-amp-700/60 text-amp-300 shadow-sm shadow-amp-500/30'
                         : 'border-ink-700 bg-ink-800 text-ink-300 hover:border-ink-500'
@@ -126,7 +126,7 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
                     type="button"
                     onClick={() => onChannelModeChange('ch2')}
                     disabled={isDuoMode}
-                    className={`rounded-xl py-2.5 px-3 text-xs font-semibold border transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
+                    className={`min-h-11 rounded-xl py-2.5 px-3 text-xs font-semibold border transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
                       currentChannelMode === 'ch2'
                         ? 'border-amp-500 bg-amp-700/60 text-amp-300 shadow-sm shadow-amp-500/30'
                         : 'border-ink-700 bg-ink-800 text-ink-300 hover:border-ink-500'
@@ -138,7 +138,7 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
                     type="button"
                     onClick={() => onChannelModeChange('both')}
                     disabled={isDuoMode}
-                    className={`rounded-xl py-2.5 px-3 text-xs font-semibold border transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
+                    className={`min-h-11 rounded-xl py-2.5 px-3 text-xs font-semibold border transition cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
                       currentChannelMode === 'both'
                         ? 'border-amp-500 bg-amp-700/60 text-amp-300 shadow-sm shadow-amp-500/30'
                         : 'border-ink-700 bg-ink-800 text-ink-300 hover:border-ink-500'
@@ -176,7 +176,7 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
                   <button
                     type="button"
                     onClick={() => ampEngine?.setMonitoringEnabled(!isMonitoring)}
-                    className={`min-h-10 px-3 py-1.5 rounded-xl text-xs font-bold border transition flex shrink-0 items-center gap-1.5 cursor-pointer ${
+                    className={`min-h-11 px-3 py-1.5 rounded-xl text-xs font-bold border transition flex shrink-0 items-center gap-1.5 cursor-pointer ${
                       isMonitoring
                         ? 'border-hit/80 bg-hit/10 text-hit shadow-sm shadow-hit/20'
                         : 'border-amp-700 bg-amp-700/40 text-amp-400'

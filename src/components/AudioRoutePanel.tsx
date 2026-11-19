@@ -34,7 +34,7 @@ const STAGE_TEXT: Record<SignalStage, { title: string; help: string; tone: strin
   'monitor-closed': { title: 'Som fechado para evitar microfonia', help: 'A saída escolhida devolve o som para a entrada. Escolha outra saída na lista.', tone: 'text-miss' },
   'no-signal': { title: 'Nenhum sinal da guitarra', help: 'Toque uma corda. Se o nível não subir, confira o cabo, o volume da guitarra, o botão de ganho da interface e se a entrada certa está marcada.', tone: 'text-near' },
   gate: { title: 'O noise gate está cortando o som', help: 'O sinal chega, mas fica abaixo do gate. Aumente o ganho de entrada ou baixe o gate.', tone: 'text-near' },
-  playing: { title: 'O som está saindo', help: 'Se não estiver ouvindo, marque outra saída na lista, confira o volume do Windows e feche os programas que usam ASIO.', tone: 'text-hit' }
+  playing: { title: 'O som está saindo', help: 'Se não estiver ouvindo, marque outra saída na lista, confira o volume do Windows e feche os programas de música que usam ASIO (um driver que prende a interface só para eles).', tone: 'text-hit' }
 };
 
 const HOLD_MS = 1500; // long enough to read, and to last between two notes
@@ -109,7 +109,7 @@ interface DeviceRowProps {
 }
 
 const DeviceRow: React.FC<DeviceRowProps> = ({ group, label, format, checked, disabled, onSelect }) => (
-  <label className={`flex min-h-10 items-center gap-2 rounded-lg px-2 py-1 text-sm transition ${disabled ? 'cursor-not-allowed text-ink-400' : 'cursor-pointer hover:bg-ink-800'} ${checked ? 'bg-signal-500/10 text-ink-100' : 'text-ink-200'}`}>
+  <label className={`flex min-h-11 items-center gap-2 rounded-lg px-2 py-1 text-sm transition ${disabled ? 'cursor-not-allowed text-ink-400' : 'cursor-pointer hover:bg-ink-800'} ${checked ? 'bg-signal-500/10 text-ink-100' : 'text-ink-200'}`}>
     <input type="radio" name={`prgb-audio-${group}`} checked={checked} disabled={disabled} onChange={onSelect} className="size-4 shrink-0 accent-signal-400" />
     <span className="w-12 shrink-0 font-mono text-[10px] uppercase tracking-wider text-ink-300">{group === 'input' ? 'Entrada' : 'Saída'}</span>
     <span className="min-w-0 flex-1 truncate">{label}</span>
@@ -170,7 +170,7 @@ const SignalPath: React.FC = () => {
       </div>
       <div className="mt-2 flex flex-wrap gap-2">
         <button type="button" onClick={() => SoundFX.playPerfectHit()}
-          className="flex min-h-10 cursor-pointer items-center gap-1.5 rounded-xl border border-ink-700 bg-ink-800 px-3 text-xs font-semibold text-ink-200 transition hover:border-ink-500">
+          className="flex min-h-11 cursor-pointer items-center gap-1.5 rounded-xl border border-ink-700 bg-ink-800 px-3 text-xs font-semibold text-ink-200 transition hover:border-ink-500">
           <Volume2 size={14} aria-hidden="true" /> Testar saída
         </button>
         {signal.stage === 'suspended' && (
@@ -215,7 +215,7 @@ export const AudioRoutePanel: React.FC<AudioRoutePanelProps> = ({ currentDeviceI
   return (
     <section aria-labelledby="audio-route-title" className="rounded-2xl border border-ink-700 bg-ink-950 p-4">
       <h3 id="audio-route-title" className="font-display text-base font-bold">Rota de áudio</h3>
-      <p className="mt-0.5 text-xs leading-5 text-ink-300">Escolha uma entrada e uma saída. O navegador usa os drivers do sistema, não ASIO.</p>
+      <p className="mt-0.5 text-xs leading-5 text-ink-300">Escolha uma entrada e uma saída. O navegador usa os drivers do sistema, não ASIO (o driver próprio de interfaces de áudio, que só programas instalados usam).</p>
       <p className="mt-1 text-xs leading-5 text-near">Use tomadas aterradas. Se sentir choque ao tocar nas cordas, pare, desconecte tudo e chame um eletricista.</p>
 
       <SignalPath />
@@ -253,7 +253,7 @@ export const AudioRoutePanel: React.FC<AudioRoutePanelProps> = ({ currentDeviceI
             </button>
           )}
           <button type="button" onClick={() => void refreshDevices()}
-            className="flex min-h-10 cursor-pointer items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-ink-200 transition hover:bg-ink-800">
+            className="flex min-h-11 min-w-11 cursor-pointer items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-ink-200 transition hover:bg-ink-800">
             <RefreshCw size={13} aria-hidden="true" /> Atualizar lista
           </button>
         </div>
@@ -312,14 +312,14 @@ export const AdvancedAudioOptions: React.FC = () => {
       </summary>
       <div className="grid gap-4 px-4 pb-4 md:grid-cols-2">
         <div className="space-y-2">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-ink-300">Compensação de latência</p>
+          <p title="Atraso entre tocar e o PRGB ouvir a nota. O teste de latência preenche isto por você." className="text-[11px] font-bold uppercase tracking-wider text-ink-300">Compensação de latência</p>
           <SliderRow label="Entrada" value={audioOptions.inputLatencySamples} min={0} max={LATENCY_SAMPLES_MAX} step={LATENCY_SAMPLES_STEP}
             readout={`${audioOptions.inputLatencySamples} amostras`}
             onChange={(inputLatencySamples) => void changeAudioOptions({ inputLatencySamples })} />
           <SliderRow label="Saída" value={audioOptions.outputLatencySamples} min={0} max={LATENCY_SAMPLES_MAX} step={LATENCY_SAMPLES_STEP}
             readout={`${audioOptions.outputLatencySamples} amostras`}
             onChange={(outputLatencySamples) => void changeAudioOptions({ outputLatencySamples })} />
-          <p className="text-[11px] leading-4 text-ink-300">Só muda a pontuação: {formatMs(((audioOptions.inputLatencySamples + audioOptions.outputLatencySamples) / sampleRate) * 1000)} a mais para as notas contarem.</p>
+          <p className="text-[11px] leading-4 text-ink-300">Compensação é o atraso entre tocar e o PRGB ouvir a nota. Só muda a pontuação: {formatMs(((audioOptions.inputLatencySamples + audioOptions.outputLatencySamples) / sampleRate) * 1000)} a mais para as notas contarem.</p>
         </div>
 
         <div className="space-y-2">
@@ -335,7 +335,8 @@ export const AdvancedAudioOptions: React.FC = () => {
             Modo de baixo consumo
           </label>
           <label className="block text-xs text-ink-200">
-            Tamanho do buffer
+            <span title="Quantas amostras de áudio o navegador junta antes de processar">Tamanho do buffer</span>
+            <span className="block text-[11px] leading-4 text-ink-300">Buffer menor responde mais rápido, mas pode causar estalos.</span>
             <select value={audioOptions.bufferSamples} disabled={isApplying}
               onChange={(event) => void applyEngineOption({ bufferSamples: Number(event.target.value) })}
               className="mt-1 w-full rounded-lg border border-ink-700 bg-ink-800 px-2 py-2 text-xs text-ink-100">
