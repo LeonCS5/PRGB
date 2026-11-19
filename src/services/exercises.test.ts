@@ -348,3 +348,72 @@ describe('exercise ids', () => {
     expect(findExercisePart(exerciseSongId(60, 0), 1.5)).toBeNull();
   });
 });
+
+describe('how a key is written', () => {
+  const labelsOf = (code: number, key: number): string[] =>
+    [...new Set(buildExerciseTab(find(code), key, 'strum').notes.flatMap((note) => (note.chord ? [note.chord.label] : [])))];
+
+  it('never mixes sharps and flats in one key: the major key a semitone above C is Db, its chords Db, Gb and Ab', () => {
+    expect(buildExerciseTab(find(130), 1, 'strum').title).toBe('I, IV, V e I em Db');
+    expect(labelsOf(130, 1)).toEqual(['Db', 'Gb', 'Ab']);
+    expect(labelsOf(130, 8)).toEqual(['Ab', 'Db', 'Eb']);
+    expect(labelsOf(130, 10)).toEqual(['Bb', 'Eb', 'F']);
+    expect(labelsOf(130, 6)).toEqual(['F#', 'B', 'C#']);
+  });
+
+  it('writes the minor keys with their own signature: C#m and G#m with sharps, Ebm and Bbm with flats', () => {
+    const titleOf = (code: number, key: number) => buildExerciseTab(find(code), key, 'strum').title;
+    expect(titleOf(140, 1)).toBe('i, iv, v e i em C#m');
+    expect(labelsOf(140, 1)).toEqual(['C#m', 'F#m', 'G#m']);
+    expect(labelsOf(140, 8)).toEqual(['G#m', 'C#m', 'D#m']);
+    expect(labelsOf(140, 3)).toEqual(['Ebm', 'Abm', 'Bbm']);
+  });
+
+  it('has no chord label with both a sharp and a flat, in any key', () => {
+    for (const variant of everyVariant) {
+      if (!['progressoes', 'acordes'].includes(variant.category.id) || !variant.item.keyed) continue;
+      const tab = buildExerciseTab(variant.item, variant.key, variant.pattern);
+      const labels = [...new Set(tab.notes.flatMap((note) => (note.chord ? [note.chord.label] : [])))];
+      const sharps = labels.some((name) => name.includes('#'));
+      const flats = labels.some((name) => /^[A-G]b/.test(name));
+      expect(sharps && flats, `${variant.item.title} [${KEYS[variant.key]}]`).toBe(false);
+    }
+  });
+
+  it('names the key in every title with a letter per note: Db, Gb or Ab, never C#, F# with Ab', () => {
+    for (const variant of everyVariant.filter(({ item }) => item.keyed)) {
+      const title = buildExerciseTab(variant.item, variant.key, variant.pattern).title;
+      const name = title.slice(title.lastIndexOf(' em ') + 4);
+      expect(name, title).toMatch(variant.item.minorKey ? /^(C|C#|D|Eb|E|F|F#|G|G#|A|Bb|B)m$/ : /^(C|Db|D|Eb|E|F|F#|G|Ab|A|Bb|B)$/);
+    }
+  });
+});
+
+describe('how far up the neck the exercises go', () => {
+  const highest = (item: Exercise): number => Math.max(...everyVariant
+    .filter((variant) => variant.item === item)
+    .flatMap(({ key, pattern }) => buildExerciseTab(item, key, pattern).notes.map((note) => note.fret)));
+
+  it('keeps levels 1 and 2 up to fret 20, in every key and way of playing', () => {
+    for (const item of everyExercise.filter(({ level }) => level <= 2)) expect(highest(item), item.title).toBeLessThanOrEqual(20);
+  });
+
+  it('lets level 3 reach fret 22, no further', () => {
+    for (const item of everyExercise.filter(({ level }) => level === 3)) expect(highest(item), item.title).toBeLessThanOrEqual(22);
+  });
+});
+
+describe('the texts of the cards', () => {
+  it('say casa, never traste, and use chord letters, not note names in solfege', () => {
+    const texts = [...everyExercise.flatMap(({ title, description }) => [title, description]), ...EXERCISE_CATEGORIES.flatMap(({ summary, note }) => [summary, note ?? ''])];
+    for (const text of texts) {
+      expect(text).not.toMatch(/\btraste/i);
+      expect(text).not.toMatch(/(?<![\p{L}])(Dó|Ré|Mi|Fá|Sol|Lá|Si)(?![\p{L}])/u);
+    }
+  });
+
+  it('do not title two different exercises just "Maior" or "Menor"', () => {
+    for (const item of everyExercise) expect(['Maior', 'Menor'], item.title).not.toContain(item.title);
+    for (const item of everyExercise) expect(item.title, item.title).not.toMatch(/^(Maior|Menor),/);
+  });
+});
