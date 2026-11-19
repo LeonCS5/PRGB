@@ -305,6 +305,22 @@ describe('TabsApi network hardening', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(goodMeta))));
     await expect(TabsApi.getSongMeta(7)).resolves.toMatchObject({ songId: 7, revisionId: 3 });
   });
+
+  it('rejects a meta image that could change the CDN path', async () => {
+    for (const image of ['../x', 'a/b', 'a?b=1', 'a#b', '', 'a b', 'a%2Fb']) {
+      vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ...goodMeta, image }))));
+      await expect(TabsApi.getSongMeta(7)).rejects.toBeInstanceOf(TabsFormatError);
+    }
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ...goodMeta, image: 'Ab-9_z' }))));
+    await expect(TabsApi.getSongMeta(7)).resolves.toMatchObject({ image: 'Ab-9_z' });
+  });
+
+  it('refuses to build a tab URL from an unsafe image', async () => {
+    const fetchMock = vi.fn(async () => new Response('[]'));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(TabsApi.getTrackTabJson(7, 3, '../../x', 0)).rejects.toBeInstanceOf(TabsFormatError);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('removed songs', () => {
