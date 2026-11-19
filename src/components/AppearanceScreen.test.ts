@@ -51,7 +51,7 @@ describe('ThemesSection', () => {
     expect(THEMES).toHaveLength(6);
     expect(html.match(/>ativo</g)).toHaveLength(1);
     expect(html.match(/<input[^>]*checked/g)).toHaveLength(1);
-    expect(html).toContain('Tema Midnight Arcade sem alterações');
+    expect(html).toContain('Tema Arcade da Meia-Noite sem alterações');
     expect(html).not.toContain('Personalizado');
   });
 
@@ -72,7 +72,7 @@ describe('ThemesSection', () => {
 describe('option sections', () => {
   it('Interface: three styles and three fonts, with the active one marked', () => {
     const html = renderToStaticMarkup(createElement(InterfaceSection, { settings: base({ uiStyle: 'sharp', font: 'technical' }), onChange: noop }));
-    for (const label of ['Soft', 'Sharp', 'Arcade', 'Modern', 'Technical', 'Expressive']) expect(html).toContain(label);
+    for (const label of ['Suave', 'Reto', 'Arcade', 'Moderna', 'Técnica', 'Expressiva']) expect(html).toContain(label);
     expect(html.match(/<legend/g)).toHaveLength(2);
     expect(html.match(/>ativo</g)).toHaveLength(2);
     expect(html).toContain('Estilo dos componentes');
@@ -82,7 +82,7 @@ describe('option sections', () => {
   it('Notes: styles, schemes with their colors, ranges with a visible value', () => {
     const settings = base({ noteStyle: 'neon', strings: { ...DEFAULT_STRINGS, scheme: 'vibrant', glow: 35 } });
     const html = renderToStaticMarkup(createElement(NotesSection, { settings, onChange: noop, originalStrings: ORIGINAL_PALETTE.strings }));
-    for (const label of ['Classic', 'Arcade', 'Minimal', 'Neon', 'Digital', 'Original', 'Vibrant', 'Pastel', 'Sólida', 'Segmentada', 'Fina', 'Grossa']) expect(html).toContain(label);
+    for (const label of ['Clássica', 'Arcade', 'Mínima', 'Neon', 'Digital', 'Original', 'Vibrante', 'Pastel', 'Sólida', 'Segmentada', 'Fina', 'Grossa']) expect(html).toContain(label);
     expect(html).toContain('#ff3d9a');
     expect(html).toContain('#c49bff');
     expect(html).toContain('>35%</output>');
@@ -93,7 +93,7 @@ describe('option sections', () => {
   it('Effects: five switches with a line each, and the reduced motion notice only when it applies', () => {
     const on = base({ effects: { ...DEFAULT_EFFECTS, hitPulse: true } });
     const html = renderToStaticMarkup(createElement(EffectsSection, { settings: on, onChange: noop, effectsPaused: false }));
-    for (const label of ['Hit Pulse', 'Perfect Spark', 'Combo Glow', 'Note Trail', 'Reactive Background', 'Sutil', 'Forte']) expect(html).toContain(label);
+    for (const label of ['Pulso de acerto', 'Faíscas do Perfeito', 'Brilho do combo', 'Rastro das notas', 'Fundo reativo', 'Sutil', 'Forte']) expect(html).toContain(label);
     expect(html.match(/role="switch"/g)).toHaveLength(5);
     expect(html.match(/<input[^>]*role="switch"[^>]*checked/g)).toHaveLength(1);
     expect(html).not.toContain('movimento reduzido');
@@ -103,7 +103,7 @@ describe('option sections', () => {
 
   it('Background: four styles with a thumbnail each', () => {
     const html = renderToStaticMarkup(createElement(BackgroundSection, { settings: base({ background: 'grid' }), onChange: noop }));
-    for (const label of ['Solid', 'Gradient', 'Grid', 'Ambient']) expect(html).toContain(label);
+    for (const label of ['Lisa', 'Degradê', 'Grade', 'Ambiente']) expect(html).toContain(label);
     expect(html.match(/h-14 rounded-lg/g)).toHaveLength(4);
     expect(html.match(/>ativo</g)).toHaveLength(1);
   });
