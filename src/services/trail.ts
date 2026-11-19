@@ -28,6 +28,7 @@ const E = 4;
 const F = 5;
 const G = 7;
 const A = 9;
+const B = 11;
 
 const step = (code: number, key = C, pattern?: ExercisePattern): TrailStep => ({ code, key, pattern });
 
@@ -42,22 +43,20 @@ export const TRAIL: TrailStage[] = [
     id: 'primeiros-acordes',
     title: 'Primeiros acordes',
     goal: 'Trocar entre os acordes abertos mais comuns no tempo.',
-    steps: [step(114), step(110), step(108), step(109), step(102), step(101), step(100), step(116), step(115)]
+    steps: [step(114), step(110), step(108), step(109), step(102), step(101), step(100)]
   },
   {
     id: 'ritmo-e-progressoes',
     title: 'Ritmo e primeiras progressões',
     goal: 'Manter a batida firme e tocar uma sequência de acordes do começo ao fim.',
-    steps: [
-      step(161), step(169), step(170), step(113, E), step(124, E), step(29),
-      step(130, G), step(136, C), step(131, D), step(132, C), step(133, G), step(140, A), step(145, E)
-    ]
+    // The first sequences use open chords only: the progressions with barre chords come after the barre stage
+    steps: [step(169), step(170), step(161), step(113, B), step(124, G), step(29), step(115), step(116)]
   },
   {
     id: 'notas-e-escalas',
     title: 'Notas e primeiras escalas',
-    goal: 'Achar as notas no braço e tocar uma escala inteira, subindo e descendo.',
-    steps: [step(190), step(191), step(185), step(186, C), step(60, C), step(61, A), step(80, C), step(81, A), step(20), step(21), step(24), step(2)]
+    goal: 'Achar as notas no braço, tocar a escala maior e a menor e experimentar o primeiro ligado e o primeiro slide.',
+    steps: [step(190), step(191), step(180), step(181), step(182), step(183), step(184), step(185), step(186, C), step(60, C), step(61, A), step(80, C), step(81, A), step(20), step(21), step(24), step(2)]
   },
   {
     id: 'pentatonica-menor',
@@ -78,9 +77,15 @@ export const TRAIL: TrailStage[] = [
     steps: [step(111, G), step(112, C), step(125, G), step(126, A), step(153, A), step(154, A), step(150, A), step(151, A), step(152, A)]
   },
   {
+    id: 'progressoes-com-pestana',
+    title: 'Progressões com pestana',
+    goal: 'Tocar sequências de acordes com pestana em vários tons, em tom maior e em tom menor.',
+    steps: [step(130, G), step(136, G), step(131, G), step(132, A), step(133, A), step(140, G), step(141, C), step(145, C)]
+  },
+  {
     id: 'pentatonica-maior',
     title: 'Pentatônica maior e tom maior',
-    goal: 'Soar doce em tom maior e conduzir progressões com mais de quatro acordes.',
+    goal: 'Soar doce em tom maior e tocar progressões mais longas, de até oito acordes.',
     steps: [step(45, G), step(58, G), step(59, G), step(46, G), step(47, G), step(48, G), step(49, G), step(51, G), step(137, C), step(138, G), step(139, C)]
   },
   {
@@ -101,13 +106,13 @@ export const TRAIL: TrailStage[] = [
   {
     id: 'ritmos',
     title: 'Ritmos e levadas',
-    goal: 'Segurar contratempo, síncope, shuffle e tercinas.',
+    goal: 'Segurar batidas fora do tempo, o balanço do blues e grupos de três notas.',
     steps: [step(162), step(163), step(164), step(165), step(166), step(171)]
   },
   {
     id: 'harmonia',
     title: 'Sétimas, arpejos e cadências',
-    goal: 'Ouvir e tocar as cadências do jazz e do blues com sétimas.',
+    goal: 'Tocar arpejos de tríades e de sétimas, e progressões com sétima e em tom menor.',
     steps: [step(84, C), step(85, C), step(134, C), step(135, C), step(86, C), step(87, G), step(88, A), step(142, A), step(143, A), step(146, A), step(147, A)]
   },
   {
@@ -125,7 +130,7 @@ export const TRAIL: TrailStage[] = [
   {
     id: 'simetrias',
     title: 'Harmonia avançada',
-    goal: 'Dominar acordes alterados, o modo lócrio e as escalas simétricas.',
+    goal: 'Tocar arpejos meio-diminutos e diminutos, o modo lócrio e as escalas simétricas.',
     steps: [step(89, C), step(90, C), step(144, A), step(148, C), step(68, A), step(69, C), step(70, C), step(71, C)]
   }
 ];
