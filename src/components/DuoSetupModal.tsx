@@ -49,7 +49,7 @@ const DuoTuner: React.FC<{ player: PlayerSlot; wasHeard: boolean }> = ({ player,
           {pitch ? (inTune ? 'afinado' : `${pitch.cents > 0 ? '+' : ''}${pitch.cents} cents`) : 'Toque uma corda'}
         </span>
       </div>
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-ink-800">
+      <div aria-hidden="true" className="mt-3 h-2 overflow-hidden rounded-full bg-ink-800">
         <div className="h-full rounded-full bg-gradient-to-r from-hit to-amp-400 transition-all duration-75" style={{ width: `${level}%` }} />
       </div>
       <p className={'mt-2 flex items-center gap-1.5 text-xs ' + (wasHeard ? 'text-hit' : 'text-ink-300')}>

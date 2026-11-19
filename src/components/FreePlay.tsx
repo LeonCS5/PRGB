@@ -52,10 +52,37 @@ const Reading: React.FC<{ label: string; className?: string; children: React.Rea
   </div>
 );
 
+// The only part that follows the pitch frame by frame: the rest of the screen does not render with it
+const PitchReadings: React.FC<{ total: number }> = ({ total }) => {
+  const pitch = useLatestPitch();
+  const position = pitch?.stringEstimate != null && pitch.fretEstimate != null
+    ? `Corda ${pitch.stringEstimate} · casa ${pitch.fretEstimate}`
+    : 'Fora do braço';
+  return (
+    <div className="mt-2 grid grid-cols-6 gap-2 sm:mt-3 sm:flex [@media(max-height:500px)]:mt-1">
+      <div className="col-span-2 flex shrink-0 flex-col items-center justify-center rounded-xl border border-signal-500/30 bg-signal-500/5 py-1 sm:w-32 sm:py-0">
+        <p className="text-[10px] tracking-wider text-ink-300">NOTA</p>
+        <p className="font-display text-3xl font-bold text-signal-300 sm:text-6xl [@media(max-height:500px)]:text-2xl">{pitch ? pitch.noteName : '--'}</p>
+      </div>
+      <div className="contents min-w-0 flex-1 gap-2 sm:grid sm:grid-cols-3 lg:grid-cols-6 [@media(max-height:500px)]:grid-cols-4">
+        <Reading label="FREQUÊNCIA">{pitch ? `${pitch.frequency.toFixed(1)} Hz` : '--'}</Reading>
+        <Reading label="AFINAÇÃO">
+          {pitch
+            ? <span className={Math.abs(pitch.cents) <= 6 ? 'text-hit' : 'text-near'}>{pitch.cents > 0 ? '+' : ''}{pitch.cents} cents</span>
+            : '--'}
+        </Reading>
+        <Reading label="POSIÇÃO" className="max-sm:col-span-3"><span className="text-xs sm:whitespace-nowrap sm:text-[11px]">{pitch ? position : '--'}</span></Reading>
+        <Reading label="ENTRADA" className="max-sm:col-span-3"><InputLevelMeter /></Reading>
+        <Reading label="CLAREZA" className={SPARE_READING}>{pitch ? `${Math.round(pitch.clarity * 100)}%` : '--'}</Reading>
+        <Reading label="NOTAS" className={SPARE_READING}><span className="text-amp-300">{total}</span></Reading>
+      </div>
+    </div>
+  );
+};
+
 export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings, onOpenAmpRack }) => {
   const { setFeedbackOpen } = useModals();
   const { audioEngine, isAudioRunning, startAudio, audioError, dismissAudioError, getLatestPitch, activeInput, outputName } = useAudioSession();
-  const pitch = useLatestPitch();
   const { look } = useGameplayLook();
   const { palette, kit, strings } = look;
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -166,10 +193,6 @@ export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings,
     setRecent([]);
   };
 
-  const position = pitch?.stringEstimate != null && pitch.fretEstimate != null
-    ? `Corda ${pitch.stringEstimate} · casa ${pitch.fretEstimate}`
-    : 'Fora do braço';
-
   return (
     <div className="flex h-dvh w-full flex-col overflow-hidden bg-ink-950 text-ink-100">
       <header className="shrink-0 border-b border-ink-700 bg-ink-900 px-3 py-2 sm:px-6 sm:py-3 [@media(max-height:500px)]:py-1">
@@ -193,24 +216,7 @@ export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings,
         </div>
         <div className="mt-2 empty:hidden"><AudioRouteNotice /></div>
 
-        <div className="mt-2 grid grid-cols-6 gap-2 sm:mt-3 sm:flex [@media(max-height:500px)]:mt-1">
-          <div className="col-span-2 flex shrink-0 flex-col items-center justify-center rounded-xl border border-signal-500/30 bg-signal-500/5 py-1 sm:w-32 sm:py-0">
-            <p className="text-[10px] tracking-wider text-ink-300">NOTA</p>
-            <p className="font-display text-3xl font-bold text-signal-300 sm:text-6xl [@media(max-height:500px)]:text-2xl">{pitch ? pitch.noteName : '--'}</p>
-          </div>
-          <div className="contents min-w-0 flex-1 gap-2 sm:grid sm:grid-cols-3 lg:grid-cols-6 [@media(max-height:500px)]:grid-cols-4">
-            <Reading label="FREQUÊNCIA">{pitch ? `${pitch.frequency.toFixed(1)} Hz` : '--'}</Reading>
-            <Reading label="AFINAÇÃO">
-              {pitch
-                ? <span className={Math.abs(pitch.cents) <= 6 ? 'text-hit' : 'text-near'}>{pitch.cents > 0 ? '+' : ''}{pitch.cents} cents</span>
-                : '--'}
-            </Reading>
-            <Reading label="POSIÇÃO" className="max-sm:col-span-3"><span className="text-xs sm:whitespace-nowrap sm:text-[11px]">{pitch ? position : '--'}</span></Reading>
-            <Reading label="ENTRADA" className="max-sm:col-span-3"><InputLevelMeter /></Reading>
-            <Reading label="CLAREZA" className={SPARE_READING}>{pitch ? `${Math.round(pitch.clarity * 100)}%` : '--'}</Reading>
-            <Reading label="NOTAS" className={SPARE_READING}><span className="text-amp-300">{total}</span></Reading>
-          </div>
-        </div>
+        <PitchReadings total={total} />
         {audioError && <div className="mt-2"><ErrorNotice message={audioError} onDismiss={dismissAudioError} /></div>}
       </header>
 

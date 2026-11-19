@@ -5,8 +5,9 @@ import type { AmpEngine } from '../services/ampEngine';
 import { readPreferences, savePreferences } from './preferences';
 import { getAudioErrorMessage } from './uiErrors';
 
-// The output was feeding the input: 'moved' to other speakers, or 'muted' when there is no safe place to go
-export type AudioRouteAlert = { kind: 'moved'; outputName: string } | { kind: 'muted' };
+// The output was feeding the input: 'moved' to other speakers, or 'muted' when there is no safe place to go.
+// 'unavailable': the chosen output could not be used, so the monitor stayed shut
+export type AudioRouteAlert = { kind: 'moved'; outputName: string } | { kind: 'muted' } | { kind: 'unavailable' };
 
 export interface AudioSessionValue {
   audioEngine: AudioEngine;
@@ -41,6 +42,8 @@ interface PitchStore {
 }
 
 const BOTH_PLAYING_FRAMES_MAX = 1000;
+
+const DISCONNECTED_MESSAGE = 'A interface de áudio foi desconectada. Confira o cabo USB e clique em Conectar guitarra.';
 
 const PitchContext = createContext<PitchStore | null>(null);
 
@@ -176,6 +179,7 @@ export const AudioSessionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       savePreferences({ outputDeviceId: saved });
       setOutputDeviceId(saved);
       if (audioEngine.getSignalReading().monitorOpen) setRouteAlert(null);
+      else if (!applied) setRouteAlert({ kind: 'unavailable' });
       await refreshOutputName(saved);
       return applied;
     },
@@ -197,6 +201,18 @@ export const AudioSessionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     });
     return () => audioEngine.setFeedbackListener(null);
   }, [audioEngine, changeOutputDevice]);
+
+  // The interface was unplugged: the game and the button must see that the guitar is no longer connected
+  useEffect(() => {
+    audioEngine.setDisconnectListener(() => {
+      setIsAudioRunning(false);
+      setActiveInput(null);
+      pitchStore.publish(null, 0);
+      pitchStore.publish(null, 1);
+      setAudioError(DISCONNECTED_MESSAGE);
+    });
+    return () => audioEngine.setDisconnectListener(null);
+  }, [audioEngine, pitchStore]);
 
   const changeChannelMode = useCallback(
     async (mode: InputChannelMode) => {

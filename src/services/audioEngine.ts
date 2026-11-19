@@ -1,4 +1,4 @@
-// Professional Guitar/Bass Audio Engine for Real-Time Pitch Detection
+// Guitar/Bass audio engine for real-time pitch detection
 // Raw 48 kHz capture (no OS processing) feeding the PRGB Amp monitor and the PRGB game
 
 export interface DetectedPitch {
@@ -142,6 +142,7 @@ export class AudioEngine {
   private inputPeak = 0;
   private outputDeviceId = '';
   private onFeedback: (() => void) | null = null;
+  private onDisconnect: (() => void) | null = null;
   private options: AudioOptions;
   private inputTrim: GainNode | null = null;
   private monitorOpen = false;
@@ -365,6 +366,11 @@ export class AudioEngine {
     this.onFeedback = listener;
   }
 
+  /** Called when the input device disappears while listening (USB cable pulled, interface turned off). */
+  setDisconnectListener(listener: (() => void) | null): void {
+    this.onDisconnect = listener;
+  }
+
   /** The signal itself, loudest channel, whether or not a note was found in it. */
   getInputLevel(): { rms: number; peak: number } {
     return { rms: this.inputRms, peak: this.inputPeak };
@@ -553,7 +559,7 @@ export class AudioEngine {
   }
 
   /**
-   * Start listening to the audio interface / microphone with raw studio settings
+   * Start listening to the audio interface / microphone with raw settings (no OS processing)
    */
   start(
     deviceId?: string,
@@ -621,7 +627,30 @@ export class AudioEngine {
       this.selectedDeviceId = '';
       this.mediaStream = await navigator.mediaDevices.getUserMedia(buildConstraints(''));
     }
-    this.sourceNode = this.audioContext.createMediaStreamSource(this.mediaStream);
+    // A failure from here on would leave the stream open, with the interface held and no way to stop it
+    try {
+      this.connectStream(this.mediaStream);
+      await this.finishStart();
+    } catch (err) {
+      await this.stopNow();
+      throw err;
+    }
+  }
+
+  private connectStream(stream: MediaStream): void {
+    if (!this.audioContext) return;
+    // Cable pulled or interface turned off: the track ends by itself, and stop() below does not fire this
+    for (const track of stream.getAudioTracks()) {
+      track.addEventListener('ended', () => {
+        if (this.mediaStream !== stream || !this.isRunning) return;
+        void this.enqueue(async () => {
+          if (this.mediaStream !== stream) return;
+          await this.stopNow();
+          this.onDisconnect?.();
+        });
+      });
+    }
+    this.sourceNode = this.audioContext.createMediaStreamSource(stream);
 
     // Channel Routing (Input 1 / Input 2 / Stereo / Duo)
     this.splitterNode = this.audioContext.createChannelSplitter(2);
@@ -656,8 +685,11 @@ export class AudioEngine {
       this.mergerNode.connect(input.analyser);
       this.playerInputs = [input];
     }
+  }
 
-    // Initialize and route to PRGB Amp Modeler for live low-latency guitar monitoring
+  private async finishStart(): Promise<void> {
+    if (!this.audioContext || !this.mergerNode) return;
+    // Initialize and route to the PRGB Amp simulator for live guitar monitoring
     if (!this.ampEngine) {
       this.ampEngine = new AmpEngine(this.audioContext, this.outputRoute?.node);
       await this.restoreNeuralFiles();
@@ -999,7 +1031,8 @@ export class AudioEngine {
       noteName,
       cents,
       clarity: Math.min(1, Math.round(maxValue * 100) / 100),
-      volume: Math.min(1, Math.round(volume * 100) / 100),
+      // Four decimals: rounding to 0.01 pushed the scoring threshold (0.02) up to about 0.025
+      volume: Math.min(1, Math.round(volume * 10000) / 10000),
       stringEstimate: position?.string,
       fretEstimate: position?.fret,
       attackId: 0 // stamped by trackAttack
