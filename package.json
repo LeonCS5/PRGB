@@ -10,6 +10,7 @@
     "lint": "oxlint",
     "test": "vitest run",
     "check:bundle": "node scripts/check-bundle-size.mjs",
+    "check:precache": "node scripts/check-precache.mjs",
     "gen:appearance-boot": "node scripts/gen-appearance-boot.mjs",
     "preview": "vite preview"
   },

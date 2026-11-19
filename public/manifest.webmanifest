@@ -7,7 +7,6 @@
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "orientation": "landscape",
   "theme_color": "#07070b",
   "background_color": "#07070b",
   "categories": ["music", "education", "entertainment"],

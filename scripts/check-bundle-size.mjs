@@ -9,7 +9,7 @@ const KB = 1024;
 const BUDGETS = [
   { name: 'entry (index-*)', test: (file) => file.startsWith('index-'), max: 75 * KB },
   { name: 'react', test: (file) => file.startsWith('react-'), max: 75 * KB },
-  { name: 'supabase client (dist-*)', test: (file) => file.startsWith('dist-'), max: 65 * KB }
+  { name: 'supabase client (supabase-*)', test: (file) => file.startsWith('supabase-'), max: 65 * KB }
 ];
 const OTHER_CHUNK_MAX = 30 * KB; // every other lazy chunk (screens, pieces, engines)
 const TOTAL_MAX = 340 * KB; // every chunk together: only matters for the offline precache, not for the first visit
