@@ -1,9 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { LEGAL_VERSION } from '../content/legal';
 import { RankingError, type RankingErrorCode, type RankingProfile, type RegisteredPart, type SubmitScoreResult } from '../services/backend/rankingApi';
 import { applyJudgement, createScoreState, type Judgement, type ScoreState } from '../services/scoring';
 import type { NormalizedSongTab } from '../services/tabsApi';
 import type { GamePart } from './gameSession';
-import { RankedRunController, RELOADED_NOTICE, type RankedRunDeps } from './rankedRun';
+import { RankedRunController, RANKING_TIMEOUT_MS, RELOADED_NOTICE, type RankedRunDeps } from './rankedRun';
 
 const PROFILE: RankingProfile = {
   nickname: 'Ana', ageConfirmedAt: 'x', consentAt: 'x', consentVersion: 'v1', createdAt: 'x', lastSeenAt: 'x'
@@ -356,4 +357,108 @@ it('notifies subscribers until they leave', async () => {
   unsubscribe();
   controller.turnOff();
   expect(listener).not.toHaveBeenCalled();
+});
+
+describe('a server that does not answer', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('stops waiting for the part after the timeout and explains it', async () => {
+    vi.useFakeTimers();
+    const { api, controller } = setup();
+    api.registerPart.mockImplementation(() => new Promise<never>(() => undefined));
+    const turningOn = controller.turnOn();
+    await vi.advanceTimersByTimeAsync(RANKING_TIMEOUT_MS);
+    expect(await turningOn).toBe(false);
+    expect(controller.getState()).toMatchObject({ phase: 'off', notice: { tone: 'error' } });
+  });
+
+  it('stops waiting for the session after the timeout and stays ready to try again', async () => {
+    vi.useFakeTimers();
+    const { api, controller } = setup();
+    await controller.turnOn();
+    api.startRankedSession.mockImplementationOnce(() => new Promise<never>(() => undefined));
+    const beginning = controller.beginRun();
+    await vi.advanceTimersByTimeAsync(RANKING_TIMEOUT_MS);
+    expect(await beginning).toBe(false);
+    expect(controller.getState()).toMatchObject({ phase: 'ready', notice: { tone: 'error' } });
+  });
+});
+
+describe('the automatic check when the game opens', () => {
+  afterEach(() => vi.useRealTimers());
+  const CURRENT: RankingProfile = { ...PROFILE, consentVersion: LEGAL_VERSION };
+
+  it('stays quiet when the network fails or hangs, and lets the player play', async () => {
+    vi.useFakeTimers();
+    const loadProfile = vi.fn(() => new Promise<never>(() => undefined));
+    const { requestAccount, controller } = setup({ loadProfile });
+    const preparing = controller.prepare(true);
+    expect(controller.getState()).toMatchObject({ phase: 'preparing', automatic: true });
+    await vi.advanceTimersByTimeAsync(RANKING_TIMEOUT_MS);
+    expect(await preparing).toBe(false);
+    expect(controller.getState()).toMatchObject({ phase: 'off', automatic: false, notice: null });
+    expect(requestAccount).not.toHaveBeenCalled();
+  });
+
+  it('never opens the account flow for terms out of date or a missing profile', async () => {
+    for (const found of [PROFILE, null]) {
+      const { api, requestAccount, controller } = setup({ loadProfile: async () => found });
+      expect(await controller.prepare(true)).toBe(false);
+      expect(requestAccount).not.toHaveBeenCalled();
+      expect(api.registerPart).not.toHaveBeenCalled();
+      expect(controller.getState()).toMatchObject({ phase: 'off', notice: null });
+    }
+  });
+
+  it('gets ready with an account on the current terms', async () => {
+    const { requestAccount, controller } = setup({ loadProfile: async () => CURRENT });
+    expect(await controller.prepare(true)).toBe(true);
+    expect(controller.getState()).toMatchObject({ phase: 'ready', automatic: false });
+    expect(requestAccount).not.toHaveBeenCalled();
+  });
+
+  it('still tells a failure that is not the network', async () => {
+    const { api, controller } = setup({ loadProfile: async () => CURRENT });
+    api.registerPart.mockImplementation(failWith('songsterr_unavailable'));
+    await controller.prepare(true);
+    expect(controller.getState()).toMatchObject({ phase: 'off', notice: { tone: 'error' } });
+  });
+
+  it('a click asks for the account when the terms changed', async () => {
+    const { requestAccount, controller } = setup({ loadProfile: async () => PROFILE });
+    await controller.turnOn();
+    expect(requestAccount).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets the player give up the wait and drops the answer that comes later', async () => {
+    const lookup = deferred<RankingProfile | null>();
+    const { api, controller } = setup({ loadProfile: () => lookup.promise });
+    const preparing = controller.prepare(true);
+    controller.abandonAutomatic();
+    expect(controller.getState().phase).toBe('off');
+    lookup.resolve(CURRENT);
+    expect(await preparing).toBe(false);
+    expect(api.registerPart).not.toHaveBeenCalled();
+    expect(controller.getState().phase).toBe('off');
+  });
+
+  it('does not abandon a check the player started', async () => {
+    const account = deferred<RankingProfile | null>();
+    const { controller } = setup({ requestAccount: () => account.promise });
+    void controller.turnOn();
+    controller.abandonAutomatic();
+    expect(controller.getState().phase).toBe('preparing');
+  });
+});
+
+it('clears the sending status when the account is lost, so it does not spin forever', async () => {
+  const sent = deferred<SubmitScoreResult>();
+  const { api, controller } = setup();
+  await controller.turnOn();
+  await controller.beginRun();
+  api.submitScore.mockImplementation(() => sent.promise);
+  controller.submitRun(scoreOf('perfect'), CLEAN);
+  expect(controller.getState().submission).toEqual({ status: 'sending' });
+  controller.accountLost();
+  expect(controller.getState().submission).toBeNull();
 });

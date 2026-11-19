@@ -3,6 +3,7 @@
 // goes with registerPart and startRankedSession, a run only plays once its session exists, and a run with
 // jumps or a speed change is never sent. Answers that arrive after the player moved on are dropped.
 
+import { LEGAL_VERSION } from '../content/legal';
 import { RankingError, toRankingError, type RankingErrorCode, type RankingProfile, type SubmitScoreInput } from '../services/backend/rankingApi';
 import { accuracyPercent, type ScoreState } from '../services/scoring';
 import type { GamePart, RankedSubmission } from './gameSession';
@@ -20,6 +21,8 @@ export interface RankedNotice {
 
 export interface RankedRunState {
   phase: RankedPhase;
+  // The check in `preparing` started by itself when the game opened, not by a click: it stays quiet and can be skipped
+  automatic: boolean;
   sessionId: string | null;
   submission: RankedSubmission | null;
   notice: RankedNotice | null;
@@ -30,6 +33,8 @@ export interface RankedRunDeps {
   part: GamePart | null; // null: duo, never ranked
   isReload: boolean; // this tab was already loaded again because the server had a newer revision
   requestAccount: () => Promise<RankingProfile | null>;
+  // Looks the account up without opening the entry flow; with it, every lookup is cut off by the timeout
+  loadProfile?: () => Promise<RankingProfile | null>;
   forgetAccount: () => void;
   // Loads the tab again, which remounts the game; returns why it couldn't, or null
   reloadTab?: () => Promise<string | null>;
@@ -44,6 +49,17 @@ export interface RunIntegrity {
 // The session stays open on the server, so these can be sent again
 const RETRYABLE: ReadonlySet<RankingErrorCode> = new Set<RankingErrorCode>(['network', 'unknown', 'rate_limited']);
 const ACCOUNT_GONE: ReadonlySet<RankingErrorCode> = new Set<RankingErrorCode>(['not_authenticated', 'profile_required']);
+
+// A server that never answers must not hold the game: past this the call counts as a network failure
+export const RANKING_TIMEOUT_MS = 10_000;
+
+const withTimeout = <T,>(promise: Promise<T>, ms: number): Promise<T> => new Promise<T>((resolve, reject) => {
+  const timer = setTimeout(() => reject(new RankingError('network')), ms);
+  promise.then(
+    (value) => { clearTimeout(timer); resolve(value); },
+    (error: unknown) => { clearTimeout(timer); reject(error); }
+  );
+});
 
 export const RELOADED_NOTICE: RankedNotice = {
   text: 'A tablatura desta música mudou no acervo. Carregamos a versão nova.',
@@ -63,6 +79,7 @@ export class RankedRunController {
     const sessionId = deps.sessionId ?? null;
     this.state = {
       phase: sessionId ? 'running' : 'off',
+      automatic: false,
       sessionId,
       submission: null,
       notice: deps.isReload ? RELOADED_NOTICE : null
@@ -77,12 +94,20 @@ export class RankedRunController {
   readonly getState = (): RankedRunState => this.state;
 
   private update(changes: Partial<RankedRunState>): void {
-    this.state = { ...this.state, ...changes };
+    // Leaving the check leaves its automatic mode too
+    const automatic = changes.automatic ?? (changes.phase === undefined || changes.phase === 'preparing' ? this.state.automatic : false);
+    this.state = { ...this.state, ...changes, automatic };
     for (const listener of this.listeners) listener();
   }
 
-  private fail(error: unknown, phase: RankedPhase): void {
-    const accountGone = ACCOUNT_GONE.has(toRankingError(error).code);
+  private fail(error: unknown, phase: RankedPhase, quiet = false): void {
+    const { code } = toRankingError(error);
+    const accountGone = ACCOUNT_GONE.has(code);
+    // A check nobody asked for stays quiet about the network: the game works without the ranking
+    if (quiet && code === 'network') {
+      this.update({ phase: 'off', sessionId: null });
+      return;
+    }
     this.update({
       phase: accountGone ? 'off' : phase,
       sessionId: null,
@@ -94,7 +119,7 @@ export class RankedRunController {
   // False when the run can't go on with this tab: the game is being remounted, or the reason is on screen
   private async register(part: GamePart, request: number): Promise<boolean> {
     const { tab, partId, revisionId } = part;
-    const registered = await this.deps.api.registerPart(tab.songId, partId, revisionId ?? undefined);
+    const registered = await withTimeout(this.deps.api.registerPart(tab.songId, partId, revisionId ?? undefined), RANKING_TIMEOUT_MS);
     if (request !== this.request) return false;
     if (revisionId === null || registered.revisionId === revisionId) return true;
     if (this.deps.isReload || !this.deps.reloadTab) throw new RankingError('revision_mismatch');
@@ -103,14 +128,23 @@ export class RankedRunController {
     return false;
   }
 
+  // The account on the current terms, or null. An automatic check never opens the entry or reaccept flow.
+  private async account(automatic: boolean): Promise<RankingProfile | null> {
+    const { loadProfile, requestAccount } = this.deps;
+    if (!loadProfile) return requestAccount();
+    const profile = await withTimeout(loadProfile(), RANKING_TIMEOUT_MS);
+    if (profile?.consentVersion === LEGAL_VERSION) return profile;
+    return automatic ? null : requestAccount();
+  }
+
   /** Account and part checks. True once the switch is on and the run can start. */
-  async prepare(): Promise<boolean> {
-    const { part, requestAccount } = this.deps;
+  async prepare(automatic = false): Promise<boolean> {
+    const { part } = this.deps;
     if (!part) return false;
     const request = ++this.request;
-    this.update({ phase: 'preparing' });
+    this.update({ phase: 'preparing', automatic });
     try {
-      const profile = await requestAccount();
+      const profile = await this.account(automatic);
       if (request !== this.request) return false;
       if (!profile) {
         this.update({ phase: 'off' });
@@ -120,9 +154,16 @@ export class RankedRunController {
       this.update({ phase: 'ready' });
       return true;
     } catch (error) {
-      if (request === this.request) this.fail(error, 'off');
+      if (request === this.request) this.fail(error, 'off', automatic);
       return false;
     }
+  }
+
+  /** The player wants to play before the automatic check ends: the run goes on without the ranking. */
+  abandonAutomatic(): void {
+    if (this.state.phase !== 'preparing' || !this.state.automatic) return;
+    this.request += 1;
+    this.update({ phase: 'off' });
   }
 
   turnOn(): Promise<boolean> {
@@ -139,7 +180,7 @@ export class RankedRunController {
   /** The account is gone (deleted in the panel, or refused by the server): the switch goes off. */
   accountLost(): void {
     this.request += 1;
-    this.update({ phase: 'off', sessionId: null });
+    this.update({ phase: 'off', sessionId: null, submission: null });
   }
 
   /** Opens the server session of a new run. True: start playing. */
@@ -148,7 +189,7 @@ export class RankedRunController {
     if (!part) return false;
     const request = ++this.request;
     const { tab, partId, revisionId } = part;
-    const open = () => api.startRankedSession(tab.songId, partId, revisionId ?? undefined);
+    const open = () => withTimeout(api.startRankedSession(tab.songId, partId, revisionId ?? undefined), RANKING_TIMEOUT_MS);
     this.update({ phase: 'starting', sessionId: null, submission: null, notice: null });
     try {
       let sessionId: string;
