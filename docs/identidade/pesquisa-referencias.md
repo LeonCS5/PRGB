@@ -1,16 +1,18 @@
 # Pesquisa de referências e direção de identidade visual do PRGB (C1)
 
-Rascunho para decisão. Nada aqui foi aplicado ao código.
+> **Documento histórico, parcialmente aplicado.** Era um rascunho para decisão. O visual já foi implementado em parte (temas, estilos de nota e tipografias da tela de Aparência, em `src/appearance/`); o que está aqui reflete a pesquisa de 2026-11-16 e não o estado atual do código. Nomes de produtos e sites de terceiros foram retirados: ficam só as categorias.
+
+Rascunho para decisão original.
 
 ## 1. O que a pesquisa conseguiu e o que não conseguiu
 
 | Fonte | Resultado |
 |---|---|
 | Buscas na web (estilos cyberpunk, neo-brutalismo, apps de música, acessibilidade) | Feitas. Resumo abaixo. |
-| Realtime Colors | Lido: previsualiza cor e fonte numa página real e mostra contraste AA/AAA. Útil para validar a paleta. |
-| Radix Colors | Lido: escala de 12 passos com papel fixo para cada passo (fundo, componente, borda, sólido, texto). Boa base para o motor de temas. |
-| Refero | A página não devolveu categorias nem filtros; não sei se dá para navegar sem login. |
-| Mobbin, Dribbble, Behance, Awwwards, Figma Community, Coolors, Color Hunt, shadcn, tweakcn, Material 3 | **Não consegui abrir como galeria** (exigem login, rolagem dinâmica ou bloqueiam leitura automática). Não vi imagem nenhuma deles. Tudo que digo sobre estilo vem de texto de artigos e de guias, não de ter olhado telas. |
+| Visualizador de paleta e fonte em página real | Lido: previsualiza cor e fonte numa página real e mostra contraste AA/AAA. Útil para validar a paleta. |
+| Guia de escalas de cor de 12 passos | Lido: papel fixo para cada passo (fundo, componente, borda, sólido, texto). Boa base para o motor de temas. |
+| Coletor de referências de interface por busca | A página não devolveu categorias nem filtros; não sei se dá para navegar sem login. |
+| Galerias de design, bibliotecas de componentes e geradores de paleta | **Não consegui abrir como galeria** (exigem login, rolagem dinâmica ou bloqueiam leitura automática). Não vi imagem nenhuma deles. Tudo que digo sobre estilo vem de texto de artigos e de guias, não de ter olhado telas. |
 
 Consequência: o que vem a seguir é direção fundamentada, **não** uma curadoria visual. A curadoria de imagens precisa dos seus prints (ver seção 7).
 
@@ -18,7 +20,7 @@ Consequência: o que vem a seguir é direção fundamentada, **não** uma curado
 
 Lido em `src/index.css` e `BrandMark.tsx`:
 
-- Fundo quase preto com tinta azulada (`ink-*`), laranja "válvula" como primária e ciano como secundária, brilho (`shadow-glow-*`) e painel com realce interno (`shadow-panel`).
+- Fundo quase preto com tinta azulada (`ink-*`), laranja como primária e ciano como secundária, brilho (`shadow-glow-*`) e painel com realce interno (`shadow-panel`).
 - Títulos em Space Grotesk, corpo em Inter, números em JetBrains Mono. Cantos arredondados uniformes e ícones de uma única família (lucide).
 - Logo: palheta com gradiente laranja e uma onda escura dentro.
 
@@ -98,7 +100,7 @@ Qualquer tema novo só entra com teste automático de contraste AA (C4 do plano)
 
 ## 8. Como me passar as referências visuais
 
-Por não conseguir abrir as galerias, o caminho que funciona: **prints no chat** (3 a 8 por estilo, com uma frase do que você gosta em cada) ou arquivos em `docs/identidade/referencias/`. Links só valem se forem de texto/paleta (Coolors, Color Hunt, Realtime Colors com as cores na URL). Não precisa instalar nada. Figma só se você já usa e tem arquivo.
+Por não conseguir abrir as galerias, o caminho que funciona: **prints no chat** (3 a 8 por estilo, com uma frase do que você gosta em cada) ou arquivos em `docs/identidade/referencias/`. Links só valem se forem de texto ou de paleta (com as cores na URL). Não precisa instalar nada.
 
 ## 9. Decisões que preciso de você
 
@@ -109,12 +111,4 @@ Por não conseguir abrir as galerias, o caminho que funciona: **prints no chat**
 
 ## Fontes consultadas
 
-- [Cyberpunk, referências de estilo (designprompts)](https://designprompts.pages.dev/cyberpunk) e [cybercore-css](https://cdn.jsdelivr.net/npm/cybercore-css@0.3.0/README.md)
-- [Neon aesthetics in web design (DEV)](https://dev.to/raxxostudios/neon-aesthetics-in-web-design-beyond-the-trend-2ako)
-- [Neobrutalism, Nielsen Norman Group](https://www.nngroup.com/articles/neobrutalism/)
-- [Neubrutalism e acessibilidade (OpenReplay)](https://blog.openreplay.com/how-neubrutalism-benefits-users-with-disabilities/)
-- [Interfaces "suaves" e acessibilidade (BOIA)](https://www.boia.org/blog/how-soft-user-interface-designs-impact-accessibility)
-- [Case de app de música (Rhythm)](https://medium.com/@rohansavant/case-study-rhythm-the-music-masterclass-e11aaca1f16e)
-- [Gamificação em prática musical (edtechbooks)](https://edtechbooks.org/jaid_13_2/designing_and_developing_a_gamified_app_for_enhancing_independent_practice_in_k12_music_education)
-- [Realtime Colors](https://www.realtimecolors.com)
-- [Radix Colors, escala de 12 passos](https://www.radix-ui.com/colors/docs/palette-composition/understanding-the-scale)
+Artigos e guias sobre estilo cyberpunk e neon, neobrutalismo e acessibilidade, interfaces "suaves" e acessibilidade, um estudo de caso de app de música, gamificação em prática musical e guias de escala de cor. Os links foram retirados desta versão (a regra de marca do projeto não cita sites e produtos de terceiros); a lista original está no histórico do git.
