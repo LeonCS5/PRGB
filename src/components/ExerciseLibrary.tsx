@@ -54,15 +54,17 @@ const formatPoints = (value: number) => value.toLocaleString('pt-BR');
 
 interface ChipGroupProps {
   legend: string;
+  hint?: string; // a plain sentence under the legend, for words the player may not know
   name: string;
   value: string;
   options: { value: string; label: string }[];
   onChange: (value: string) => void;
 }
 
-const ChipGroup: React.FC<ChipGroupProps> = ({ legend, name, value, options, onChange }) => (
+const ChipGroup: React.FC<ChipGroupProps> = ({ legend, hint, name, value, options, onChange }) => (
   <fieldset className="min-w-0">
-    <legend className="mb-2 text-[11px] font-bold uppercase tracking-wider text-ink-300">{legend}</legend>
+    <legend className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-300">{legend}</legend>
+    {hint && <p className="-mt-1 mb-2 text-xs leading-5 text-ink-300">{hint}</p>}
     <div className="flex flex-wrap gap-1.5">
       {options.map((option) => (
         <label key={option.value} className="relative cursor-pointer">
@@ -125,7 +127,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({ exercise, keyIndex, pattern
       <span className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-300">
         <LevelMark level={exercise.level} />
         {sequence
-          ? <span className="font-mono font-semibold text-signal-300">{variations.length} variações em sequência · {sequenceMinutes}</span>
+          ? <span className="font-mono font-semibold text-signal-300">Sequência de {variations.length} exercícios · {sequenceMinutes}</span>
           : <span className="font-mono">{seconds} s · {exercise.bpm} bpm</span>}
         {showsKey && !exercise.keyed && <span>Tom fixo</span>}
         {!sequence && best !== null && <span className="font-mono text-amp-300">Recorde {formatPoints(best)}</span>}
@@ -135,7 +137,7 @@ const ExerciseCard: React.FC<ExerciseCardProps> = ({ exercise, keyIndex, pattern
 };
 
 const KEY_CYCLE_LABELS: Record<KeyCycle, string> = { 1: 'Só este tom', 3: '3 tons', 6: '6 tons', 12: '12 tons' };
-const PLAY_MODE_LABELS = { one: 'Só esta variação', all: 'Todas as variações em sequência' } as const;
+const PLAY_MODE_LABELS = { one: 'Tocar só este', all: 'Tocar todas as versões (tons e jeitos)' } as const;
 
 interface ControlsProps {
   category: ExerciseCategory;
@@ -154,26 +156,26 @@ const Controls: React.FC<ControlsProps> = ({ category, view, onViewChange, patte
   return (
     <div className="mt-6 grid gap-5 rounded-2xl border border-ink-700 bg-ink-900/60 p-4">
       {canSequence && (
-        <ChipGroup legend="Ao tocar um cartão" name="exercise-play-mode" value={all ? 'all' : 'one'}
+        <ChipGroup legend="Ao tocar um exercício" name="exercise-play-mode" value={all ? 'all' : 'one'}
           options={[{ value: 'one', label: PLAY_MODE_LABELS.one }, { value: 'all', label: PLAY_MODE_LABELS.all }]}
           onChange={(value) => sequence.onAllChange(value === 'all')} />
       )}
       {hasKeys && (
-        <ChipGroup legend={all ? 'Começar no tom' : 'Tom'} name="exercise-key" value={String(view.key)}
+        <ChipGroup legend={all ? 'Começar no tom' : 'Tom'} hint="Nota em que o exercício começa. Se não sabe, deixe em Lá." name="exercise-key" value={String(view.key)}
           options={KEYS.map((name, index) => ({ value: String(index), label: name }))}
           onChange={(value) => onViewChange({ ...view, key: Number(value) })} />
       )}
       {all && hasKeys && (
-        <ChipGroup legend="Quantos tons" name="exercise-cycle" value={String(sequence.keys)}
+        <ChipGroup legend="Quantos tons" hint="Sobe o exercício para outros tons, para treinar o braço todo." name="exercise-cycle" value={String(sequence.keys)}
           options={KEY_CYCLES.map((count) => ({ value: String(count), label: KEY_CYCLE_LABELS[count] }))}
           onChange={(value) => sequence.onKeysChange(Number(value) as KeyCycle)} />
       )}
       {!all && category.patterns.length > 0 && pattern && (
-        <ChipGroup legend="Como tocar" name="exercise-pattern" value={pattern}
+        <ChipGroup legend="Jeito de tocar" name="exercise-pattern" value={pattern}
           options={category.patterns.map((id) => ({ value: id, label: patternName(category, id) }))}
           onChange={(value) => onViewChange({ ...view, patterns: { ...view.patterns, [category.id]: value as ExercisePattern } })} />
       )}
-      {all && category.patterns.length > 1 && <p className="text-xs leading-5 text-ink-300">Cada tom toca de todos os jeitos: {category.patterns.map((id) => patternName(category, id)).join(', ')}.</p>}
+      {all && category.patterns.length > 1 && <p className="text-xs leading-5 text-ink-300">Cada tom toca de todos os jeitos de tocar: {category.patterns.map((id) => patternName(category, id)).join(', ')}.</p>}
     </div>
   );
 };
@@ -197,8 +199,8 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ view, onViewCh
           </button>
           <h1 className="font-display text-xl font-bold tracking-tight">Exercícios</h1>
           {onSession && (
-            <button type="button" onClick={onSession} className="ml-auto flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-ink-600 px-3 text-sm font-semibold text-ink-100 hover:bg-ink-800">
-              <ListChecks size={16} className="text-signal-300" aria-hidden="true" /><span>Montar sessão</span>
+            <button type="button" onClick={onSession} aria-label="Montar sessão" title="Montar sessão" className="ml-auto flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-ink-600 px-3 text-sm font-semibold text-ink-100 hover:bg-ink-800">
+              <ListChecks size={16} className="text-signal-300" aria-hidden="true" /><span className="hidden min-[360px]:inline">Montar sessão</span>
             </button>
           )}
         </div>

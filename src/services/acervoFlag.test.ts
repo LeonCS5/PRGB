@@ -57,7 +57,7 @@ describe('acervo entry points', () => {
     vi.stubEnv('VITE_ACERVO_ENABLED', 'false');
     const html = renderToStaticMarkup(createElement(RoomModal, { isOpen: true, onClose: noop, onStartGame: noop }));
     expect(html).not.toContain('Escolher música</button>');
-    expect(html).toContain('Exercício demo');
+    expect(html).toContain('Pentatônica em Lá menor');
     expect(html).toContain('Exercícios do PRGB');
     expect(html).toContain('<optgroup');
     vi.stubEnv('VITE_ACERVO_ENABLED', 'true');
