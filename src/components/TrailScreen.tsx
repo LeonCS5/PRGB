@@ -3,6 +3,7 @@ import { ArrowLeft, ListChecks, Play, Route, Star } from 'lucide-react';
 import { LEVEL_NAMES, type Exercise, type ExercisePattern } from '../services/exercises';
 import { loadProgress, MAX_STARS } from '../services/progress';
 import { summarizeTrail, TRAIL_STEP_COUNT, type ResolvedStep, type StageSummary, type TrailSummary } from '../services/trail';
+import { ACCURACY_TEXT, STARS_RULE_TEXT } from './progress/starRules';
 import { plural, starsText } from './progress/viewModel';
 
 // A path through the exercise library, easiest first. Everything is read from this browser, nothing is locked and the
@@ -20,7 +21,7 @@ const card = 'rounded-2xl border border-ink-700 bg-ink-900';
 const Stars: React.FC<{ count: number }> = ({ count }) => (
   <span aria-hidden="true" className="hidden shrink-0 gap-0.5 sm:flex">
     {Array.from({ length: MAX_STARS }, (_, index) => (
-      <Star key={index} size={14} className={index < count ? 'fill-amp-300 text-amp-300' : 'text-ink-600'} />
+      <Star key={index} size={14} className={index < count ? 'fill-amp-300 text-amp-300' : 'text-ink-400'} />
     ))}
   </span>
 );
@@ -46,10 +47,10 @@ const StepRow: React.FC<{ item: StageSummary['steps'][number]; isNext: boolean; 
       <span className="min-w-0 flex-1">
         <span className="flex flex-wrap items-center gap-x-2 text-sm font-semibold text-ink-100">
           {step.title}
-          {isNext && <span className="rounded-full bg-amp-500/15 px-2 py-0.5 text-[11px] font-bold text-amp-300">Próximo</span>}
+          {isNext && <span className="rounded-full bg-amp-500/15 px-2 py-0.5 text-xs font-bold text-amp-300">Próximo</span>}
         </span>
         <span className="mt-0.5 block text-xs text-ink-300">{detail}</span>
-        {step.exercise.description && <span className="mt-0.5 hidden text-xs text-ink-300 sm:block">{step.exercise.description}</span>}
+        {step.exercise.description && <span className="mt-0.5 block text-xs text-ink-300">{step.exercise.description}</span>}
       </span>
       <Stars count={progress.stars} />
       <PlayButton step={step} onPlay={onPlay} primary={isNext} />
@@ -70,11 +71,12 @@ export const TrailView: React.FC<TrailViewProps> = ({ summary, onPlay, onExit, o
           <ArrowLeft size={18} aria-hidden="true" /> Voltar ao início
         </button>
         <h1 ref={heading} tabIndex={-1} className="mt-4 flex items-center gap-3 font-display text-3xl font-bold">
-          <Route size={28} className="shrink-0 text-amp-400" aria-hidden="true" /> Trilha de evolução
+          <Route size={28} className="shrink-0 text-amp-400" aria-hidden="true" /> Trilha
         </h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-300">
           {TRAIL_STEP_COUNT} exercícios em {summary.stages.length} etapas, do primeiro som até o material mais difícil. Siga a ordem ou toque o que quiser: nada fica bloqueado. As estrelas ficam só neste navegador.
         </p>
+        <p className="mt-2 max-w-2xl text-xs leading-5 text-ink-300">{STARS_RULE_TEXT} {ACCURACY_TEXT}</p>
 
         <section aria-labelledby="trail-summary" className={`${card} mt-5 p-4 sm:p-5`}>
           <h2 id="trail-summary" className="font-display text-lg font-bold text-ink-100">Seu caminho</h2>
@@ -95,7 +97,7 @@ export const TrailView: React.FC<TrailViewProps> = ({ summary, onPlay, onExit, o
           )}
           {onSession && (
             <button type="button" onClick={() => onSession()} className="mt-4 flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-ink-600 px-4 text-sm font-semibold text-ink-100 hover:bg-ink-800">
-              <ListChecks size={16} className="text-signal-300" aria-hidden="true" /> Montar uma sessão de prática
+              <ListChecks size={16} className="text-signal-300" aria-hidden="true" /> Montar sessão
             </button>
           )}
         </section>

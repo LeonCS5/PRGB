@@ -25,11 +25,11 @@ export const PreviewSamples: React.FC<{ settings: AppearanceSettings }> = ({ set
     <div className="space-y-4">
       <div>
         <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-300">Cores do tema</p>
-        <ul className="grid grid-cols-6 gap-1.5">
+        <ul className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
           {COLOR_CHIPS.map((chip) => (
             <li key={chip.label} className="min-w-0 text-center">
               <span aria-hidden="true" className={`block h-7 rounded-md border border-ink-500 ${chip.className}`} />
-              <span className="mt-1 block truncate text-[10px] text-ink-300">{chip.label}</span>
+              <span className="mt-1 block truncate text-xs text-ink-300">{chip.label}</span>
             </li>
           ))}
         </ul>

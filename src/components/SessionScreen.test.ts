@@ -23,6 +23,25 @@ describe('SessionView', () => {
     for (const text of ['Etapa da trilha', 'Por tempo', 'Montar a minha', 'Deixar mais longa', 'Tons por exercício', '12 tons', 'Todos os jeitos de tocar']) expect(html).toContain(text);
   });
 
+  it('says what really happens between exercises: each one starts right after the last, results come at the end', () => {
+    const text = textOf(render('tempo'));
+    expect(text).toContain('Cada um começa assim que o anterior termina; o resultado de todos aparece no fim');
+    expect(text).not.toContain('Entre um e outro você vê o resultado');
+    expect(text).not.toContain('pause a contagem');
+    expect(text).not.toMatch(/loop/i);
+    expect(text).toContain('Sobe o exercício para outros tons');
+    expect(text).not.toContain('quarta em quarta');
+  });
+
+  it('by hand: starts at the same key as the library (Lá), counts the list in plain sight and uses a PRGB color for the checkbox', () => {
+    const html = render('minha');
+    expect(html).toContain('<option value="9" selected');
+    expect(textOf(html)).toContain('0 na lista');
+    expect(textOf(html)).toContain('se não sabe, deixe em Lá');
+    expect(html).toContain('accent-amp-400');
+    expect(html).not.toContain('accent-amber');
+  });
+
   it('by time: lets the player pick 10, 15 or 20 minutes and shows the session it would play', () => {
     const html = render('tempo');
     for (const text of ['10 minutos', '15 minutos', '20 minutos']) expect(html).toContain(text);

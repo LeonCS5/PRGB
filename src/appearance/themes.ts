@@ -40,19 +40,19 @@ export const THEMES: readonly ThemeDefinition[] = [
     colors: { background: '#090A0F', surface: '#12141C', surfaceElevated: '#1B1E29', border: '#282D3C', primary: '#FF984B', secondary: '#75E5F4', text: '#F3F4F8', textMuted: '#9DA7BA', success: '#39DCA1' }
   },
   {
-    id: 'midnight-arcade', name: 'Midnight Arcade', description: 'Jogo de ritmo moderno, fundos azulados.',
+    id: 'midnight-arcade', name: 'Arcade da Meia-Noite', description: 'Jogo de ritmo moderno, fundos azulados.',
     colors: { background: '#0B0C18', surface: '#17192A', surfaceElevated: '#20243A', border: '#30344E', primary: '#FF865E', secondary: '#65DFFC', text: '#F6F5FF', textMuted: '#A3A7C6', success: '#34E5A0' }
   },
   {
-    id: 'graphite-studio', name: 'Graphite Studio', description: 'Sóbrio, de software de produção musical.',
+    id: 'graphite-studio', name: 'Estúdio Grafite', description: 'Sóbrio, de software de produção musical.',
     colors: { background: '#111214', surface: '#1C1E22', surfaceElevated: '#272A30', border: '#363A40', primary: '#F2A45C', secondary: '#79C9CE', text: '#F5F5F4', textMuted: '#A8ADB4', success: '#65C98C' }
   },
   {
-    id: 'analog-soul', name: 'Analog Soul', description: 'Amplificadores clássicos e estúdio tradicional.',
+    id: 'analog-soul', name: 'Alma Analógica', description: 'Amplificadores clássicos e estúdio tradicional.',
     colors: { background: '#191714', surface: '#29251F', surfaceElevated: '#373128', border: '#504537', primary: '#D6A65C', secondary: '#A6B8A0', text: '#F2E8D8', textMuted: '#B4A695', success: '#88B987' }
   },
   {
-    id: 'electric-neon', name: 'Electric Neon', description: 'Detalhes intensos de jogo rítmico.',
+    id: 'electric-neon', name: 'Neon Elétrico', description: 'Detalhes intensos de jogo rítmico.',
     colors: { background: '#080B12', surface: '#121827', surfaceElevated: '#1C2638', border: '#2D3B50', primary: '#B7F34B', secondary: '#4DE1FF', text: '#F0F7FF', textMuted: '#91A4B8', success: '#38E8A0' }
   }
 ];

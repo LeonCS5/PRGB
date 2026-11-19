@@ -1,6 +1,7 @@
 import React from 'react';
 import { RotateCcw, TriangleAlert } from 'lucide-react';
 import { BrandMark } from './BrandMark';
+import { isLoadFailure, resetFailedLazyLoads } from './lazyLoad';
 
 /** What the player sees when a screen crashes: a way out, instead of a blank page. */
 export const CrashScreen: React.FC = () => (
@@ -40,5 +41,59 @@ export class ErrorBoundary extends React.Component<React.PropsWithChildren, Erro
 
   render(): React.ReactNode {
     return this.state.hasError ? <CrashScreen /> : this.props.children;
+  }
+}
+
+interface LazyErrorBoundaryProps extends React.PropsWithChildren {
+  overlay?: boolean;
+  onClose?: () => void;
+}
+
+interface LazyErrorBoundaryState {
+  error: unknown;
+}
+
+/** What the player sees when a part of the app could not be downloaded (a new version replaced the files, or the network dropped). */
+export const LoadFailureNotice: React.FC<{ overlay: boolean; onRetry: () => void; onClose?: () => void }> = ({ overlay, onRetry, onClose }) => {
+  const box = (
+    <div role="alert" className="max-w-md rounded-2xl border border-ink-700 bg-ink-900 p-5 text-left text-ink-100 shadow-panel">
+      <h2 className="font-display text-lg font-bold">Não deu para carregar esta parte</h2>
+      <p className="mt-2 text-sm leading-6 text-ink-300">
+        Confira a conexão e tente de novo. Se o PRGB acabou de ser atualizado, recarregar a página resolve.
+      </p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button type="button" onClick={onRetry}
+          className="flex min-h-11 cursor-pointer items-center gap-2 rounded-xl bg-amp-400 px-4 text-sm font-bold text-ink-950 transition hover:bg-amp-300 focus-visible:outline-2 focus-visible:outline-signal-400">
+          <RotateCcw size={16} aria-hidden="true" /> Tentar de novo
+        </button>
+        {onClose && (
+          <button type="button" onClick={onClose}
+            className="min-h-11 cursor-pointer rounded-xl border border-ink-600 px-4 text-sm font-semibold text-ink-100 hover:bg-ink-800">Fechar</button>
+        )}
+      </div>
+    </div>
+  );
+  return overlay ? <div className="fixed inset-0 z-[90] grid place-items-center bg-ink-950/60 p-5">{box}</div> : <div className="grid place-items-center p-5">{box}</div>;
+};
+
+// Around one lazy screen: a failed download offers to try again instead of taking the whole app down. Any other error
+// goes up to the app-wide boundary, as before.
+export class LazyErrorBoundary extends React.Component<LazyErrorBoundaryProps, LazyErrorBoundaryState> {
+  state: LazyErrorBoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: unknown): LazyErrorBoundaryState {
+    return { error };
+  }
+
+  retry = (): void => {
+    resetFailedLazyLoads();
+    this.setState({ error: null });
+  };
+
+  render(): React.ReactNode {
+    const { error } = this.state;
+    if (error === null) return this.props.children;
+    if (!isLoadFailure(error)) throw error;
+    return <LoadFailureNotice overlay={this.props.overlay ?? false} onRetry={this.retry} onClose={this.props.onClose} />;
   }
 }

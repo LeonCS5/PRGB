@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { formatCountedTime, type RunProgress } from '../context/progressStore';
 import { exerciseSongId } from '../services/exerciseIds';
-import { createProgress, recordRun, type FinishedRun } from '../services/progress';
+import { createProgress, recordRun, STAR_ACCURACY, type FinishedRun } from '../services/progress';
 import type { ScoreState } from '../services/scoring';
 import { ProgressSummary } from './ProgressSummary';
 
@@ -21,6 +21,12 @@ const render = (over: Partial<FinishedRun> = {}, goal: 3 | 5 | 7 | null = null):
 };
 
 describe('ProgressSummary', () => {
+  it('always says how stars and accuracy are earned, from the thresholds the game uses', () => {
+    const html = render();
+    expect(html).toContain(`1 com ${STAR_ACCURACY.one}% de precisão`);
+    expect(html).toContain('Precisão é a porcentagem das notas acertadas (Perfeito ou Bom)');
+  });
+
   it('shows the stars of the run in words, the new pick with its description, and the level by name', () => {
     const html = render();
     expect(html).toContain('3 de 3 estrelas');

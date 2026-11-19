@@ -25,7 +25,7 @@ const MODES: readonly Option<SessionMode>[] = [
 const KEY_OPTIONS: readonly Option<number>[] = KEY_CYCLES.map((count) => ({
   value: count,
   label: count === 1 ? '1 tom' : `${count} tons`,
-  hint: count === 1 ? 'Só o tom do exercício.' : count === 12 ? 'Passa pelos 12 tons.' : 'De quarta em quarta, a partir do tom do exercício.'
+  hint: count === 1 ? 'Só o tom do exercício.' : count === 12 ? 'Passa pelos 12 tons.' : 'Sobe o exercício para outros tons, para treinar o braço todo.'
 }));
 
 const MINUTE_OPTIONS: readonly Option<SessionMinutes>[] = SESSION_MINUTES.map((minutes) => ({
@@ -70,9 +70,10 @@ export const SessionView: React.FC<SessionViewProps> = ({ progress, now, onStart
   const [stageId, setStageId] = useState(() => initialStageId ?? summarizeTrail(progress).nextStageId ?? RESOLVED_TRAIL[0].stage.id);
   const [entries, setEntries] = useState<SessionItem[]>([]);
   const [categoryId, setCategoryId] = useState(EXERCISE_CATEGORIES[0].id);
-  const [key, setKey] = useState(0);
+  const [key, setKey] = useState(9); // Lá, the same start as the exercise library
   const [pattern, setPattern] = useState<string>('');
   const [announcement, setAnnouncement] = useState('');
+  const listRef = useRef<HTMLElement>(null);
 
   const category = EXERCISE_CATEGORIES.find((entry) => entry.id === categoryId) ?? EXERCISE_CATEGORIES[0];
   const choosable = patternsOf(category);
@@ -115,7 +116,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ progress, now, onStart
           <ListChecks size={28} className="shrink-0 text-signal-300" aria-hidden="true" /> Sessão de prática
         </h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-300">
-          Vários exercícios um depois do outro, sem voltar ao menu. Entre um e outro você vê o resultado e o próximo começa sozinho, a menos que você pause a contagem.
+          Vários exercícios um depois do outro, sem voltar ao menu. Cada um começa assim que o anterior termina; o resultado de todos aparece no fim. Para parar antes, use Encerrar.
         </p>
         <p role="status" className="sr-only">{announcement}</p>
 
@@ -165,7 +166,11 @@ export const SessionView: React.FC<SessionViewProps> = ({ progress, now, onStart
                     </div>
                   )}
                 </div>
-                <p className="text-xs leading-5 text-ink-300">O tom vale para os exercícios que mudam de tom; os de lugar fixo no braço ignoram. {category.summary}</p>
+                <p className="text-xs leading-5 text-ink-300">Tom é a nota em que o exercício começa; se não sabe, deixe em Lá. Vale para os exercícios que mudam de tom; os de lugar fixo no braço ignoram. {category.summary}</p>
+                <p className="flex flex-wrap items-center gap-x-3 text-sm text-ink-100">
+                  <span><span className="font-mono">{entries.length}</span> na lista</span>
+                  {entries.length > 0 && <button type="button" onClick={() => listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })} className="min-h-11 cursor-pointer rounded-lg px-2 text-sm font-semibold text-signal-300 underline hover:text-signal-200">Ver a lista</button>}
+                </p>
                 <ul aria-label={`Exercícios de ${category.title}`} className="grid gap-2">
                   {category.groups.flatMap((group) => group.exercises).map((exercise) => (
                     <li key={exercise.code} className="flex items-center gap-3 rounded-xl border border-ink-700 px-3 py-2">
@@ -185,21 +190,21 @@ export const SessionView: React.FC<SessionViewProps> = ({ progress, now, onStart
 
           <section aria-labelledby={`${ids}-long`} className={card}>
             <h2 id={`${ids}-long`} className="font-display text-lg font-bold text-ink-100">Deixar mais longa</h2>
-            <p className="mt-1 text-sm text-ink-300">Cada exercício rende mais sem virar um loop da mesma coisa.</p>
+            <p className="mt-1 text-sm text-ink-300">Cada exercício rende mais sem virar uma repetição da mesma coisa.</p>
             <div className="mt-4 grid gap-4">
               <OptionGroup legend="Tons por exercício" name={`${ids}-keys`} options={KEY_OPTIONS} value={keys} onChange={setKeys} columns="grid-cols-2 sm:grid-cols-4" />
               <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-xl border border-ink-600 p-3">
-                <input type="checkbox" checked={allPatterns} onChange={(event) => setAllPatterns(event.target.checked)} className="mt-0.5 size-5 shrink-0 accent-amber-500" />
+                <input type="checkbox" checked={allPatterns} onChange={(event) => setAllPatterns(event.target.checked)} className="mt-0.5 size-5 shrink-0 accent-amp-400" />
                 <span>
                   <span className="block text-sm font-semibold text-ink-100">Todos os jeitos de tocar</span>
-                  <span className="block text-xs leading-5 text-ink-300">Nas escalas: sobe e desce, grupos de 3, grupos de 4, terças e 3 por corda. Nos acordes: batida e dedilhado.</span>
+                  <span className="block text-xs leading-5 text-ink-300">Cada exercício é tocado de todos os jeitos de tocar que tem. Nas escalas: sobe e desce, grupos de 3, grupos de 4, terças e 3 por corda. Nos acordes: batida e dedilhado.</span>
                 </span>
               </label>
             </div>
           </section>
 
           {mode === 'minha' && (
-            <section aria-labelledby={`${ids}-mine`} className={card}>
+            <section ref={listRef} aria-labelledby={`${ids}-mine`} className={card}>
               <h2 id={`${ids}-mine`} className="font-display text-lg font-bold text-ink-100">Sua lista</h2>
               {entries.length === 0 ? (
                 <p className="mt-2 text-sm text-ink-300">Nada por aqui ainda. Escolha exercícios acima e toque em Adicionar.</p>

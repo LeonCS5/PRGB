@@ -43,7 +43,7 @@ const CodeDisplay: React.FC<{ code: string }> = ({ code }) => {
         {code}
       </span>
       <button type="button" onClick={copyCode} aria-label="Copiar código da sala"
-        className="flex min-h-10 cursor-pointer items-center gap-1.5 rounded-xl border border-ink-700 bg-ink-800 px-3 text-xs font-semibold text-ink-200 transition hover:border-ink-500">
+        className="flex min-h-11 cursor-pointer items-center gap-1.5 rounded-xl border border-ink-700 bg-ink-800 px-3 text-xs font-semibold text-ink-200 transition hover:border-ink-500">
         {copied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
         {copied ? 'Copiado!' : 'Copiar'}
       </button>
@@ -340,7 +340,7 @@ export const RoomModal: React.FC<RoomModalProps> = ({ isOpen, onClose, onStartGa
                 }
               }}>
               <option value="" disabled>Escolha um exercício…</option>
-              <option value="demo">Exercício demo</option>
+              <option value="demo">Pentatônica em Lá menor</option>
               {EXERCISE_CATEGORIES.map((category) => (
                 <optgroup key={category.id} label={category.title}>
                   {category.groups.flatMap((group) => group.exercises).map((exercise) => (
@@ -351,7 +351,7 @@ export const RoomModal: React.FC<RoomModalProps> = ({ isOpen, onClose, onStartGa
             </select>
           </div>
         )}
-        {state.song && !isSongAllowed && <p className="mt-4 text-sm text-near">O acervo está desativado. O anfitrião precisa escolher um exercício do PRGB.</p>}
+        {state.song && !isSongAllowed && <p className="mt-4 text-sm text-near">A busca de músicas está desativada. O anfitrião precisa escolher um exercício do PRGB.</p>}
         {state.song && !isHost && songId !== null && songId <= 0 && (
           <button type="button" className={secondaryButton + ' mt-4 w-full'}
             onClick={() => { setPartError(null); controller.selectPart(state.song!.partId, state.song!.trackName); }}>

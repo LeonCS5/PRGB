@@ -5,7 +5,7 @@ import {
   type PracticeQueue, type SessionItem, type SessionResult
 } from './services/practiceSession';
 import type { SessionMode } from './components/SessionScreen';
-import React, { lazy, Suspense, useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import React, { useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   Music,
   ListChecks,
@@ -51,7 +51,8 @@ import { openModalLayer, openScreenLayer } from './context/historyLayers';
 import { getSongMetadata, loadSongTrack } from './context/uiErrors';
 import { AudioSessionProvider, useAudioSession, useLatestPitch } from './context/AudioSessionContext';
 import { ModalsProvider, useModals } from './context/ModalsContext';
-import { OnDemand } from './components/OnDemand';
+import { LazyScreen, OnDemand } from './components/OnDemand';
+import { installPreloadErrorReload, lazyWithRetry } from './components/lazyLoad';
 import { StorageNotice } from './components/StorageNotice';
 import { LEGAL_CONTACT } from './content/legal';
 import { AppearanceButton, AudioChip, HeaderNav, ProgressButton, TabBar } from './components/SiteNav';
@@ -65,22 +66,24 @@ import { RoomProvider } from './context/RoomProvider';
 import { useRanking } from './context/ranking';
 import { useRoom } from './context/useRoom';
 
-const PracticeGame = lazy(() => import('./components/PracticeGame').then((module) => ({ default: module.PracticeGame })));
-const FreePlay = lazy(() => import('./components/FreePlay').then((module) => ({ default: module.FreePlay })));
-const OnlinePracticeGame = lazy(() => import('./components/OnlinePracticeGame').then((module) => ({ default: module.OnlinePracticeGame })));
-const RoomModal = lazy(() => import('./components/RoomModal').then((module) => ({ default: module.RoomModal })));
-const SongSearchModal = lazy(() => import('./components/SongSearchModal').then((module) => ({ default: module.SongSearchModal })));
-const AudioSettingsModal = lazy(() => import('./components/AudioSettingsModal').then((module) => ({ default: module.AudioSettingsModal })));
-const AmpRack = lazy(() => import('./components/AmpRack').then((module) => ({ default: module.AmpRack })));
-const LatencyTest = lazy(() => import('./components/LatencyTest').then((module) => ({ default: module.LatencyTest })));
-const DuoSetupModal = lazy(() => import('./components/DuoSetupModal').then((module) => ({ default: module.DuoSetupModal })));
-const FeedbackModal = lazy(() => import('./components/FeedbackModal').then((module) => ({ default: module.FeedbackModal })));
-const RankingModals = lazy(() => import('./components/RankingModals').then((module) => ({ default: module.RankingModals })));
-const AppearanceScreen = lazy(() => import('./components/AppearanceScreen').then((module) => ({ default: module.AppearanceScreen })));
-const ProgressScreen = lazy(() => import('./components/ProgressScreen').then((module) => ({ default: module.ProgressScreen })));
-const SessionScreen = lazy(() => import('./components/SessionScreen').then((module) => ({ default: module.SessionScreen })));
-const TrailScreen = lazy(() => import('./components/TrailScreen').then((module) => ({ default: module.TrailScreen })));
-const RepertoireLibrary = lazy(() => import('./components/RepertoireLibrary').then((module) => ({ default: module.RepertoireLibrary })));
+const PracticeGame = lazyWithRetry(() => import('./components/PracticeGame'), (module) => module.PracticeGame);
+const FreePlay = lazyWithRetry(() => import('./components/FreePlay'), (module) => module.FreePlay);
+const OnlinePracticeGame = lazyWithRetry(() => import('./components/OnlinePracticeGame'), (module) => module.OnlinePracticeGame);
+const RoomModal = lazyWithRetry(() => import('./components/RoomModal'), (module) => module.RoomModal);
+const SongSearchModal = lazyWithRetry(() => import('./components/SongSearchModal'), (module) => module.SongSearchModal);
+const AudioSettingsModal = lazyWithRetry(() => import('./components/AudioSettingsModal'), (module) => module.AudioSettingsModal);
+const AmpRack = lazyWithRetry(() => import('./components/AmpRack'), (module) => module.AmpRack);
+const LatencyTest = lazyWithRetry(() => import('./components/LatencyTest'), (module) => module.LatencyTest);
+const DuoSetupModal = lazyWithRetry(() => import('./components/DuoSetupModal'), (module) => module.DuoSetupModal);
+const FeedbackModal = lazyWithRetry(() => import('./components/FeedbackModal'), (module) => module.FeedbackModal);
+const RankingModals = lazyWithRetry(() => import('./components/RankingModals'), (module) => module.RankingModals);
+const AppearanceScreen = lazyWithRetry(() => import('./components/AppearanceScreen'), (module) => module.AppearanceScreen);
+const ProgressScreen = lazyWithRetry(() => import('./components/ProgressScreen'), (module) => module.ProgressScreen);
+const SessionScreen = lazyWithRetry(() => import('./components/SessionScreen'), (module) => module.SessionScreen);
+const TrailScreen = lazyWithRetry(() => import('./components/TrailScreen'), (module) => module.TrailScreen);
+const RepertoireLibrary = lazyWithRetry(() => import('./components/RepertoireLibrary'), (module) => module.RepertoireLibrary);
+
+installPreloadErrorReload();
 
 const supportUrl = import.meta.env.VITE_SUPPORT_URL?.trim();
 const supportHref = supportUrl || 'https://github.com/LeonCS5/PRGB';
@@ -97,9 +100,9 @@ const PracticePreview: React.FC = () => (
       <div className="flex items-center justify-between gap-3 border-b border-ink-700 bg-ink-850 px-4 py-4 sm:px-6">
         <div className="flex items-center gap-3">
           <span className="flex size-10 items-center justify-center rounded-lg border border-amp-500/25 bg-amp-500/10 text-amp-400"><Guitar size={20} /></span>
-          <div><p className="text-sm font-bold text-ink-100">Exercício PRGB</p><p className="mt-1 text-xs text-ink-300">Pentatônica · Guitarra</p></div>
+          <div><p className="text-sm font-bold text-ink-100">Pentatônica em Lá menor</p><p className="mt-1 text-xs text-ink-300">Exercício de boas-vindas</p></div>
         </div>
-        <span className="rounded-md border border-signal-500/25 bg-signal-500/10 px-2 py-1 font-mono text-[10px] font-bold tracking-wider text-signal-300">PRÁTICA</span>
+        <span className="rounded-md border border-signal-500/25 bg-signal-500/10 px-2 py-1 font-mono text-xs font-bold tracking-wider text-signal-300">PRÁTICA</span>
       </div>
       <div className="flex items-center justify-between px-4 pt-5 font-mono text-xs sm:px-6">
         <span className="text-ink-300">PONTUAÇÃO <span className="ml-1 text-ink-100">2.450</span></span>
@@ -121,7 +124,7 @@ const PracticePreview: React.FC = () => (
             <text x={x} y={Number(y) + 5} textAnchor="middle" className="fill-ink-950 font-mono text-[14px] font-bold">{fret}</text>
           </g>
         ))}
-        <text x="104" y="22" textAnchor="middle" className="fill-amp-300 font-mono text-[10px]">TOQUE AQUI</text>
+        <text x="104" y="22" textAnchor="middle" className="fill-amp-300 font-mono text-[12px]">TOQUE AQUI</text>
         <text x="206" y="194" className="fill-hit font-display text-[17px] font-bold">Perfeito!</text>
       </svg>
       <div className="flex items-center justify-between gap-3 border-t border-ink-700 px-4 py-4 text-xs text-ink-300 sm:px-6">
@@ -129,7 +132,10 @@ const PracticePreview: React.FC = () => (
         <span className="font-mono text-ink-300">01:24 / 06:36</span>
       </div>
     </div>
-    <figcaption className="mt-4 text-center font-mono text-[10px] tracking-widest text-ink-300">UMA PRÉVIA DO SEU PRÓXIMO RIFF</figcaption>
+    <figcaption className="mt-4 text-center font-mono text-xs tracking-widest text-ink-300">UMA PRÉVIA DO SEU PRÓXIMO RIFF</figcaption>
+    <p className="mx-auto mt-2 max-w-md text-center text-sm leading-6 text-ink-300">
+      Cada linha é uma corda (a de baixo é a mais grossa). O número é a casa: 0 é a corda solta. Toque a nota quando ela cruzar a linha laranja.
+    </p>
   </figure>
 );
 
@@ -150,17 +156,22 @@ const soloSession = (part: GamePart, challenge: Challenge | null = null, rankedS
 const duoSession = (parts: [GamePart, GamePart], names: [string, string]): GameSession =>
   ({ mode: 'duo', key: nextSessionKey(), parts, names });
 
-const initialSession = (devScene: ReturnType<typeof readDevScene>): GameSession | null => {
+// The scenes exist only in development: the guard keeps their names out of the production bundle
+const devSceneSession = (devScene: ReturnType<typeof readDevScene>): GameSession | null => {
+  if (!import.meta.env.DEV) return null;
   if (devScene === 'dupla' || devScene === 'dupla-resultado') {
     const demo = demoPart();
     return duoSession([demo, demo], ['Ana', 'Beto']);
   }
   if (devScene === 'ranking-partida') return soloSession(demoPart(), null, 'on');
-  if (devScene === 'resultado' || devScene === 'desafio' || devScene === 'ranking-resultado' || devScene === 'ranking-automatico' || devScene === 'ranking-sem-conta' || new URLSearchParams(window.location.search).has('demo')) {
+  if (devScene === 'resultado' || devScene === 'desafio' || devScene === 'ranking-resultado' || devScene === 'ranking-automatico' || devScene === 'ranking-sem-conta') {
     return soloSession(demoPart());
   }
   return null;
 };
+
+const initialSession = (devScene: ReturnType<typeof readDevScene>): GameSession | null =>
+  devSceneSession(devScene) ?? (new URLSearchParams(window.location.search).has('demo') ? soloSession(demoPart()) : null);
 
 // Drops ?desafio= from the address bar without reloading, keeping any other parameter
 const clearChallengeParam = () => {
@@ -246,7 +257,7 @@ const AppContent: React.FC = () => {
   const [devScene] = useState(readDevScene);
   const [session, setSession] = useState<GameSession | null>(() => initialSession(devScene));
   const [devSessionKey] = useState(() => session?.key ?? null);
-  const [isDuoSetupOpen, setIsDuoSetupOpen] = useState(() => devScene === 'dupla-assistente');
+  const [isDuoSetupOpen, setIsDuoSetupOpen] = useState(() => import.meta.env.DEV && devScene === 'dupla-assistente');
   // Player names while the duo picks a song in the search modal (it's in duo mode while set)
   const [duoSearchNames, setDuoSearchNames] = useState<[string, string] | null>(null);
   const [savedSong, setSavedSong] = useState(() => readPreferences().lastSong);
@@ -480,7 +491,7 @@ const AppContent: React.FC = () => {
   const handleLoadDemo = () => {
     songSelectionVersion.current += 1;
     setRestoreError(null);
-    exitDuoAudio();
+    ensureSoloAudio(); // the demo is judged by the guitar too: without the input every note would be a Miss
     setSession(soloSession(demoPart()));
   };
 
@@ -559,7 +570,7 @@ const AppContent: React.FC = () => {
   };
 
   const latencyAdjustMs = Math.round(((audioOptions.inputLatencySamples + audioOptions.outputLatencySamples) / (audioEngine.getEngineInfo()?.sampleRate ?? 48000)) * 1000);
-  const pageName = onlineSession ? 'Dupla online' : isFreePlayOpen ? 'Play Free' : session ? sessionParts[0].tab.title : isProgressOpen ? 'Meu progresso' : isSessionOpen ? 'Sessão de prática' : isTrailOpen ? 'Trilha de evolução' : isAppearanceOpen ? 'Aparência' : isRepertoireOpen ? 'Repertório do PRGB' : isLibraryOpen ? 'Exercícios' : legalRoute?.document.title;
+  const pageName = onlineSession ? 'Dupla online' : isFreePlayOpen ? 'Play Free' : session ? sessionParts[0].tab.title : isProgressOpen ? 'Meu progresso' : isSessionOpen ? 'Sessão de prática' : isTrailOpen ? 'Trilha' : isAppearanceOpen ? 'Aparência' : isRepertoireOpen ? 'Repertório' : isLibraryOpen ? 'Exercícios' : legalRoute?.document.title;
 
   return (
     <div className="h-dvh w-full overflow-hidden bg-ink-950 font-sans text-ink-100">
@@ -594,7 +605,7 @@ const AppContent: React.FC = () => {
         )}
       </div>
       {onlineSession ? (
-        <Suspense fallback={<p role="status" className="p-5">Carregando o jogo…</p>}>
+        <LazyScreen label="o jogo">
         <OnlinePracticeGame
           key={onlineSession.sessionKey}
           myPart={onlineSession.part}
@@ -609,15 +620,15 @@ const AppContent: React.FC = () => {
           ampEngine={ampEngine}
           onOpenAmpRack={() => setIsAmpRackOpen(true)}
         />
-        </Suspense>
+        </LazyScreen>
       ) : isFreePlayOpen ? (
-        <Suspense fallback={<p role="status" className="p-5">Carregando o Play Free…</p>}>
+        <LazyScreen label="o Play Free">
         <FreePlay onExit={() => setIsFreePlayOpen(false)} onOpenAudioSettings={() => setIsSettingsOpen(true)}
           onOpenAmpRack={() => setIsAmpRackOpen(true)} />
-        </Suspense>
+        </LazyScreen>
       ) : session ? (
         /* Practice mode */
-        <Suspense fallback={<p role="status" className="p-5">Carregando o jogo…</p>}>
+        <LazyScreen label="o jogo">
           <PracticeGame
             key={session.key}
             parts={sessionParts}
@@ -653,28 +664,28 @@ const AppContent: React.FC = () => {
               onEnd: handleEndSession
             } : null}
           />
-        </Suspense>
+        </LazyScreen>
       ) : isProgressOpen ? (
-        <Suspense fallback={<p role="status" className="p-5">Carregando progresso…</p>}>
+        <LazyScreen label="progresso">
           <ProgressScreen onExit={() => setIsProgressOpen(false)} onOpenExercises={() => { setIsProgressOpen(false); handleOpenLibrary(); }} />
-        </Suspense>
+        </LazyScreen>
       ) : isSessionOpen ? (
-        <Suspense fallback={<p role="status" className="p-5">Carregando as sessões…</p>}>
+        <LazyScreen label="as sessões">
           <SessionScreen onStart={handleStartSession} onExit={() => setIsSessionOpen(false)} initialMode={sessionPreset.mode} initialStageId={sessionPreset.stageId} />
-        </Suspense>
+        </LazyScreen>
       ) : isTrailOpen ? (
-        <Suspense fallback={<p role="status" className="p-5">Carregando a trilha…</p>}>
+        <LazyScreen label="a trilha">
           <TrailScreen onPlay={handlePlayExercise} onExit={() => setIsTrailOpen(false)}
             onSession={(stageId) => handleOpenSession(stageId ? { mode: 'etapa', stageId } : { mode: 'tempo' })} />
-        </Suspense>
+        </LazyScreen>
       ) : isAppearanceOpen ? (
-        <Suspense fallback={<p role="status" className="p-5">Carregando aparência…</p>}>
+        <LazyScreen label="aparência">
           <AppearanceScreen onExit={() => setIsAppearanceOpen(false)} />
-        </Suspense>
+        </LazyScreen>
       ) : isRepertoireOpen ? (
-        <Suspense fallback={<p role="status" className="p-5">Carregando repertório…</p>}>
+        <LazyScreen label="repertório">
           <RepertoireLibrary onPlay={handlePlayRepertoire} onSearch={handleOpenSearch} onExit={() => setIsRepertoireOpen(false)} />
-        </Suspense>
+        </LazyScreen>
       ) : isLibraryOpen ? (
         <ExerciseLibrary view={libraryView} onViewChange={setLibraryView} onPlay={handlePlayExercise} onPlayAll={handleStartSession} onExit={() => setIsLibraryOpen(false)} onSession={() => handleOpenSession({ mode: 'minha' })} />
       ) : legalRoute ? (
@@ -694,7 +705,7 @@ const AppContent: React.FC = () => {
                 <ProgressButton onOpen={handleOpenProgress} />
                 <AppearanceButton onOpen={handleOpenAppearance} />
                 {isRankingOn && (
-                  <button type="button" onClick={openAccount} aria-label={hasAccount ? 'Minha conta do ranking' : 'Entrar no ranking'}
+                  <button type="button" onClick={openAccount} aria-label={hasAccount ? 'Minha conta do ranking' : 'Entrar no ranking'} title={hasAccount ? 'Minha conta do ranking' : 'Entrar no ranking'}
                     className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-lg px-2 text-sm font-semibold text-ink-200 transition hover:bg-ink-800 hover:text-amp-300">
                     <UserRound size={18} className="shrink-0 text-amp-400" aria-hidden="true" /><span className="hidden 2xl:inline">{hasAccount ? 'Minha conta' : 'Entrar'}</span>
                   </button>
@@ -730,12 +741,12 @@ const AppContent: React.FC = () => {
                     <button type="button" onClick={handleLoadDemo}
                       className="flex min-h-16 cursor-pointer items-center justify-center gap-3 rounded-xl bg-amp-400 px-6 py-3 text-ink-950 shadow-glow-amp transition hover:bg-amp-300">
                       <Play size={22} className="fill-current" aria-hidden="true" />
-                      <span className="text-left"><span className="block text-base font-bold">Tocar agora</span><span className="mt-0.5 block text-xs font-medium">Exercício original · ~20 s</span></span>
+                      <span className="text-left"><span className="block text-base font-bold">Tocar agora</span><span className="mt-0.5 block text-xs font-medium">Pentatônica em Lá menor · ~20 s</span></span>
                     </button>
                     {isAcervoEnabled() ? (
                       <button type="button" onClick={handleOpenSearch} className="flex min-h-16 cursor-pointer items-center justify-center gap-3 rounded-xl border border-ink-600 bg-ink-900 px-6 py-3 text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
                         <Search size={20} className="text-signal-300" aria-hidden="true" />
-                        <span className="text-left"><span className="block text-base font-bold">Buscar uma música</span><span className="mt-0.5 block text-xs font-medium text-ink-300">Pelo nome ou pelo artista</span></span>
+                        <span className="text-left"><span className="block text-base font-bold">Buscar músicas</span><span className="mt-0.5 block text-xs font-medium text-ink-300">Pelo nome ou pelo artista</span></span>
                       </button>
                     ) : (
                       <button type="button" onClick={handleOpenRepertoire} className="flex min-h-16 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-600 bg-ink-900 px-6 py-3 text-sm font-semibold text-ink-100 transition hover:border-ink-400 hover:bg-ink-800">
@@ -752,6 +763,10 @@ const AppContent: React.FC = () => {
                     </button>
                   )}
                   <p className="mt-4 flex items-center gap-2 text-xs text-ink-300"><Check size={14} className="text-hit" aria-hidden="true" /> Sem cadastro para tocar. O ranking é opcional.</p>
+                  <aside aria-label="O que você precisa" className="mt-4 max-w-lg rounded-xl border border-ink-700 bg-ink-900/60 px-4 py-3 text-sm leading-6 text-ink-300">
+                    <p className="font-bold text-ink-100">O que você precisa</p>
+                    <p className="mt-1">Uma guitarra ligada a uma interface de áudio USB e fones de ouvido, no Chrome, Edge ou Firefox. O navegador pede o microfone porque é por essa entrada que o PRGB escuta a guitarra: o áudio fica no seu computador e não é enviado.</p>
+                  </aside>
                 </div>
                 <div className="hidden min-w-0 lg:block"><PracticePreview /></div>
               </div>
@@ -759,17 +774,24 @@ const AppContent: React.FC = () => {
 
             <section aria-labelledby="pick-title" className="mx-auto max-w-7xl px-5 pb-10 sm:px-8 lg:px-12 lg:pb-14">
               <h2 id="pick-title" className="font-display text-2xl font-bold tracking-tight">O que você quer tocar?</h2>
-              <p className="mt-1 text-sm text-ink-300">Siga uma ordem sugerida ou escolha por conta própria.</p>
-              <div className={`mt-4 grid gap-3 ${isAcervoEnabled() ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
-                <div className="grid gap-3 md:col-span-full md:grid-cols-2">
-                  <ActionRow icon={Route} tone={AMP_TONE} title="Trilha de evolução" description={`${TRAIL_STEP_COUNT} exercícios em ordem, do primeiro som ao material mais difícil. Nada fica bloqueado.`} onClick={handleOpenTrail} />
+              <p className="mt-1 text-sm text-ink-300">Nunca tocou? Comece pela Trilha. Já tem prática? Monte uma sessão ou escolha um exercício.</p>
+              <div className="mt-4 grid gap-5 md:grid-cols-3">
+                <div className="grid content-start gap-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-ink-300">Aprender</h3>
+                  <ActionRow icon={Route} tone={AMP_TONE} title="Trilha" description={`${TRAIL_STEP_COUNT} exercícios em ordem, do primeiro som ao material mais difícil. Nada fica bloqueado.`} onClick={handleOpenTrail} />
+                  <ActionRow icon={Dumbbell} tone={AMP_TONE} title="Exercícios" description="Escalas, acordes e técnicas, em qualquer tom. Funciona sem internet." onClick={() => handleOpenLibrary()} />
+                </div>
+                <div className="grid content-start gap-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-ink-300">Praticar</h3>
                   <ActionRow icon={ListChecks} tone={SIGNAL_TONE} title="Sessão de prática" description="Vários exercícios em sequência, por etapa, por tempo ou montada por você." onClick={() => handleOpenSession()} />
                 </div>
-                <ActionRow icon={Dumbbell} tone={AMP_TONE} title="Exercícios" description="Escalas, acordes e técnicas, em qualquer tom. Funciona sem internet." onClick={() => handleOpenLibrary()} />
-                <ActionRow icon={Music} tone={SIGNAL_TONE} title="Repertório do PRGB" description="Peças de domínio público e originais, com ranking nas liberadas." onClick={handleOpenRepertoire} />
-                {isAcervoEnabled() && (
-                  <ActionRow icon={Search} tone={HIT_TONE} title="Buscar no acervo (experimental)" description="Tablaturas de outros artistas, de um provedor externo. Sem ranking." onClick={handleOpenSearch} />
-                )}
+                <div className="grid content-start gap-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-ink-300">Tocar músicas</h3>
+                  <ActionRow icon={Music} tone={SIGNAL_TONE} title="Repertório" description="Peças de domínio público e originais. Cada peça diz se vale para o ranking." onClick={handleOpenRepertoire} />
+                  {isAcervoEnabled() && (
+                    <ActionRow icon={Search} tone={HIT_TONE} title="Buscar músicas (experimental)" description="Tablaturas de outros artistas, de um banco externo. Sem ranking." onClick={handleOpenSearch} />
+                  )}
+                </div>
               </div>
             </section>
 
@@ -793,18 +815,18 @@ const AppContent: React.FC = () => {
                 <h2 id="modes-title" className="font-display text-2xl font-bold tracking-tight">Modos de jogo</h2>
                 <div className="mt-4 grid gap-3">
                   <ActionRow icon={Guitar} tone={AMP_TONE} title="Play Free" description="Só ouvir a guitarra e ver as notas" onClick={handleOpenFreePlay} />
-                  <ActionRow icon={Users} tone={AMP_TONE} title="Jogar em dupla" description="Duas guitarras, um computador" onClick={() => setIsDuoSetupOpen(true)} />
-                  {isRankingOn && <ActionRow icon={Wifi} tone={SIGNAL_TONE} title="Dupla online" description="Toque junto a distância" onClick={() => setIsRoomModalOpen(true)} />}
+                  <ActionRow icon={Users} tone={AMP_TONE} title="Jogar em dupla" description="Duas guitarras no mesmo computador. Exige uma interface de áudio com 2 entradas." onClick={() => setIsDuoSetupOpen(true)} />
+                  {isRankingOn && <ActionRow icon={Wifi} tone={SIGNAL_TONE} title="Dupla online" description="Toque junto a distância. Exige conta no ranking (18+); vocês não se ouvem, só o placar é compartilhado." onClick={() => setIsRoomModalOpen(true)} />}
                 </div>
               </section>
 
               <section aria-labelledby="setup-title">
                 <h2 id="setup-title" className="font-display text-2xl font-bold tracking-tight">Prepare a guitarra</h2>
                 <div className="mt-4 grid gap-3">
-                  <ActionRow icon={PlugZap} tone={isAudioRunning ? HIT_TONE : AMP_TONE} title={isAudioRunning ? 'Guitarra conectada' : 'Conectar guitarra'}
-                    description={isAudioRunning ? 'Entrada de áudio ativa' : 'Interface não conectada'} disabled={isAudioRunning} onClick={() => void handleStartAudio()} />
+                  <ActionRow icon={PlugZap} tone={isAudioRunning ? HIT_TONE : AMP_TONE} title={isAudioRunning ? 'Áudio conectado' : 'Conectar áudio'}
+                    description={isAudioRunning ? 'Entrada de áudio ativa' : 'O navegador vai pedir o microfone: é a entrada da sua interface'} disabled={isAudioRunning} onClick={() => void handleStartAudio()} />
                   <ActionRow icon={Sliders} tone={SIGNAL_TONE} title="Áudio e afinador" description="Entrada, saída, buffer e latência" onClick={() => setIsSettingsOpen(true)} />
-                  <ActionRow icon={Zap} tone={AMP_TONE} title="Timbre do amp" description="Motor PRGB Amp" onClick={() => {
+                  <ActionRow icon={Zap} tone={AMP_TONE} title="Timbre do amp" description="Simulador PRGB Amp: ganho, gabinete e reverb" onClick={() => {
                     if (!isAudioRunning) void handleStartAudio();
                     setIsAmpRackOpen(true);
                   }} />
@@ -828,11 +850,11 @@ const AppContent: React.FC = () => {
                   {[
                     { icon: Zap, label: '01 / TIMBRE', title: 'Encontre o seu timbre.', description: 'Simulador de amplificador em tempo real, o PRGB Amp. Ajuste o ganho, o gabinete e o reverb até achar o seu som.', detail: 'PRGB Amp · Simulador + gabinete + reverb', color: 'text-amp-300', surface: 'bg-amp-500/10 border-amp-500/20' },
                     { icon: AudioLines, label: '02 / ENTRADA', title: 'Plugue. Afine. Toque.', description: 'Escolha sua interface, monte a rota de áudio e use o afinador integrado. A latência depende do seu navegador e do seu equipamento.', detail: 'Sua guitarra no centro de tudo', color: 'text-signal-300', surface: 'bg-signal-500/10 border-signal-500/20' },
-                    { icon: Target, label: '03 / PRÁTICA', title: 'Cada nota conta.', description: 'Acompanhe as tablaturas, acerte as notas e construa seu combo. Perfeito, Bom ou Errou: veja seu progresso enquanto toca.', detail: isAcervoEnabled() ? 'Exercício próprio e busca em acervo externo' : 'Exercícios próprios do PRGB', color: 'text-hit', surface: 'bg-hit/10 border-hit/20' }
+                    { icon: Target, label: '03 / PRÁTICA', title: 'Cada nota conta.', description: 'Acompanhe as tablaturas, acerte as notas e construa seu combo. Perfeito, Bom ou Errou: veja seu progresso enquanto toca.', detail: isAcervoEnabled() ? 'Exercícios próprios e busca em banco de tablaturas externo' : 'Exercícios próprios do PRGB', color: 'text-hit', surface: 'bg-hit/10 border-hit/20' }
                   ].map(({ icon: Icon, label, title, description, detail, color, surface }) => (
                     <article key={label} className="grid grid-cols-[auto_1fr] items-center gap-x-3 rounded-2xl border border-ink-700 bg-ink-850 p-5 sm:p-6 md:grid-rows-[auto_auto_1fr_auto]">
                       <span className={`flex size-10 items-center justify-center rounded-xl border ${color} ${surface}`}><Icon size={20} aria-hidden="true" /></span>
-                      <p className={`hidden font-mono text-[10px] tracking-widest md:block ${color}`}>{label}</p>
+                      <p className={`hidden font-mono text-xs tracking-widest md:block ${color}`}>{label}</p>
                       <h3 className="font-display text-xl font-bold tracking-tight md:col-span-2 md:mt-4">{title}</h3>
                       <p className="col-span-2 mt-2 self-start text-sm leading-6 text-ink-300 md:mb-4">{description}</p>
                       <p className="col-span-2 hidden border-t border-ink-700 pt-3 text-xs text-ink-300 md:block">{detail}</p>
@@ -866,7 +888,7 @@ const AppContent: React.FC = () => {
 
           <footer className="border-t border-ink-700 bg-ink-900">
             <div className="mx-auto flex max-w-7xl flex-col gap-6 px-5 py-9 sm:px-8 lg:px-12">
-              <div className="flex flex-wrap items-center justify-between gap-4"><BrandMark size={28} /><span className="font-mono text-[10px] tracking-widest text-ink-300">PLAY REAL GUITAR IN BROWSER</span></div>
+              <div className="flex flex-wrap items-center justify-between gap-4"><BrandMark size={28} /><span className="font-mono text-xs tracking-widest text-ink-300">PLAY REAL GUITAR IN BROWSER</span></div>
               <p className="max-w-3xl text-xs leading-6 text-ink-300">Tablaturas e metadados vêm de um provedor externo. O PRGB não é afiliado a esse provedor, a artistas ou a gravadoras; todas as marcas pertencem aos seus donos.</p>
               <div className="flex flex-wrap items-center justify-between gap-4 border-t border-ink-700 pt-5 text-xs text-ink-300">
                 <span>© {currentYear} PRGB</span>
@@ -884,10 +906,10 @@ const AppContent: React.FC = () => {
         </div>
       )}
 
-      <OnDemand open={isFeedbackOpen}><FeedbackModal isOpen={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)} screen={screen} /></OnDemand>
+      <OnDemand open={isFeedbackOpen} label="o formulário" onClose={() => setIsFeedbackOpen(false)}><FeedbackModal isOpen={isFeedbackOpen} onClose={() => setIsFeedbackOpen(false)} screen={screen} /></OnDemand>
 
       {/* Song Search Modal */}
-      <OnDemand open={isAcervoEnabled() && isSearchOpen}>
+      <OnDemand open={isAcervoEnabled() && isSearchOpen} label="a busca" onClose={() => setIsSearchOpen(false)}>
       <SongSearchModal
         isOpen={isAcervoEnabled() && isSearchOpen}
         onClose={() => {
@@ -921,7 +943,7 @@ const AppContent: React.FC = () => {
       </OnDemand>
 
       {isDuoSetupOpen && (
-        <OnDemand open>
+        <LazyScreen overlay label="a dupla" onClose={() => setIsDuoSetupOpen(false)}>
         <DuoSetupModal
           onCancel={() => {
             setIsDuoSetupOpen(false);
@@ -938,11 +960,11 @@ const AppContent: React.FC = () => {
             setIsSearchOpen(true);
           }}
         />
-        </OnDemand>
+        </LazyScreen>
       )}
 
       {/* Audio Interface Settings Modal */}
-      <OnDemand open={isSettingsOpen}>
+      <OnDemand open={isSettingsOpen} label="o painel de áudio" onClose={() => setIsSettingsOpen(false)}>
       <AudioSettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
@@ -956,15 +978,15 @@ const AppContent: React.FC = () => {
       </OnDemand>
 
       {/* PRGB Amp & Monitoring Rack */}
-      <OnDemand open={isAmpRackOpen}>
+      <OnDemand open={isAmpRackOpen} label="o rack do amp" onClose={() => setIsAmpRackOpen(false)}>
         <AmpRack isOpen={isAmpRackOpen} onClose={() => setIsAmpRackOpen(false)} ampEngine={ampEngine} />
       </OnDemand>
 
-      <OnDemand open={isLatencyTestOpen}><LatencyTest isOpen={isLatencyTestOpen} onClose={() => setIsLatencyTestOpen(false)} /></OnDemand>
+      <OnDemand open={isLatencyTestOpen} label="o teste de latência" onClose={() => setIsLatencyTestOpen(false)}><LatencyTest isOpen={isLatencyTestOpen} onClose={() => setIsLatencyTestOpen(false)} /></OnDemand>
 
-      <OnDemand open={entryMode !== null || isAccountOpen || leaderboardTarget !== null}><RankingModals /></OnDemand>
+      <OnDemand open={entryMode !== null || isAccountOpen || leaderboardTarget !== null} label="o ranking"><RankingModals /></OnDemand>
 
-      <OnDemand open={isRoomModalOpen}>
+      <OnDemand open={isRoomModalOpen} label="a dupla online" onClose={() => setIsRoomModalOpen(false)}>
       <RoomModal
         isOpen={isRoomModalOpen}
         onClose={() => setIsRoomModalOpen(false)}
