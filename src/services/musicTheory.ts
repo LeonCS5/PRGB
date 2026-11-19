@@ -6,9 +6,33 @@ export const TUNING = [64, 59, 55, 50, 45, 40];
 // A key is a pitch class, 0 = C
 export const KEYS = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
 
+// How the notes outside the key are written: sharps in the keys with sharps, flats in the ones with flats, so a key
+// never mixes both (Db, Gb and Ab in a key of Db; never C# with Ab)
+export type Spelling = 'sharp' | 'flat';
+
+const SHARP_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const FLAT_NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+
+// Keys whose signature has sharps, by pitch class (F# major has six sharps and Gb six flats: F# is the one used)
+const SHARP_MAJOR = new Set([2, 4, 6, 7, 9, 11]);
+const SHARP_MINOR = new Set([1, 4, 6, 8, 9, 11]);
+
+export const spellingOf = (key: number, minor = false): Spelling =>
+  (minor ? SHARP_MINOR : SHARP_MAJOR).has(((key % 12) + 12) % 12) ? 'sharp' : 'flat';
+
+/** The name of a key as written in a title: Db, never C#, for the major key; C#m, never Dbm, for the minor one. */
+export const keyName = (key: number, minor = false): string => {
+  const pitch = ((key % 12) + 12) % 12;
+  const names = spellingOf(pitch, minor) === 'sharp' ? SHARP_NAMES : FLAT_NAMES;
+  return `${names[pitch]}${minor ? 'm' : ''}`;
+};
+
 const LOW_E = 5;
 const A_STRING = 4;
 const LAST_FRET = 22;
+/** Exercises of levels 1 and 2 stay up to fret 20: before this, 91 variants asked for fret 22 and 111 for fret 21. */
+export const EASY_LAST_FRET = 20;
+export const lastFretFor = (level: number): number => (level >= 3 ? LAST_FRET : EASY_LAST_FRET);
 
 export interface FretNote {
   string: number;
@@ -67,14 +91,14 @@ export function positionNotes(key: number, intervals: readonly number[]): FretNo
   return notes;
 }
 
-const fitToNeck = (notes: FretNote[]): FretNote[] =>
-  notes.some((note) => note.fret > LAST_FRET)
+const fitToNeck = (notes: FretNote[], lastFret: number): FretNote[] =>
+  notes.some((note) => note.fret > lastFret)
     ? notes.map((note) => ({ ...note, fret: note.fret - 12, midi: note.midi - 12 }))
     : notes;
 
 // The same count of notes on each string, walking up the scale from one of its degrees on the low E string. Two
 // per string on a pentatonic gives its five boxes; three per string on a seven-note scale, its three-note patterns.
-export function notesPerString(key: number, intervals: readonly number[], perString: number, startDegree = 0): FretNote[] {
+export function notesPerString(key: number, intervals: readonly number[], perString: number, startDegree = 0, lastFret = LAST_FRET): FretNote[] {
   const classes = new Set(intervals.map((interval) => mod12(key + interval)));
   let midi = TUNING[LOW_E] + rootFret(key) + intervals[startDegree];
   const notes: FretNote[] = [];
@@ -85,7 +109,7 @@ export function notesPerString(key: number, intervals: readonly number[], perStr
       while (!classes.has(mod12(midi))) midi += 1;
     }
   }
-  return fitToNeck(notes);
+  return fitToNeck(notes, lastFret);
 }
 
 export type ChordQuality = 'maj' | 'min' | '7' | 'm7' | 'maj7' | 'm7b5' | 'dim7' | '5' | 'sus2' | 'sus4';
@@ -115,7 +139,11 @@ const QUALITIES: Record<ChordQuality, QualityShape> = {
 
 export const chordIntervals = (quality: ChordQuality): readonly number[] => QUALITIES[quality].intervals;
 
-export const chordName = (root: number, quality: ChordQuality): string => `${KEYS[mod12(root)]}${QUALITIES[quality].suffix}`;
+/** `spelling` is the one of the key the chord is in; without it the name follows KEYS. */
+export const chordName = (root: number, quality: ChordQuality, spelling?: Spelling): string => {
+  const names = spelling === 'sharp' ? SHARP_NAMES : spelling === 'flat' ? FLAT_NAMES : KEYS;
+  return `${names[mod12(root)]}${QUALITIES[quality].suffix}`;
+};
 
 export interface Voicing {
   label: string;
@@ -124,8 +152,8 @@ export interface Voicing {
   notes: FretNote[]; // lowest first
 }
 
-const voicing = (root: number, quality: ChordQuality, frets: Frets): Voicing => ({
-  label: chordName(root, quality),
+const voicing = (root: number, quality: ChordQuality, frets: Frets, spelling?: Spelling): Voicing => ({
+  label: chordName(root, quality, spelling),
   rootClass: mod12(root),
   toneClasses: QUALITIES[quality].intervals.map((interval) => mod12(root + interval)),
   notes: frets.flatMap((fret, index) => (fret === null ? [] : [fretNote(LOW_E - index, fret)]))
@@ -136,7 +164,7 @@ const atFret = (shape: Frets, root: number): Frets => shape.map((fret) => (fret 
 export type ShapeString = 'lowE' | 'a';
 
 /** A barre or movable voicing. Without `shape`, the one nearest to `nearFret`, so changes stay short. */
-export function movableChord(root: number, quality: ChordQuality, nearFret = 5, shape?: ShapeString): Voicing {
+export function movableChord(root: number, quality: ChordQuality, nearFret = 5, shape?: ShapeString, spelling?: Spelling): Voicing {
   const { onLowE, onA } = QUALITIES[quality];
   // Fret 2 up, since some shapes reach one fret under the root
   const lowFret = rootFret(root, LOW_E, 2);
@@ -145,7 +173,7 @@ export function movableChord(root: number, quality: ChordQuality, nearFret = 5, 
     || (shape !== 'a' && onLowE !== undefined && (onA === undefined || Math.abs(lowFret - nearFret) <= Math.abs(aFret - nearFret)));
   const frets = useLowE ? onLowE : onA;
   if (!frets) throw new Error(`Shape not available: ${quality}`);
-  return voicing(root, quality, atFret(frets, useLowE ? lowFret : aFret));
+  return voicing(root, quality, atFret(frets, useLowE ? lowFret : aFret), spelling);
 }
 
 const OPEN_CHORDS = {

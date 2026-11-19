@@ -7,12 +7,14 @@ import {
   chordIntervals,
   chordName,
   fretNote,
+  keyName,
   movableChord,
   notesPerString,
   openChord,
   pitchClass,
   positionNotes,
   rootFret,
+  spellingOf,
   type ChordQuality,
   type FretNote
 } from './musicTheory';
@@ -184,5 +186,37 @@ describe('chords', () => {
     expect(chordName(9, 'min')).toBe('Am');
     expect(chordName(11, 'm7b5')).toBe('Bm7(b5)');
     expect(chordName(13, 'maj')).toBe('C#');
+  });
+});
+
+describe('key spelling', () => {
+  it('writes each major key with one kind of accidental: Db, Eb, Ab, Bb with flats; F#, B, E, A, D, G with sharps', () => {
+    expect(ALL_KEYS.map((key) => keyName(key))).toEqual(['C', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B']);
+  });
+
+  it('writes the minor keys by their own signature, so C#m and G#m are not Dbm and Abm', () => {
+    expect(ALL_KEYS.map((key) => keyName(key, true))).toEqual(['Cm', 'C#m', 'Dm', 'Ebm', 'Em', 'Fm', 'F#m', 'Gm', 'G#m', 'Am', 'Bbm', 'Bm']);
+  });
+
+  it('names a chord in the spelling of its key and never mixes the two in one key', () => {
+    const chords = (key: number, minor: boolean) => [0, 5, 7].map((degree) => chordName(key + degree, minor ? 'min' : 'maj', spellingOf(key, minor)));
+    expect(chords(1, false)).toEqual(['Db', 'Gb', 'Ab']);
+    expect(chords(1, true)).toEqual(['C#m', 'F#m', 'G#m']);
+    expect(chords(6, false)).toEqual(['F#', 'B', 'C#']);
+    expect(chords(3, true)).toEqual(['Ebm', 'Abm', 'Bbm']);
+    expect(chordName(13, 'maj')).toBe('C#'); // without a key the old names stay
+  });
+
+  it('lets a lower last fret move a box down an octave', () => {
+    let moved = 0;
+    for (const key of ALL_KEYS) {
+      for (const degree of [0, 1, 2, 3, 4]) {
+        const high = notesPerString(key, SCALES.minorPentatonic, 2, degree, 22);
+        const low = notesPerString(key, SCALES.minorPentatonic, 2, degree, 20);
+        expect(Math.max(...low.map((note) => note.fret))).toBeLessThanOrEqual(20);
+        if (Math.max(...high.map((note) => note.fret)) > 20) moved += 1;
+      }
+    }
+    expect(moved).toBeGreaterThan(0); // the 22 limit did let boxes up to fret 21 and 22 through
   });
 });

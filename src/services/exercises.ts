@@ -9,16 +9,20 @@ import {
   TUNING,
   chordIntervals,
   fretNote,
+  keyName,
+  lastFretFor,
   movableChord,
   notesPerString,
   openChord,
   pitchClass,
   positionNotes,
   rootFret,
+  spellingOf,
   type ChordQuality,
   type FretNote,
   type OpenChordName,
   type ShapeString,
+  type Spelling,
   type Voicing
 } from './musicTheory';
 import { TabsApi, type ChordTarget, type NormalizedSongTab, type NoteEvent, type SongMeta } from './tabsApi';
@@ -42,7 +46,14 @@ export type ExerciseLevel = 1 | 2 | 3;
 
 export const LEVEL_NAMES: Record<ExerciseLevel, string> = { 1: 'Iniciante', 2: 'Intermediário', 3: 'Avançado' };
 
-type BuildBeats = (key: number, pattern: ExercisePattern) => RawBeat[];
+// What a builder may need to know about the exercise it builds besides the key: how to write the chord names in that
+// key and how far up the neck the exercise may go (the beginner levels stay lower)
+interface BuildInfo {
+  spelling: Spelling;
+  lastFret: number;
+}
+
+type BuildBeats = (key: number, pattern: ExercisePattern, info: BuildInfo) => RawBeat[];
 
 export interface Exercise {
   code: number; // stable: part of the song id
@@ -158,11 +169,11 @@ const melody = (up: FretNote[], pattern: ExercisePattern, extra: NoteExtra = {})
   return [...line(notes.slice(0, -1), EIGHTH, extra), single(notes[notes.length - 1], HALF, extra)];
 };
 
-const scale = (intervals: readonly number[]): BuildBeats => (key, pattern) =>
-  melody(pattern === 'perString' ? notesPerString(key, intervals, 3) : positionNotes(key, intervals), pattern);
+const scale = (intervals: readonly number[]): BuildBeats => (key, pattern, { lastFret }) =>
+  melody(pattern === 'perString' ? notesPerString(key, intervals, 3, 0, lastFret) : positionNotes(key, intervals), pattern);
 
-const box = (intervals: readonly number[], degree: number): BuildBeats => (key, pattern) =>
-  melody(notesPerString(key, intervals, 2, degree), pattern);
+const box = (intervals: readonly number[], degree: number): BuildBeats => (key, pattern, { lastFret }) =>
+  melody(notesPerString(key, intervals, 2, degree, lastFret), pattern);
 
 const arpeggio = (quality: ChordQuality): BuildBeats => (key) => {
   const intervals = chordIntervals(quality);
@@ -185,16 +196,16 @@ const chordBars = (voicings: Voicing[], pattern: ExercisePattern, barsEach = 1):
 const openChords = (names: OpenChordName[], barsEach = 2): BuildBeats => (_key, pattern) =>
   chordBars(names.map(openChord), pattern, barsEach);
 
-const movableSet = (qualities: ChordQuality[], shape: ShapeString): BuildBeats => (key, pattern) =>
-  chordBars(qualities.map((quality) => movableChord(key, quality, 5, shape)), pattern, 2);
+const movableSet = (qualities: ChordQuality[], shape: ShapeString): BuildBeats => (key, pattern, { spelling }) =>
+  chordBars(qualities.map((quality) => movableChord(key, quality, 5, shape, spelling)), pattern, 2);
 
 // A chord of a progression: semitones above the key, and its quality
 type Step = readonly [number, ChordQuality];
 
-const progression = (steps: readonly Step[], barsEach = 1): BuildBeats => (key, pattern) => {
+const progression = (steps: readonly Step[], barsEach = 1): BuildBeats => (key, pattern, { spelling }) => {
   let near = 5;
   const voicings = steps.map(([degree, quality]) => {
-    const chord = movableChord(key + degree, quality, near);
+    const chord = movableChord(key + degree, quality, near, undefined, spelling);
     near = chord.notes[0].fret;
     return chord;
   });
@@ -227,20 +238,20 @@ const firstPosition = (notes: [number, number][]): RawBeat[] => {
 };
 
 // The five pentatonic boxes one after the other, from the lowest to the highest
-const boxesInRow = (intervals: readonly number[]): BuildBeats => (key) => {
-  const notes = [0, 1, 2, 3, 4].flatMap((degree) => notesPerString(key, intervals, 2, degree));
+const boxesInRow = (intervals: readonly number[]): BuildBeats => (key, _pattern, { lastFret }) => {
+  const notes = [0, 1, 2, 3, 4].flatMap((degree) => notesPerString(key, intervals, 2, degree, lastFret));
   return [...line(notes.slice(0, -1)), single(notes[notes.length - 1], HALF)];
 };
 
 // A short phrase in the first pentatonic box (0 is its lowest note, 11 the highest), ending on a long note
-const phrase = (intervals: readonly number[], positions: number[]): BuildBeats => (key) => {
-  const box = notesPerString(key, intervals, 2, 0);
+const phrase = (intervals: readonly number[], positions: number[]): BuildBeats => (key, _pattern, { lastFret }) => {
+  const box = notesPerString(key, intervals, 2, 0, lastFret);
   const notes = positions.map((position) => box[position]);
   return [...line(notes.slice(0, -1)), single(notes[notes.length - 1], HALF)];
 };
 
-const threePerString = (intervals: readonly number[], degree: number): BuildBeats => (key, pattern) =>
-  melody(notesPerString(key, intervals, 3, degree), pattern);
+const threePerString = (intervals: readonly number[], degree: number): BuildBeats => (key, pattern, { lastFret }) =>
+  melody(notesPerString(key, intervals, 3, degree, lastFret), pattern);
 
 // One bar of sixteenths: 1 is a strum, 0 a rest
 const FUNK_SLOTS = [1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1];
@@ -263,8 +274,9 @@ const sameNote = (key: number): RawBeat[] => {
 
 const octaves = (key: number): RawBeat[] => {
   const degrees = [0, 2, 4, 5, 7, 5, 4, 2, 0];
-  const onLowE = rootFret(key, 5, 1);
-  const onA = rootFret(key, 4, 1);
+  // From fret 0, so the highest note is fret 20 (it was 21 for E and 21 for A)
+  const onLowE = rootFret(key, 5, 0);
+  const onA = rootFret(key, 4, 0);
   return line([
     ...degrees.flatMap((degree) => [fretNote(5, onLowE + degree), fretNote(3, onLowE + degree + 2)]),
     ...degrees.flatMap((degree) => [fretNote(4, onA + degree), fretNote(2, onA + degree + 2)])
@@ -305,7 +317,7 @@ export const EXERCISE_CATEGORIES: ExerciseCategory[] = [
           exercise(4, 'Permutação 1-4-2-3', 'Mais independência para o dedo mínimo.', 2, 70, fixed(fingerRun([0, 3, 1, 2]))),
           exercise(5, 'Escada cromática', 'A cada corda, a mão sobe uma casa.', 2, 75, fixed(line(ALL_STRINGS.flatMap((string, index) => [0, 1, 2, 3].map((offset) => at(string, 5 + index + offset)))))),
           exercise(6, 'Abertura dos dedos', 'Grandes distâncias entre os dedos, a partir da casa 7.', 3, 60, fixed(fingerRun([0, 3, 1, 4], 7))),
-          exercise(9, 'Dois dedos, casas 1 e 2', 'Só o indicador e o médio, em todas as cordas, com calma.', 1, 60, fixed(fingerRun([0, 1]))),
+          exercise(9, 'Dois dedos: indicador e médio', 'Só o indicador e o médio, em casas vizinhas e em todas as cordas, com calma.', 1, 60, fixed(fingerRun([0, 1]))),
           exercise(10, 'Aranha', 'Quatro dedos, quatro cordas: cada dedo numa casa diferente.', 2, 60, fixed(spider(false))),
           exercise(11, 'Aranha invertida', 'A mesma ideia, começando pelo dedo mínimo.', 2, 60, fixed(spider(true))),
           exercise(12, 'Cromático em semicolcheias', 'O cromático de sempre, com o dobro de notas por tempo.', 2, 60, fixed(fingerRun([0, 1, 2, 3], 5, SIXTEENTH))),
@@ -343,12 +355,12 @@ export const EXERCISE_CATEGORIES: ExerciseCategory[] = [
         exercises: [
           exercise(24, 'Slide', 'Deslize da casa 5 à casa 7 sem tirar a pressão do dedo.', 1, 70, fixed(eachString((string) => [single(at(string, 5), QUARTER, { slide: 'shift' }), single(at(string, 7), QUARTER)]))),
           exercise(30, 'Trinado', 'Palhete uma vez e alterne duas notas só com os dedos.', 2, 70, fixed(eachString((string) => repeatBars([single(at(string, 5), SIXTEENTH), ...Array.from({ length: 7 }, (_, index) => single(at(string, index % 2 === 0 ? 7 : 5), SIXTEENTH, { hp: true }))], 2)))),
-          exercise(31, 'Slide longo', 'Do traste 5 ao 12 e de volta, sem soltar a corda.', 2, 70, fixed(eachString((string) => [single(at(string, 5), QUARTER, { slide: 'shift' }), single(at(string, 12), QUARTER, { slide: 'shift' }), single(at(string, 5), HALF)]))),
+          exercise(31, 'Slide longo', 'Da casa 5 à casa 12 e de volta, sem soltar a corda.', 2, 70, fixed(eachString((string) => [single(at(string, 5), QUARTER, { slide: 'shift' }), single(at(string, 12), QUARTER, { slide: 'shift' }), single(at(string, 5), HALF)]))),
           exercise(32, 'Slide e ligado', 'Um slide e depois dois ligados, tudo com uma palhetada.', 3, 70, fixed(eachString((string) => [single(at(string, 5), EIGHTH, { slide: 'shift' }), single(at(string, 7), EIGHTH), single(at(string, 9), EIGHTH, { hp: true }), single(at(string, 7), EIGHTH, { hp: true }), single(at(string, 5), EIGHTH, { hp: true }), rest(EIGHTH), rest(QUARTER)]))),
           exercise(25, 'Bend de um tom', 'Empurre a corda até soar a nota de duas casas acima.', 2, 60, fixed(repeatBars([single(at(3, 7), HALF, { bend: { tone: 100 } }), single(at(2, 8), HALF, { bend: { tone: 100 } })], 3))),
           exercise(26, 'Bend de meio tom', 'Um bend curto: a nota sobe só uma casa.', 2, 60, fixed(repeatBars([single(at(2, 8), HALF, { bend: { tone: 50 } }), single(at(1, 8), HALF, { bend: { tone: 50 } })], 3))),
           exercise(27, 'Vibrato', 'Notas longas, com a corda oscilando de maneira regular.', 2, 60, fixed(repeatBars([single(at(2, 8), HALF, { vibrato: true }), single(at(1, 7), HALF, { vibrato: true })], 3))),
-          exercise(28, 'Harmônicos naturais', 'Encoste o dedo sobre o traste, sem apertar a corda.', 2, 60, fixed([12, 7, 5].flatMap((fret) => line([6, 5, 4, 3].map((string) => at(string, fret)), QUARTER, { harmonic: 'natural' }))))
+          exercise(28, 'Harmônicos naturais', 'Encoste de leve o dedo sobre a casa (12, 7 e 5), sem apertar a corda.', 2, 60, fixed([12, 7, 5].flatMap((fret) => line([6, 5, 4, 3].map((string) => at(string, fret)), QUARTER, { harmonic: 'natural' }))))
         ]
       },
       {
@@ -363,41 +375,42 @@ export const EXERCISE_CATEGORIES: ExerciseCategory[] = [
     id: 'pentatonicas',
     title: 'Pentatônicas',
     summary: 'As cinco posições, para improvisar em qualquer tom.',
+    note: 'A tônica é a nota que dá nome ao tom, e a posição 1 começa nela. A "blue note" é a nota a mais do blues.',
     patterns: ['updown', 'threes', 'fours', 'thirds'],
     // A skipped note makes a third in a seven-note scale; here it makes fourths and seconds too
     patternNames: { thirds: 'Notas alternadas' },
     groups: [
       {
         title: 'Pentatônica menor',
-        exercises: [0, 1, 2, 3, 4].map((degree) => keyedExercise(40 + degree, `Menor, posição ${degree + 1}`, degree === 0 ? 'A primeira posição, com a tônica na corda 6.' : `A posição ${degree + 1}, emendada com a anterior.`, degree === 0 ? 1 : 2, 80, box(SCALES.minorPentatonic, degree), { minorKey: true }))
+        exercises: [0, 1, 2, 3, 4].map((degree) => keyedExercise(40 + degree, `Pentatônica menor, posição ${degree + 1}`, degree === 0 ? 'A primeira posição, com a nota do tom (a tônica) na corda 6.' : `A posição ${degree + 1}, emendada com a anterior.`, degree === 0 ? 1 : 2, 80, box(SCALES.minorPentatonic, degree), { minorKey: true }))
       },
       {
         title: 'Pentatônica maior',
-        exercises: [0, 1, 2, 3, 4].map((degree) => keyedExercise(45 + degree, `Maior, posição ${degree + 1}`, degree === 0 ? 'A primeira posição, com a tônica na corda 6.' : `A posição ${degree + 1}, emendada com a anterior.`, 2, 80, box(SCALES.majorPentatonic, degree)))
+        exercises: [0, 1, 2, 3, 4].map((degree) => keyedExercise(45 + degree, `Pentatônica maior, posição ${degree + 1}`, degree === 0 ? 'A primeira posição, com a nota do tom (a tônica) na corda 6.' : `A posição ${degree + 1}, emendada com a anterior.`, degree === 0 ? 1 : 2, 80, box(SCALES.majorPentatonic, degree)))
       },
       {
         title: 'Com blue note',
         exercises: [
-          keyedExercise(50, 'Blues menor', 'A pentatônica menor com a quinta diminuta.', 2, 80, scale(SCALES.minorBlues), { minorKey: true }),
-          keyedExercise(51, 'Blues maior', 'A pentatônica maior com a terça menor de passagem.', 2, 80, scale(SCALES.majorBlues))
+          keyedExercise(50, 'Blues menor', 'A pentatônica menor com uma nota a mais, a "blue note" (a quinta bemol).', 2, 80, scale(SCALES.minorBlues), { minorKey: true }),
+          keyedExercise(51, 'Blues maior', 'A pentatônica maior com uma nota de passagem, a terça menor.', 2, 80, scale(SCALES.majorBlues))
         ]
       },
       {
         title: 'Emendando as posições',
         exercises: [
-          keyedExercise(52, 'Menor, as cinco posições', 'Sobe pelo braço passando pelas cinco posições, sem parar.', 3, 80, boxesInRow(SCALES.minorPentatonic), { minorKey: true }),
-          keyedExercise(53, 'Maior, as cinco posições', 'A mesma subida, na pentatônica maior.', 3, 80, boxesInRow(SCALES.majorPentatonic))
+          keyedExercise(52, 'Pentatônica menor, as cinco posições', 'Sobe pelo braço passando pelas cinco posições, sem parar.', 3, 80, boxesInRow(SCALES.minorPentatonic), { minorKey: true }),
+          keyedExercise(53, 'Pentatônica maior, as cinco posições', 'A mesma subida, na pentatônica maior.', 3, 80, boxesInRow(SCALES.majorPentatonic))
         ]
       },
       {
         title: 'Frases curtas',
         exercises: [
-          keyedExercise(54, 'Menor, frase 1', 'Sobe devagar e volta para a tônica.', 1, 80, phrase(SCALES.minorPentatonic, [2, 3, 4, 3, 2, 1, 2, 0, 1, 0]), { minorKey: true }),
-          keyedExercise(55, 'Menor, frase 2', 'Uma subida em direção às cordas mais finas.', 2, 80, phrase(SCALES.minorPentatonic, [4, 5, 6, 7, 6, 5, 4, 2, 3, 2, 0]), { minorKey: true }),
-          keyedExercise(56, 'Menor, frase 3', 'Descida em pares de notas, de cima para baixo.', 2, 80, phrase(SCALES.minorPentatonic, [7, 6, 7, 5, 6, 4, 5, 3, 4, 2, 3, 1, 2, 0]), { minorKey: true }),
-          keyedExercise(57, 'Menor, frase 4', 'Saltos entre cordas, uma nota por corda.', 3, 80, phrase(SCALES.minorPentatonic, [0, 2, 4, 6, 8, 10, 8, 6, 4, 2, 0]), { minorKey: true }),
-          keyedExercise(58, 'Maior, frase 1', 'Uma frase doce que sobe e volta para a tônica.', 2, 80, phrase(SCALES.majorPentatonic, [2, 3, 4, 5, 4, 3, 2, 0, 1, 0])),
-          keyedExercise(59, 'Maior, frase 2', 'Começa no agudo e desce até a tônica.', 2, 80, phrase(SCALES.majorPentatonic, [8, 9, 10, 11, 9, 8, 6, 7, 5, 4, 2, 0]))
+          keyedExercise(54, 'Pentatônica menor, frase 1', 'Sobe devagar e volta para a tônica.', 1, 80, phrase(SCALES.minorPentatonic, [2, 3, 4, 3, 2, 1, 2, 0, 1, 0]), { minorKey: true }),
+          keyedExercise(55, 'Pentatônica menor, frase 2', 'Uma subida em direção às cordas mais finas.', 2, 80, phrase(SCALES.minorPentatonic, [4, 5, 6, 7, 6, 5, 4, 2, 3, 2, 0]), { minorKey: true }),
+          keyedExercise(56, 'Pentatônica menor, frase 3', 'Descida em pares de notas, de cima para baixo.', 2, 80, phrase(SCALES.minorPentatonic, [7, 6, 7, 5, 6, 4, 5, 3, 4, 2, 3, 1, 2, 0]), { minorKey: true }),
+          keyedExercise(57, 'Pentatônica menor, frase 4', 'Saltos entre cordas, uma nota por corda.', 3, 80, phrase(SCALES.minorPentatonic, [0, 2, 4, 6, 8, 10, 8, 6, 4, 2, 0]), { minorKey: true }),
+          keyedExercise(58, 'Pentatônica maior, frase 1', 'Uma frase doce que sobe e volta para a tônica.', 2, 80, phrase(SCALES.majorPentatonic, [2, 3, 4, 5, 4, 3, 2, 0, 1, 0])),
+          keyedExercise(59, 'Pentatônica maior, frase 2', 'Começa no agudo e desce até a tônica.', 2, 80, phrase(SCALES.majorPentatonic, [8, 9, 10, 11, 9, 8, 6, 7, 5, 4, 2, 0]))
         ]
       }
     ]
@@ -406,13 +419,14 @@ export const EXERCISE_CATEGORIES: ExerciseCategory[] = [
     id: 'escalas',
     title: 'Escalas',
     summary: 'Duas oitavas na mesma região do braço, em qualquer tom.',
+    note: 'Um tom são duas casas e um semitom, uma casa. A tônica é a nota que dá nome à escala.',
     patterns: ['updown', 'threes', 'fours', 'thirds', 'perString'],
     groups: [
       {
         title: 'Maior e menores',
         exercises: [
           keyedExercise(60, 'Escala maior', 'Tom, tom, semitom, tom, tom, tom, semitom.', 1, 80, scale(SCALES.major)),
-          keyedExercise(61, 'Menor natural', 'A escala maior, começando no sexto grau.', 1, 80, scale(SCALES.naturalMinor), { minorKey: true }),
+          keyedExercise(61, 'Menor natural', 'As mesmas notas da escala maior, começando na sexta nota.', 1, 80, scale(SCALES.naturalMinor), { minorKey: true }),
           keyedExercise(62, 'Menor harmônica', 'A sétima maior traz um salto bem marcado.', 2, 75, scale(SCALES.harmonicMinor), { minorKey: true }),
           keyedExercise(63, 'Menor melódica', 'Sexta e sétima maiores sobre a terça menor.', 2, 75, scale(SCALES.melodicMinor), { minorKey: true })
         ]
@@ -437,11 +451,11 @@ export const EXERCISE_CATEGORIES: ExerciseCategory[] = [
       },
       {
         title: 'Três notas por corda: maior',
-        exercises: [1, 2, 3, 4, 5, 6].map((degree) => keyedExercise(199 + degree, `Maior, três por corda, posição ${degree + 1}`, `A escala maior começando no grau ${degree + 1}, com três notas em cada corda.`, degree < 3 ? 2 : 3, 75, threePerString(SCALES.major, degree)))
+        exercises: [1, 2, 3, 4, 5, 6].map((degree) => keyedExercise(199 + degree, `Escala maior, três por corda, posição ${degree + 1}`, `A escala maior começando no grau ${degree + 1}, com três notas em cada corda.`, degree < 3 ? 2 : 3, 75, threePerString(SCALES.major, degree)))
       },
       {
         title: 'Três notas por corda: menor',
-        exercises: [1, 2, 3, 4, 5, 6].map((degree) => keyedExercise(205 + degree, `Menor, três por corda, posição ${degree + 1}`, `A menor natural começando no grau ${degree + 1}, com três notas em cada corda.`, degree < 3 ? 2 : 3, 75, threePerString(SCALES.naturalMinor, degree), { minorKey: true }))
+        exercises: [1, 2, 3, 4, 5, 6].map((degree) => keyedExercise(205 + degree, `Menor natural, três por corda, posição ${degree + 1}`, `A menor natural começando no grau ${degree + 1}, com três notas em cada corda.`, degree < 3 ? 2 : 3, 75, threePerString(SCALES.naturalMinor, degree), { minorKey: true }))
       }
     ]
   },
@@ -449,14 +463,14 @@ export const EXERCISE_CATEGORIES: ExerciseCategory[] = [
     id: 'arpejos',
     title: 'Arpejos',
     summary: 'As notas de cada acorde, uma por vez, em duas oitavas.',
-    note: 'Toque uma nota por vez e abafe a anterior: com cordas soando juntas, o PRGB ouve o acorde e conta só como Bom.',
+    note: 'Toque uma nota por vez e abafe a anterior: com cordas soando juntas, o PRGB ouve o acorde e conta só como Bom. A tônica é a nota que dá nome ao acorde.',
     patterns: [],
     groups: [
       {
         title: 'Tríades',
         exercises: [
-          keyedExercise(80, 'Maior', 'Tônica, terça maior e quinta.', 1, 70, arpeggio('maj')),
-          keyedExercise(81, 'Menor', 'Tônica, terça menor e quinta.', 1, 70, arpeggio('min'), { minorKey: true }),
+          keyedExercise(80, 'Tríade maior', 'Tônica, terça maior e quinta.', 1, 70, arpeggio('maj')),
+          keyedExercise(81, 'Tríade menor', 'Tônica, terça menor e quinta.', 1, 70, arpeggio('min'), { minorKey: true }),
           keyedExercise(84, 'Suspenso com segunda', 'A segunda no lugar da terça.', 2, 70, arpeggio('sus2')),
           keyedExercise(85, 'Suspenso com quarta', 'A quarta no lugar da terça.', 2, 70, arpeggio('sus4'))
         ]
@@ -477,20 +491,20 @@ export const EXERCISE_CATEGORIES: ExerciseCategory[] = [
     id: 'acordes',
     title: 'Acordes',
     summary: 'Formas abertas, com pestana e power chords, com trocas no tempo.',
-    note: 'Na batida, o PRGB confere o tempo e a tônica do acorde, não cada nota: ele não separa A de Am. No dedilhado, cada nota conta.',
+    note: 'Na batida, o PRGB confere o tempo e a tônica do acorde, não cada nota: ele não separa A de Am. No dedilhado, cada nota conta. Pestana é o dedo deitado sobre várias cordas, e power chord, um acorde de duas notas.',
     patterns: ['strum', 'picked'],
     groups: [
       {
         title: 'Abertos',
         exercises: [
           exercise(100, 'C, G e D', 'Trocas entre três formas abertas.', 1, 70, openChords(['C', 'G', 'D'])),
-          exercise(101, 'A, D e E', 'Os graus I, IV e V do tom de Lá.', 1, 70, openChords(['A', 'D', 'E'])),
+          exercise(101, 'A, D e E', 'Os acordes I, IV e V do tom de A.', 1, 70, openChords(['A', 'D', 'E'])),
           exercise(102, 'Am, Em e Dm', 'Os três menores abertos.', 1, 70, openChords(['Am', 'Em', 'Dm'])),
           exercise(103, 'C, Am, F e G', 'Quatro acordes, com o F com pestana.', 2, 70, openChords(['C', 'Am', 'F', 'G'])),
           exercise(114, 'Em e Am', 'As duas trocas mais fáceis: só dois dedos mudam de lugar.', 1, 60, openChords(['Em', 'Am'])),
           exercise(115, 'G, Em, C e D', 'Quatro acordes que aparecem em muita música.', 1, 65, openChords(['G', 'Em', 'C', 'D'], 1)),
-          exercise(116, 'A, D, A e E', 'Voltas curtas entre os três acordes do tom de Lá.', 1, 70, openChords(['A', 'D', 'A', 'E'], 1)),
-          exercise(117, 'Am, G, F e E', 'A cadência andaluza nas formas abertas.', 2, 70, openChords(['Am', 'G', 'F', 'E'], 1)),
+          exercise(116, 'A, D, A e E', 'Voltas curtas entre os três acordes do tom de A.', 1, 70, openChords(['A', 'D', 'A', 'E'], 1)),
+          exercise(117, 'Am, G, F e E', 'Uma descida de acordes comum no flamenco, nas formas abertas.', 2, 70, openChords(['Am', 'G', 'F', 'E'], 1)),
           exercise(118, 'C, G, Am e F', 'Quatro acordes, com uma troca a cada compasso.', 2, 70, openChords(['C', 'G', 'Am', 'F'], 1)),
           exercise(119, 'C, G, C e D', 'Trocas de um compasso, na velocidade de uma música.', 2, 75, openChords(['C', 'G', 'C', 'D'], 1)),
           exercise(121, 'Asus4, A7, Dsus2 e D7', 'Suspensos e sétimas na mesma sequência.', 2, 70, openChords(['Asus4', 'A7', 'Dsus2', 'D7'], 1))
@@ -499,7 +513,7 @@ export const EXERCISE_CATEGORIES: ExerciseCategory[] = [
       {
         title: 'Com sétima',
         exercises: [
-          exercise(104, 'A7, D7 e E7', 'As sétimas do blues em Lá.', 1, 70, openChords(['A7', 'D7', 'E7'])),
+          exercise(104, 'A7, D7 e E7', 'As sétimas do blues em A.', 1, 70, openChords(['A7', 'D7', 'E7'])),
           exercise(105, 'G7, C7 e B7', 'Trocas mais longas entre as formas.', 2, 70, openChords(['G7', 'C7', 'B7'])),
           exercise(106, 'Am7, Em7 e Dm7', 'As formas menores com sétima.', 2, 70, openChords(['Am7', 'Em7', 'Dm7'])),
           exercise(107, 'C7M, F7M, G7M e D7M', 'Sétimas maiores abertas.', 2, 70, openChords(['C7M', 'F7M', 'G7M', 'D7M']))
@@ -509,7 +523,7 @@ export const EXERCISE_CATEGORIES: ExerciseCategory[] = [
         title: 'Suspensos',
         exercises: [
           exercise(108, 'Asus2, A e Asus4', 'Um dedo muda, a forma fica.', 1, 70, openChords(['Asus2', 'A', 'Asus4'])),
-          exercise(109, 'Dsus2, D e Dsus4', 'A mesma ideia em Ré.', 1, 70, openChords(['Dsus2', 'D', 'Dsus4'])),
+          exercise(109, 'Dsus2, D e Dsus4', 'A mesma ideia em D.', 1, 70, openChords(['Dsus2', 'D', 'Dsus4'])),
           exercise(110, 'E e Esus4', 'Uma suspensão e o retorno.', 1, 70, openChords(['E', 'Esus4']))
         ]
       },
@@ -518,10 +532,10 @@ export const EXERCISE_CATEGORIES: ExerciseCategory[] = [
         exercises: [
           keyedExercise(111, 'Pestana na corda 6', 'Maior, menor, com sétima e menor com sétima.', 2, 70, movableSet(['maj', 'min', '7', 'm7'], 'lowE')),
           keyedExercise(112, 'Pestana na corda 5', 'As mesmas quatro formas, com a tônica na corda 5.', 2, 70, movableSet(['maj', 'min', '7', 'm7'], 'a')),
-          keyedExercise(113, 'Power chords', 'Tônica e quinta, nas cordas 6 e 5.', 1, 80, (key, pattern) => chordBars([movableChord(key, '5', 5, 'lowE'), movableChord(key, '5', 5, 'a')], pattern, 2)),
-          keyedExercise(124, 'Power chords: I, IV e V', 'Tônica, quarta e quinta, com duas notas em cada acorde.', 1, 80, progression([[I, '5'], [IV, '5'], [V, '5'], [I, '5']])),
-          keyedExercise(125, 'Pestana maior: duas formas', 'A mesma tônica na forma de Mi e na de Lá.', 2, 70, (key, pattern) => chordBars([movableChord(key, 'maj', 5, 'lowE'), movableChord(key, 'maj', 5, 'a')], pattern, 2)),
-          keyedExercise(126, 'Pestana menor: duas formas', 'A mesma tônica na forma de Em e na de Am.', 2, 70, (key, pattern) => chordBars([movableChord(key, 'min', 5, 'lowE'), movableChord(key, 'min', 5, 'a')], pattern, 2), { minorKey: true })
+          keyedExercise(113, 'Power chords', 'Tônica e quinta, nas cordas 6 e 5.', 1, 80, (key, pattern, { spelling }) => chordBars([movableChord(key, '5', 5, 'lowE', spelling), movableChord(key, '5', 5, 'a', spelling)], pattern, 2)),
+          keyedExercise(124, 'Power chords: I, IV e V', 'O acorde do tom, o quarto e o quinto, com duas notas em cada.', 1, 80, progression([[I, '5'], [IV, '5'], [V, '5'], [I, '5']])),
+          keyedExercise(125, 'Pestana maior: duas formas', 'A mesma tônica na forma do E aberto e na do A aberto.', 2, 70, (key, pattern, { spelling }) => chordBars([movableChord(key, 'maj', 5, 'lowE', spelling), movableChord(key, 'maj', 5, 'a', spelling)], pattern, 2)),
+          keyedExercise(126, 'Pestana menor: duas formas', 'A mesma tônica na forma de Em e na de Am.', 2, 70, (key, pattern, { spelling }) => chordBars([movableChord(key, 'min', 5, 'lowE', spelling), movableChord(key, 'min', 5, 'a', spelling)], pattern, 2), { minorKey: true })
         ]
       }
     ]
@@ -529,37 +543,37 @@ export const EXERCISE_CATEGORIES: ExerciseCategory[] = [
   {
     id: 'progressoes',
     title: 'Progressões',
-    summary: 'Sequências de acordes em qualquer tom, nomeadas pelos graus.',
-    note: 'Na batida, o PRGB confere o tempo e a tônica do acorde, não cada nota. No dedilhado, cada nota conta.',
+    summary: 'Sequências de acordes em qualquer tom, nomeadas pelo lugar de cada acorde no tom.',
+    note: 'Os números romanos dizem o lugar de cada acorde no tom: I é o acorde do próprio tom, IV o quarto e V o quinto. Maiúscula é acorde maior e minúscula, menor. Na batida, o PRGB confere o tempo e a tônica do acorde, não cada nota. No dedilhado, cada nota conta.',
     patterns: ['strum', 'picked'],
     groups: [
       {
         title: 'Tom maior',
         exercises: [
-          keyedExercise(130, 'I, IV, V e I', 'Tônica, subdominante e dominante.', 1, 75, progression([[I, 'maj'], [IV, 'maj'], [V, 'maj'], [I, 'maj']])),
-          keyedExercise(131, 'I, V, vi e IV', 'Da tônica à dominante, passando pelo relativo menor.', 1, 75, progression([[I, 'maj'], [V, 'maj'], [vi, 'min'], [IV, 'maj']])),
-          keyedExercise(132, 'vi, IV, I e V', 'A mesma sequência, começando no menor.', 1, 75, progression([[vi, 'min'], [IV, 'maj'], [I, 'maj'], [V, 'maj']])),
-          keyedExercise(133, 'I, vi, IV e V', 'O relativo menor logo depois da tônica.', 1, 75, progression([[I, 'maj'], [vi, 'min'], [IV, 'maj'], [V, 'maj']])),
-          keyedExercise(134, 'ii, V e I', 'Preparação e resolução, com acordes de sétima.', 2, 75, progression([[ii, 'm7'], [V, '7'], [I, 'maj7']], 2)),
+          keyedExercise(130, 'I, IV, V e I', 'O acorde do tom (I), o quarto (IV) e o quinto (V).', 2, 75, progression([[I, 'maj'], [IV, 'maj'], [V, 'maj'], [I, 'maj']])),
+          keyedExercise(131, 'I, V, vi e IV', 'Do acorde do tom ao quinto (V), com o menor do sexto grau (vi) e o quarto (IV).', 2, 75, progression([[I, 'maj'], [V, 'maj'], [vi, 'min'], [IV, 'maj']])),
+          keyedExercise(132, 'vi, IV, I e V', 'Os mesmos acordes, começando pelo menor (vi).', 2, 75, progression([[vi, 'min'], [IV, 'maj'], [I, 'maj'], [V, 'maj']])),
+          keyedExercise(133, 'I, vi, IV e V', 'O menor (vi) logo depois do acorde do tom (I).', 2, 75, progression([[I, 'maj'], [vi, 'min'], [IV, 'maj'], [V, 'maj']])),
+          keyedExercise(134, 'ii, V e I', 'O ii e o V levam ao I, tudo com acordes de sétima.', 2, 75, progression([[ii, 'm7'], [V, '7'], [I, 'maj7']], 2)),
           keyedExercise(135, 'I, vi, ii e V', 'Sequência circular: o V leva de volta ao I.', 2, 75, progression([[I, 'maj7'], [vi, 'm7'], [ii, 'm7'], [V, '7']])),
-          keyedExercise(136, 'I, V e IV', 'Três acordes e uma volta curta.', 1, 75, progression([[I, 'maj'], [V, 'maj'], [IV, 'maj'], [I, 'maj']])),
-          keyedExercise(137, 'I, iii, IV e V', 'O terceiro grau como ponte entre a tônica e a subdominante.', 2, 75, progression([[I, 'maj'], [4, 'min'], [IV, 'maj'], [V, 'maj']])),
-          keyedExercise(138, 'I, bVII, IV e I', 'O acorde de sétima menor, comum no rock.', 2, 75, progression([[I, 'maj'], [10, 'maj'], [IV, 'maj'], [I, 'maj']])),
-          keyedExercise(139, 'I, V, vi, iii, IV, I, IV e V', 'Oito acordes que descem em escada até a cadência.', 2, 75, progression([[I, 'maj'], [V, 'maj'], [vi, 'min'], [4, 'min'], [IV, 'maj'], [I, 'maj'], [IV, 'maj'], [V, 'maj']])),
-          keyedExercise(148, 'ii, V, I e vi', 'Preparação, resolução e volta, com sétimas.', 3, 75, progression([[ii, 'm7'], [V, '7'], [I, 'maj7'], [vi, 'm7']]))
+          keyedExercise(136, 'I, V e IV', 'Três acordes e uma volta curta.', 2, 75, progression([[I, 'maj'], [V, 'maj'], [IV, 'maj'], [I, 'maj']])),
+          keyedExercise(137, 'I, iii, IV e V', 'O menor do terceiro grau (iii) como ponte entre o I e o IV.', 2, 75, progression([[I, 'maj'], [4, 'min'], [IV, 'maj'], [V, 'maj']])),
+          keyedExercise(138, 'I, bVII, IV e I', 'O bVII, o acorde dois semitons abaixo do I, comum no rock.', 2, 75, progression([[I, 'maj'], [10, 'maj'], [IV, 'maj'], [I, 'maj']])),
+          keyedExercise(139, 'I, V, vi, iii, IV, I, IV e V', 'Oito acordes seguidos, terminando no V, que pede a volta ao I.', 2, 75, progression([[I, 'maj'], [V, 'maj'], [vi, 'min'], [4, 'min'], [IV, 'maj'], [I, 'maj'], [IV, 'maj'], [V, 'maj']])),
+          keyedExercise(148, 'ii, V, I e vi', 'O ii, o V e o I com sétimas, e a volta pelo vi.', 3, 75, progression([[ii, 'm7'], [V, '7'], [I, 'maj7'], [vi, 'm7']]))
         ]
       },
       {
         title: 'Tom menor',
         exercises: [
-          keyedExercise(140, 'i, iv, v e i', 'Os três graus principais do tom menor.', 1, 75, progression([[0, 'min'], [5, 'min'], [7, 'min'], [0, 'min']]), { minorKey: true }),
-          keyedExercise(141, 'i, VI, III e VII', 'Do menor para os três acordes maiores do tom.', 1, 75, progression([[0, 'min'], [8, 'maj'], [3, 'maj'], [10, 'maj']]), { minorKey: true }),
-          keyedExercise(142, 'i, VII, VI e V', 'A cadência andaluza.', 2, 75, progression([[0, 'min'], [10, 'maj'], [8, 'maj'], [7, 'maj']]), { minorKey: true }),
-          keyedExercise(143, 'i, iv, VII e III', 'Caminha pelo círculo de quartas.', 2, 75, progression([[0, 'min'], [5, 'min'], [10, 'maj'], [3, 'maj']]), { minorKey: true }),
+          keyedExercise(140, 'i, iv, v e i', 'Os três acordes principais do tom menor.', 2, 75, progression([[0, 'min'], [5, 'min'], [7, 'min'], [0, 'min']]), { minorKey: true }),
+          keyedExercise(141, 'i, VI, III e VII', 'Do menor para os três acordes maiores do tom.', 2, 75, progression([[0, 'min'], [8, 'maj'], [3, 'maj'], [10, 'maj']]), { minorKey: true }),
+          keyedExercise(142, 'i, VII, VI e V', 'Uma descida de acordes comum no flamenco e no rock, do i ao V.', 2, 75, progression([[0, 'min'], [10, 'maj'], [8, 'maj'], [7, 'maj']]), { minorKey: true }),
+          keyedExercise(143, 'i, iv, VII e III', 'Cada troca sobe uma quarta, cinco casas na mesma corda.', 2, 75, progression([[0, 'min'], [5, 'min'], [10, 'maj'], [3, 'maj']]), { minorKey: true }),
           keyedExercise(144, 'ii°, V e i', 'Preparação e resolução em tom menor.', 3, 75, progression([[2, 'm7b5'], [7, '7'], [0, 'm7']], 2), { minorKey: true }),
-          keyedExercise(145, 'i, VI, VII e i', 'Do menor para dois acordes maiores e de volta.', 1, 75, progression([[0, 'min'], [8, 'maj'], [10, 'maj'], [0, 'min']]), { minorKey: true }),
+          keyedExercise(145, 'i, VI, VII e i', 'Do menor para dois acordes maiores e de volta.', 2, 75, progression([[0, 'min'], [8, 'maj'], [10, 'maj'], [0, 'min']]), { minorKey: true }),
           keyedExercise(146, 'i, VII, VI e VII', 'Vai e volta entre os acordes maiores do tom menor.', 2, 75, progression([[0, 'min'], [10, 'maj'], [8, 'maj'], [10, 'maj']]), { minorKey: true }),
-          keyedExercise(147, 'i, iv, i e V', 'Cadência com a dominante maior, que pede o retorno.', 2, 75, progression([[0, 'min'], [5, 'min'], [0, 'min'], [7, 'maj']]), { minorKey: true })
+          keyedExercise(147, 'i, iv, i e V', 'Termina no V maior, que pede a volta ao i.', 2, 75, progression([[0, 'min'], [5, 'min'], [0, 'min'], [7, 'maj']]), { minorKey: true })
         ]
       },
       {
@@ -569,7 +583,7 @@ export const EXERCISE_CATEGORIES: ExerciseCategory[] = [
           keyedExercise(151, 'Blues com troca rápida', 'O IV já aparece no segundo compasso.', 2, 80, progression([[I, '7'], [IV, '7'], [I, '7'], [I, '7'], [IV, '7'], [IV, '7'], [I, '7'], [I, '7'], [V, '7'], [IV, '7'], [I, '7'], [V, '7']])),
           keyedExercise(152, 'Blues menor', 'A forma de 12 compassos em tom menor.', 2, 80, progression([[0, 'm7'], [0, 'm7'], [0, 'm7'], [0, 'm7'], [5, 'm7'], [5, 'm7'], [0, 'm7'], [0, 'm7'], [8, '7'], [7, '7'], [0, 'm7'], [7, '7']]), { minorKey: true }),
           keyedExercise(153, 'Blues de 8 compassos', 'Uma forma mais curta do que a de 12.', 2, 80, progression([[I, '7'], [V, '7'], [IV, '7'], [IV, '7'], [I, '7'], [V, '7'], [I, '7'], [V, '7']])),
-          keyedExercise(154, 'Volta do blues', 'Os quatro compassos que fecham o blues e levam ao começo.', 2, 80, progression([[I, '7'], [IV, '7'], [I, '7'], [V, '7']]))
+          keyedExercise(154, 'Volta do blues', 'Uma volta curta de quatro compassos, I, IV, I e V, que leva de volta ao começo.', 2, 80, progression([[I, '7'], [IV, '7'], [I, '7'], [V, '7']]))
         ]
       }
     ]
@@ -578,17 +592,17 @@ export const EXERCISE_CATEGORIES: ExerciseCategory[] = [
     id: 'ritmo',
     title: 'Ritmo',
     summary: 'Batidas e levadas para tocar sempre em cima do tempo.',
-    note: 'Nas batidas, o PRGB confere o tempo e a tônica do acorde, não cada nota. Ligue o metrônomo para treinar a contagem.',
+    note: 'Nas batidas, o PRGB confere o tempo e a tônica do acorde, não cada nota. Ligue o metrônomo e conte em voz alta: 1 e 2 e 3 e 4 e.',
     patterns: [],
     groups: [
       {
         title: 'Batidas com acorde',
         exercises: [
-          exercise(160, 'Semínimas', 'Uma batida por tempo.', 1, 80, fixed(repeatBars(Array.from({ length: 4 }, () => strum(E_MINOR, QUARTER))))),
-          exercise(161, 'Colcheias', 'Duas batidas por tempo: para baixo e para cima.', 1, 80, fixed(repeatBars(Array.from({ length: 8 }, () => strum(E_MINOR, EIGHTH))))),
-          exercise(162, 'Contratempo', 'A batida cai entre os tempos.', 2, 80, fixed(repeatBars(Array.from({ length: 4 }, () => [rest(EIGHTH), strum(E_MINOR, EIGHTH)]).flat()))),
-          exercise(163, 'Síncope', 'Acento antes do tempo forte.', 2, 80, fixed(repeatBars([strum(E_MINOR, EIGHTH), strum(E_MINOR, QUARTER), strum(E_MINOR, EIGHTH), strum(E_MINOR, QUARTER), strum(E_MINOR, QUARTER)]))),
-          exercise(164, 'Levada popular', 'Baixo, baixo-cima, cima-baixo-cima.', 2, 85, fixed(repeatBars([strum(E_MINOR, QUARTER), strum(E_MINOR, EIGHTH), strum(E_MINOR, QUARTER), strum(E_MINOR, EIGHTH), strum(E_MINOR, EIGHTH), strum(E_MINOR, EIGHTH)]))),
+          exercise(160, 'Uma batida por tempo', 'Uma batida a cada tempo: conte 1, 2, 3, 4.', 1, 80, fixed(repeatBars(Array.from({ length: 4 }, () => strum(E_MINOR, QUARTER))))),
+          exercise(161, 'Duas batidas por tempo', 'Duas batidas por tempo: conte 1 e 2 e 3 e 4 e, para baixo no número e para cima no "e".', 1, 80, fixed(repeatBars(Array.from({ length: 8 }, () => strum(E_MINOR, EIGHTH))))),
+          exercise(162, 'Contratempo', 'A batida cai entre os tempos: conte 1 e 2 e 3 e 4 e e bata só no "e".', 2, 80, fixed(repeatBars(Array.from({ length: 4 }, () => [rest(EIGHTH), strum(E_MINOR, EIGHTH)]).flat()))),
+          exercise(163, 'Síncope (batida fora do tempo)', 'Algumas batidas caem no "e" e empurram o ritmo: bata no 1, no "e" do 1, no "e" do 2, no 3 e no 4.', 2, 80, fixed(repeatBars([strum(E_MINOR, EIGHTH), strum(E_MINOR, QUARTER), strum(E_MINOR, EIGHTH), strum(E_MINOR, QUARTER), strum(E_MINOR, QUARTER)]))),
+          exercise(164, 'Levada popular', 'Bata no 1, no 2, no "e" do 2, no "e" do 3, no 4 e no "e" do 4.', 2, 85, fixed(repeatBars([strum(E_MINOR, QUARTER), strum(E_MINOR, EIGHTH), strum(E_MINOR, QUARTER), strum(E_MINOR, EIGHTH), strum(E_MINOR, EIGHTH), strum(E_MINOR, EIGHTH)]))),
           exercise(169, 'Batida e pausa', 'Bata nos tempos 1 e 3 e respire nos 2 e 4.', 1, 80, fixed(repeatBars([strum(E_MINOR, QUARTER), rest(QUARTER), strum(E_MINOR, QUARTER), rest(QUARTER)]))),
           exercise(170, 'Tempos 2 e 4', 'A batida cai só nos tempos fracos, como numa caixa de bateria.', 1, 80, fixed(repeatBars([rest(QUARTER), strum(E_MINOR, QUARTER), rest(QUARTER), strum(E_MINOR, QUARTER)]))),
           exercise(171, 'Baixo e batida', 'Uma nota grave, uma batida: o baixo marca o chão.', 2, 80, fixed(repeatBars([single(at(6, 0), QUARTER), strum(E_MINOR, QUARTER), single(at(5, 2), QUARTER), strum(E_MINOR, QUARTER)]))),
@@ -598,10 +612,10 @@ export const EXERCISE_CATEGORIES: ExerciseCategory[] = [
       {
         title: 'Levadas com uma nota',
         exercises: [
-          exercise(165, 'Shuffle', 'A colcheia longa-curta do blues.', 2, 80, fixed(repeatBars(Array.from({ length: 4 }, () => [single(MUTED_E, SHUFFLE_LONG, { palmMute: true }), single(MUTED_E, TRIPLET, { palmMute: true })]).flat()))),
-          exercise(166, 'Tercinas', 'Três notas iguais em cada tempo.', 2, 70, fixed(repeatBars(line(Array.from({ length: 12 }, () => MUTED_E), TRIPLET, { palmMute: true })))),
-          exercise(167, 'Galope', 'Uma colcheia e duas semicolcheias.', 3, 80, fixed(repeatBars(Array.from({ length: 4 }, () => [single(MUTED_E, EIGHTH, { palmMute: true }), single(MUTED_E, SIXTEENTH, { palmMute: true }), single(MUTED_E, SIXTEENTH, { palmMute: true })]).flat()))),
-          exercise(168, 'Semicolcheias', 'Quatro notas iguais em cada tempo.', 3, 70, fixed(repeatBars(line(Array.from({ length: 16 }, () => MUTED_E), SIXTEENTH, { palmMute: true }))))
+          exercise(165, 'Shuffle (balanço do blues)', 'O balanço do blues: em cada tempo, uma nota longa e uma curta, a primeira valendo o dobro.', 2, 80, fixed(repeatBars(Array.from({ length: 4 }, () => [single(MUTED_E, SHUFFLE_LONG, { palmMute: true }), single(MUTED_E, TRIPLET, { palmMute: true })]).flat()))),
+          exercise(166, 'Três notas por tempo', 'Três notas iguais em cada tempo: conte "um-e-a, dois-e-a".', 2, 70, fixed(repeatBars(line(Array.from({ length: 12 }, () => MUTED_E), TRIPLET, { palmMute: true })))),
+          exercise(167, 'Galope: uma longa e duas curtas', 'Uma nota longa e duas curtas em cada tempo, como um galope: conte 1 e-a, 2 e-a.', 3, 80, fixed(repeatBars(Array.from({ length: 4 }, () => [single(MUTED_E, EIGHTH, { palmMute: true }), single(MUTED_E, SIXTEENTH, { palmMute: true }), single(MUTED_E, SIXTEENTH, { palmMute: true })]).flat()))),
+          exercise(168, 'Quatro batidas por tempo', 'Quatro notas iguais em cada tempo: conte 1 e & a, 2 e & a.', 3, 70, fixed(repeatBars(line(Array.from({ length: 16 }, () => MUTED_E), SIXTEENTH, { palmMute: true }))))
         ]
       }
     ]
@@ -616,9 +630,9 @@ export const EXERCISE_CATEGORIES: ExerciseCategory[] = [
         title: 'Para começar',
         exercises: [
           exercise(188, 'Cordas soltas', 'Cada corda sem apertar casa nenhuma, da mais grave à mais aguda.', 1, 50, fixed(firstPosition(ALL_STRINGS.map((string) => [string, 0] as [number, number])))),
-          exercise(189, 'Dó maior, primeira posição', 'As notas de Dó a Sol nas casas de 0 a 3, sem sair do lugar.', 1, 60, fixed(firstPosition([[5, 3], [4, 0], [4, 2], [4, 3], [3, 0], [3, 2], [2, 0], [2, 1], [2, 3], [1, 0], [1, 1], [1, 3]]))),
-          exercise(190, 'Lá menor, primeira posição', 'De Lá a Mi, com as cordas soltas ajudando.', 1, 60, fixed(firstPosition([[5, 0], [5, 2], [5, 3], [4, 0], [4, 2], [4, 3], [3, 0], [3, 2], [2, 0], [2, 1], [2, 3], [1, 0]]))),
-          exercise(191, 'Sol maior, primeira posição', 'De Sol a Sol, passando pelo Fá sustenido.', 1, 60, fixed(firstPosition([[6, 3], [5, 0], [5, 2], [5, 3], [4, 0], [4, 2], [4, 4], [3, 0], [3, 2], [2, 0], [2, 1], [2, 3], [1, 0], [1, 2], [1, 3]])))
+          exercise(189, 'C, primeira posição', 'As notas de C a G nas casas de 0 a 3, sem sair do lugar.', 1, 60, fixed(firstPosition([[5, 3], [4, 0], [4, 2], [4, 3], [3, 0], [3, 2], [2, 0], [2, 1], [2, 3], [1, 0], [1, 1], [1, 3]]))),
+          exercise(190, 'Am, primeira posição', 'De A a E, com as cordas soltas ajudando.', 1, 60, fixed(firstPosition([[5, 0], [5, 2], [5, 3], [4, 0], [4, 2], [4, 3], [3, 0], [3, 2], [2, 0], [2, 1], [2, 3], [1, 0]]))),
+          exercise(191, 'G, primeira posição', 'De G a G, passando pelo F#.', 1, 60, fixed(firstPosition([[6, 3], [5, 0], [5, 2], [5, 3], [4, 0], [4, 2], [4, 4], [3, 0], [3, 2], [2, 0], [2, 1], [2, 3], [1, 0], [1, 2], [1, 3]])))
         ]
       },
       {
@@ -675,13 +689,13 @@ export function buildExerciseTab(item: Exercise, key: number, requested?: Exerci
   const category = categoryOf(item);
   const pattern = patternFor(category, requested);
   const place = item.keyed ? key : 0;
-  const beats = item.build(place, pattern);
-  const keyName = `${KEYS[place]}${item.minorKey ? 'm' : ''}`;
+  const beats = item.build(place, pattern, { spelling: spellingOf(place, item.minorKey), lastFret: lastFretFor(item.level) });
+  const name = keyName(place, item.minorKey);
   const trackName = category.patterns.length > 0 ? patternName(category, pattern) : category.title;
   const meta: SongMeta = {
     songId: exerciseSongId(item.code, PATTERN_CODES[pattern]),
     revisionId: 0,
-    title: item.keyed ? `${item.title} em ${keyName}` : item.title,
+    title: item.keyed ? `${item.title} em ${name}` : item.title,
     artist: 'Exercício original', // not the brand name: it is a reserved word, so challenge links would refuse it
     image: '',
     tracks: [{ instrumentId: 30, instrument: 'Guitarra', name: trackName, tuning: TUNING, partId: place }]
@@ -731,11 +745,11 @@ export function exerciseVariant(item: Exercise, key: number, requested?: Exercis
   const category = categoryOf(item);
   const pattern = patternFor(category, requested);
   const place = item.keyed ? key : 0;
-  const keyName = `${KEYS[place]}${item.minorKey ? 'm' : ''}`;
+  const name = keyName(place, item.minorKey);
   return {
     songId: exerciseSongId(item.code, PATTERN_CODES[pattern]),
     partId: place,
-    title: item.keyed ? `${item.title} em ${keyName}` : item.title,
+    title: item.keyed ? `${item.title} em ${name}` : item.title,
     trackName: category.patterns.length > 0 ? patternName(category, pattern) : category.title
   };
 }

@@ -4,7 +4,7 @@ A trilha é uma ordem sugerida para a biblioteca de exercícios: do primeiro som
 
 ## De onde veio a ordem
 
-A pesquisa foi uma leitura de programas de ensino de violão e guitarra e de guias de prática. **É uma síntese editorial, não equivale a nenhum exame**, e nenhuma das fontes valida a ordem exata das nossas 15 etapas. Fontes abertas consultadas em 2026-11-18, descritas sem nomes nem links de terceiros. Elas inspiraram a ordem, não a certificam nem têm relação com o PRGB:
+A pesquisa foi uma leitura de programas de ensino de violão e guitarra e de guias de prática. **É uma síntese editorial, não equivale a nenhum exame**, e nenhuma das fontes valida a ordem exata das nossas 16 etapas. Fontes abertas consultadas em 2026-11-18, descritas sem nomes nem links de terceiros. Elas inspiraram a ordem, não a certificam nem têm relação com o PRGB:
 
 | Ideia aplicada | Fonte |
 |---|---|
@@ -21,31 +21,45 @@ O que **não** ficou provado: os números de "trocas por minuto" e de "bpm a cad
 ## Critérios
 
 1. **Nível de cada exercício** (`level` 1 a 3 em `exercises.ts`) manda: dentro de uma etapa nenhum passo é mais fácil que o anterior, e nenhuma etapa tem média de nível menor que a anterior. Os testes (`trail.test.ts`) barram o contrário.
-2. As quatro primeiras etapas só têm exercícios de nível 1; nível 3 só aparece da etapa 13 em diante, e as três últimas só têm nível 3.
+2. As quatro primeiras etapas só têm exercícios de nível 1; nível 3 só aparece da etapa 14 em diante, e as três últimas só têm nível 3. A média de nível é comparada com a tolerância de um décimo (uma etapa pode abrir com um passo mais fácil, como a primeira posição da pentatônica maior).
 3. **Mão antes de cabeça, cabeça antes de velocidade:** cordas soltas, dois dedos e cromático vêm antes das escalas; escalas e pentatônicas, antes dos modos e das posições de três notas por corda; ritmos simples, antes do contratempo, da síncope e das semicolcheias.
-4. **Acordes em dois tempos:** abertos fáceis (duas trocas, depois quatro), depois sétimas, suspensos e F com pestana, só então a pestana móvel e o blues.
-5. **Tonalidades confortáveis:** os passos usam tons com a tônica perto do começo do braço (Dó, Ré, Mi, Sol, Lá) onde isso ajuda; a biblioteca continua oferecendo os 12 tons.
+4. **Acordes em dois tempos:** abertos fáceis (duas trocas, depois quatro), as primeiras progressões também com acordes abertos (G, Em, C e D; A, D e E), depois sétimas, suspensos e F com pestana, só então a pestana móvel, o blues e as progressões que dependem da pestana (etapa 8). Um teste barra qualquer progressão móvel antes dela.
+5. **Tonalidades confortáveis:** os passos usam tons com a tônica perto do começo do braço onde isso ajuda; a biblioteca continua oferecendo os 12 tons. As três primeiras etapas não passam da casa 9 (um teste confere); os exercícios de nível 1 e 2 não passam da casa 20 em tom nenhum (nível 3, da casa 22).
 6. **Sem pressão:** nenhum texto fala em perda, urgência ou falta (um teste confere). O resumo mostra o que foi feito e aponta o próximo passo sem estrela como "Continue daqui".
 
-## As 15 etapas
+## As 16 etapas
 
 | # | Etapa | Níveis | Passos |
 |---|---|---|---|
 | 1 | Primeiros sons | 1 | 6 |
-| 2 | Primeiros acordes | 1 | 9 |
-| 3 | Ritmo e primeiras progressões | 1 | 13 |
-| 4 | Notas e primeiras escalas | 1 | 12 |
+| 2 | Primeiros acordes | 1 | 7 |
+| 3 | Ritmo e primeiras progressões | 1 | 8 |
+| 4 | Notas e primeiras escalas | 1 | 17 |
 | 5 | Pentatônica menor | 1 a 2 | 9 |
 | 6 | Mais acordes abertos | 1 a 2 | 9 |
 | 7 | Pestana e blues | 2 | 9 |
-| 8 | Pentatônica maior e tom maior | 2 | 11 |
-| 9 | Escalas e modos | 2 | 11 |
-| 10 | Técnicas da mão | 2 | 15 |
-| 11 | Ritmos e levadas | 2 | 6 |
-| 12 | Sétimas, arpejos e cadências | 2 | 11 |
-| 13 | Braço inteiro | 3 | 10 |
-| 14 | Velocidade e precisão | 3 | 9 |
-| 15 | Harmonia avançada | 3 | 8 |
+| 8 | Progressões com pestana | 2 | 8 |
+| 9 | Pentatônica maior e tom maior | 1 a 2 | 11 |
+| 10 | Escalas e modos | 2 | 11 |
+| 11 | Técnicas da mão | 2 | 15 |
+| 12 | Ritmos e levadas | 2 | 6 |
+| 13 | Sétimas, arpejos e cadências | 2 | 11 |
+| 14 | Braço inteiro | 3 | 10 |
+| 15 | Velocidade e precisão | 3 | 9 |
+| 16 | Harmonia avançada | 3 | 8 |
+
+São 154 passos. Cada etapa tem a sua meta (`goal`) escrita de acordo com os passos que ela tem de fato.
+
+## Decisões da revisão crítica
+
+- **Progressões com pestana (CONT-02).** As oito progressões de acorde móvel (exercícios 130, 131, 132, 133, 136, 140, 141 e 145) estavam na etapa 3, de nível 1, mas só têm forma de pestana, e em vários tons subiam até a casa 12 ou 14. Passaram para uma etapa própria depois de "Pestana e blues", com nível 2 (o nível dos exercícios foi de 1 para 2: ids e recordes não mudam), e nos tons em que a mão fica mais perto do começo do braço (no máximo a casa 10). A etapa 3 passou a ter as progressões com acordes abertos (115, G, Em, C e D, e 116, A, D, A e E, que antes eram da etapa 2), os power chords em tons baixos e os ritmos. Quem já tinha estrelas num passo cujo tom mudou (113, 124, 131, 132, 133, 136, 140 e 145) não as vê mais na trilha: elas continuam guardadas no progresso, no tom antigo.
+- **Etapa 4 (CONT-13).** Ganhou as cordas 6 a 2 (180 a 184), que ficavam fora da trilha, e a meta passou a dizer que a etapa tem também os primeiros ligados e slides. O exercício 141 entrou na etapa 8. Os ritmos 169 e 170 vêm antes do 161, que é mais difícil.
+- **Metas (CONT-13).** A de "Sétimas, arpejos e cadências" falava de jazz e blues, e a de "Harmonia avançada" de acordes alterados, que não existem na biblioteca: as duas foram reescritas pelo que os passos têm.
+- **Pentatônica maior (CONT-14).** A posição 1 da maior passou a nível 1, como a da menor (tinham a mesma dificuldade). O exercício 138 descreve o bVII, não "o acorde de sétima menor", e a "Volta do blues" (154) diz que toca I, IV, I e V.
+- **Limite de casas (CONT-15).** Os níveis 1 e 2 vão até a casa 20 (antes, até 22: 91 variantes pediam a casa 22 e 111 a casa 21). Acima disso a posição desce uma oitava. "Oitavas" (187) passou a começar nas cordas soltas para E e A. Um teste confere a casa mais alta de cada exercício, por nível.
+- **Grafia dos tons (CONT-03).** Cada tom é escrito com um só tipo de acidente: Db, Eb, Ab e Bb com bemol; F#, B, E, A, D e G com sustenido. No tom menor vale a armadura do menor: C#m e G#m com sustenido, Ebm e Bbm com bemol. O título e os nomes dos acordes seguem isso ("em Db" mostra Db, Gb e Ab). O seletor de tom da biblioteca continua com a lista antiga (C# e Ab).
+- **Cifra (CONT-20).** Nomes e descrições de exercícios usam cifra (C, Am, G, A, D), não Dó, Lá, Sol.
+- **Textos (UX-10).** "Casa" em vez de "traste", títulos sem "Maior" ou "Menor" soltos, glossário curto nas notas das categorias (tônica, tom e semitom, números romanos, pestana, "blue note") e contagem falada nos ritmos.
 
 ## Exercícios acrescentados
 

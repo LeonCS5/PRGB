@@ -43,7 +43,7 @@ export const rawDemo = {
     // Phrase with a hammer-on, a slide and a held bend
     measure([eighth(2, 5), eighth(2, 7, { hp: true }), eighth(1, 5), eighth(1, 8), quarter(1, 8, { slide: 'shift' }), quarter(2, 7)]),
     measure([quarter(1, 8, { bend: { tone: 100 } }), quarter(1, 8, { tie: true }), eighth(1, 5), eighth(2, 7), quarter(2, 5)]),
-    // Ending on the root with vibrato
+    // Closing long note, with vibrato
     measure([quarter(4, 7), quarter(3, 7), { duration: [1, 2], notes: [{ string: 2, fret: 7, vibrato: true }] }])
   ]
 };
