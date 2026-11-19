@@ -212,7 +212,7 @@ const SongStep: React.FC<{ onBack: () => void; onSearch: () => void; onDemo: () 
       </button>}
       <button type="button" onClick={onDemo} className="flex min-h-24 cursor-pointer items-center gap-3 rounded-xl border border-signal-500/30 bg-signal-500/5 p-4 text-left transition hover:bg-signal-500/10">
         <Play size={22} className="shrink-0 text-signal-300" aria-hidden="true" />
-        <span><span className="block font-bold text-ink-100">Exercício demo</span><span className="mt-1 block text-xs text-ink-300">Os dois tocam a pentatônica, sem internet</span></span>
+        <span><span className="block font-bold text-ink-100">Pentatônica em Lá menor</span><span className="mt-1 block text-xs text-ink-300">Os dois tocam a pentatônica, sem internet</span></span>
       </button>
     </div>
     <div className="mt-6">

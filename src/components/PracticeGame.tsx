@@ -30,7 +30,7 @@ import {
   buildNoteGraphics,
   drawLaneBackground,
   layoutLanes,
-  type Canvas2D,
+  createLayer,
   noteHeightFor,
   playHitFeedback,
   stringY,
@@ -128,17 +128,6 @@ const freshPlayers = (): PlayerRun[] => [
 const synthKey = (laneIndex: number, noteId: string, lapNumber: number) => `${lapNumber}:${laneIndex}:${noteId}`;
 
 // Safari before 16.4 has no OffscreenCanvas: a canvas that is never attached to the page does the same job
-const createLayer = (width: number, height: number): { layer: OffscreenCanvas | HTMLCanvasElement; ctx: Canvas2D | null } => {
-  if (typeof OffscreenCanvas !== 'undefined') {
-    const layer = new OffscreenCanvas(width, height);
-    return { layer, ctx: layer.getContext('2d') };
-  }
-  const layer = document.createElement('canvas');
-  layer.width = width;
-  layer.height = height;
-  return { layer, ctx: layer.getContext('2d') };
-};
-
 const formatSpeedLabel = (value: number) => value.toLocaleString('pt-BR') + '×';
 
 // A longer gap between frames (a stall, a slow device) only moves the song this far, so it never jumps

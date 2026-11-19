@@ -5,6 +5,7 @@ import { clearRecords, exportLocalData } from '../services/records';
 import { clearPreferences, readPreferences } from './preferences';
 import { clearProgress, exportProgress } from '../services/progress';
 import { clearAppearance, exportAppearance } from '../appearance/useAppearance';
+import { clearLegendSeen } from './sessionSettings';
 
 export const LOCAL_DATA_FILE_NAME = 'prgb-dados-locais.json';
 
@@ -27,6 +28,7 @@ export const clearLocalData = (): void => {
   clearPreferences();
   // Also puts the <html> attributes and theme variables back to the default, so it holds even without the reload
   clearAppearance();
+  clearLegendSeen();
 };
 
 // Reads the key directly: asking supabase-js would download it for players who never opened the ranking

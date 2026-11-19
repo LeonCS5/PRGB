@@ -1,7 +1,7 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowLeft, ArrowUp, ListChecks, Play, Plus, Trash2 } from 'lucide-react';
 import { categoryOf, EXERCISE_CATEGORIES, exerciseByCode, LEVEL_NAMES, patternName, type ExerciseCategory } from '../services/exercises';
-import { KEYS } from '../services/musicTheory';
+import { KEYS, keyName } from '../services/musicTheory';
 import { loadProgress, type Progress } from '../services/progress';
 import {
   customSession, formatMinutes, itemTitle, KEY_CYCLES, MAX_SESSION_ITEMS, SESSION_MINUTES, sessionDurationMs, stageSession, timedSession,
@@ -153,7 +153,7 @@ export const SessionView: React.FC<SessionViewProps> = ({ progress, now, onStart
                   <div>
                     <label htmlFor={`${ids}-key`} className="text-sm font-semibold text-ink-100">Tom</label>
                     <select id={`${ids}-key`} value={key} onChange={(event) => setKey(Number(event.target.value))} className={`${field} mt-2`}>
-                      {KEYS.map((name, index) => <option key={name} value={index}>{name}</option>)}
+                      {KEYS.map((_, index) => <option key={index} value={index}>{keyName(index)}</option>)}
                     </select>
                   </div>
                   {choosable.length > 0 && (

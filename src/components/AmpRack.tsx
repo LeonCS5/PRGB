@@ -169,7 +169,7 @@ export const AmpRack: React.FC<AmpRackProps> = ({
         </div>
 
         {/* Amp Faceplate & Knobs Rack */}
-        <div className="mt-5 rounded-2xl border border-ink-800 bg-gradient-to-b from-ink-900 via-ink-950 to-black p-5 shadow-inner">
+        <div className="mt-5 rounded-2xl border border-ink-800 bg-gradient-to-b from-ink-900 via-ink-950 to-ink-950 p-5 shadow-inner">
           <div className="flex items-center justify-between mb-4 pb-2 border-b border-ink-800/80 text-xs">
             <div className="flex items-center gap-2 text-ink-200 font-mono font-bold">
               <Sliders size={14} className="text-amp-400" />

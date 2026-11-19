@@ -7,6 +7,7 @@ import { AudioRouteNotice, InputLevelMeter } from './AudioRouting';
 import { BrandMark } from './BrandMark';
 import { ErrorNotice } from './ErrorNotice';
 import {
+  createLayer,
   drawLaneBackground,
   layoutLanes,
   noteHeightFor,
@@ -36,7 +37,7 @@ interface Scene {
   width: number;
   height: number;
   dpr: number;
-  background: OffscreenCanvas;
+  background: OffscreenCanvas | HTMLCanvasElement;
   layout: LaneLayout;
   noteHeight: number;
 }
@@ -114,8 +115,8 @@ export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings,
         sceneRef.current = null;
         return;
       }
-      const background = new OffscreenCanvas(canvas.width, canvas.height);
-      const ctx = background.getContext('2d');
+      // Browsers without OffscreenCanvas draw the static layer on a detached canvas element
+      const { layer: background, ctx } = createLayer(canvas.width, canvas.height);
       if (!ctx) return;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.fillStyle = palette.background;

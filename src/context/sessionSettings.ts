@@ -37,6 +37,15 @@ export const saveSessionSettings = (queueId: number, settings: SessionSettings):
 
 export const LEGEND_KEY = 'prgb:legend:v1';
 
+// Part of the local data: erasing it brings the first-game legend back
+export const clearLegendSeen = (): void => {
+  try {
+    window.localStorage.removeItem(LEGEND_KEY);
+  } catch {
+    // Without storage there is nothing to erase.
+  }
+};
+
 export const isLegendSeen = (): boolean => {
   try {
     return window.localStorage.getItem(LEGEND_KEY) === '1';

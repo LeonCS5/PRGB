@@ -6,6 +6,11 @@ O histórico detalhado, com dono e status de cada item, fica em [AGENTS.md](AGEN
 
 - Seis revisores independentes, só leitura, fizeram uma revisão crítica do projeto: 89 achados (nenhum de segurança crítico ou alto), com dono por área, em `docs/revisao-critica.md`. As correções saíram em seis branches por área.
 - Segurança e documentação: o backup local do banco passou a guardar 7 dias e a excluir `play_sessions`; o `image` do meta do acervo é validado antes de entrar no caminho do CDN; os textos que o anfitrião envia na dupla online passam pelo mesmo filtro dos links de desafio (caracteres de controle, links e termos bloqueados); README reescrito em torno de exercícios, trilha, repertório e sessões, sem alegações sem prova; metadados do `index.html` sem "tablaturas" como foco; documentos de identidade marcados como histórico; mapas de arquivos do AGENTS.md e do CLAUDE.md atualizados. Riscos aceitos e procedimentos (moderação, rate limit, cotas) em `docs/operacao.md` seção 11.
+- Jogo: confirmação ao sair de uma partida em andamento, legenda da primeira partida, velocidade/metrônomo/sintetizador/treino mantidos entre os exercícios de uma sessão, timeout de 10 s no ranking sem travar o Tocar (a verificação automática é silenciosa e não abre modal), treino sem notas perdidas na virada da volta, textos de erro e botões mais claros, alvos de 44 px. Criar a conta pelo placar com o resultado aberto não apaga mais o resultado.
+- Áudio: o PRGB detecta a interface USB desconectada durante a sessão (para o áudio e avisa, em vez de marcar tudo como Errou); saída indisponível mostra aviso; o microfone deixa de vazar se a abertura falha; limiar de volume mínimo volta a 0,02; o Play Free não re-renderiza a cada quadro. No rack do amp, alegações e nomes de preset e gabinete foram trocados por termos neutros; no painel de Áudio, ASIO, buffer e compensação são explicados.
+- Interface: "Tocar agora" pede o microfone; landing em três grupos (Aprender, Praticar, Tocar músicas) com "O que você precisa"; nomes padronizados (Conectar áudio, Montar sessão, Meu progresso, Trilha, Repertório, Buscar músicas); critério das estrelas e da precisão sempre à vista; repertório marca "Vale para o ranking"; falha ao carregar uma tela lazy mostra "Tentar de novo" (e um reload único em `vite:preloadError`); rótulos de Aparência em português; tons com a grafia certa (Db, não C#).
+- Conteúdo: tons grafados pela armadura (Db, C#m…); exercícios de nível 1 e 2 só até a casa 20; a trilha passou a 154 passos em 16 etapas (progressões com pestana só depois da etapa de pestana; cordas 6 a 2 e o exercício 141 entraram); "Brilha, brilha, estrelinha" creditada como tradicional; textos em cifra e com "casa", glossário e contagem falada nos ritmos.
+- Engenharia: o service worker não regrava mais o index no cache de uma versão antiga (offline abria em branco após um deploy) e a navegação cai para o cache em 3,5 s; ícone maskable no precache; manifest sem `orientation`; o build falha se um chunk lazy de `src/components` ou `src/content` ficar fora do precache e `npm run check:precache` confere o `dist` no CI; chunk do Supabase com nome fixo (`supabase-*`); CI em Node 22 e 24; patches de supabase-js, react, vite e vitest.
 <!-- rodada 19: outros agentes -->
 
 ## Rodada 18 — todas as variações de um exercício
@@ -24,7 +29,7 @@ O histórico detalhado, com dono e status de cada item, fica em [AGENTS.md](AGEN
 
 ## Rodada 15 — trilha de evolução e landing
 
-- Trilha de evolução: 148 passos em 15 etapas, do primeiro som ao material mais difícil, com estrelas e "Continue daqui"; nada fica bloqueado. A pesquisa e os critérios estão em `docs/trilha.md`.
+- Trilha de evolução: 148 passos em 15 etapas (hoje 154 em 16, ver Rodada 19), do primeiro som ao material mais difícil, com estrelas e "Continue daqui"; nada fica bloqueado. A pesquisa e os critérios estão em `docs/trilha.md`.
 - 58 exercícios novos (a biblioteca passou de 96 para 154 e de 1.891 para 3.339 variantes).
 - Busca no acervo na primeira tela e no menu; landing reorganizada em "O que você quer tocar?".
 

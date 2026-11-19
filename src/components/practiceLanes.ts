@@ -272,3 +272,15 @@ export const playHitFeedback = (judgement: Judgement, note: NoteEvent, y: number
     effects.texts.push({ text: 'Errou', color: palette.miss, ...textAt, alpha: 0.9 });
   }
 };
+
+// The static layers are drawn once on an offscreen surface; browsers without OffscreenCanvas get a detached canvas
+export const createLayer = (width: number, height: number): { layer: OffscreenCanvas | HTMLCanvasElement; ctx: Canvas2D | null } => {
+  if (typeof OffscreenCanvas !== 'undefined') {
+    const layer = new OffscreenCanvas(width, height);
+    return { layer, ctx: layer.getContext('2d') };
+  }
+  const layer = document.createElement('canvas');
+  layer.width = width;
+  layer.height = height;
+  return { layer, ctx: layer.getContext('2d') };
+};

@@ -62,6 +62,7 @@ PRGB/
 │   │
 │   ├── context/
 │   │   ├── AudioSessionContext.tsx  # AudioEngine, PRGB Amp, device/canal, erros de áudio; pitch em store próprio (useLatestPitch)
+│   │   ├── sessionSettings.ts       # Velocidade, metrônomo, sintetizador e treino de uma sessão (em memória, por fila) e a flag da legenda da 1ª partida (prgb:legend:v1)
 │   │   ├── gameSession.ts           # Tipos de sessão de jogo: GamePart, SoloSession, DuoSession, RunSummary, RankedSubmission
 │   │   ├── historyLayers.ts         # Uma entrada no histórico por camada aberta (tela e modais): o Voltar fecha a de cima
 │   │   ├── legalRoute.ts            # Roteamento por hash (#privacidade / #termos) sem biblioteca de router
@@ -125,7 +126,10 @@ PRGB/
 │   │   ├── SiteNav.tsx              # Menu superior, estado do áudio e barra de abas do celular
 │   │   ├── SongSearchModal.tsx      # Modal: busca no acervo + seleção de faixa
 │   │   ├── AmpRack.tsx      # Modal: rack completo do amp modeler
-│   │   ├── OnDemand.tsx             # Monta um modal ou tela só depois da primeira abertura (lazy + Suspense)
+│   │   ├── OnDemand.tsx             # LazyScreen (mensagem de carregamento e "Tentar de novo" numa tela lazy) e OnDemand (monta um modal só depois da primeira abertura)
+│   │   ├── lazyLoad.ts              # lazyWithRetry e o reload único em vite:preloadError (protegido por sessionStorage)
+│   │   ├── sessionFormat.ts         # Formatação do tempo da sessão (lógica pura)
+│   │   ├── progress/starRules.ts    # Texto fixo do critério das estrelas e da precisão, lido de progress.ts
 │   │   ├── ProgressScreen.tsx       # Tela Meu progresso (lazy): nível, ensaio da semana, palhetas e conteúdo tocado
 │   │   ├── progress/viewModel.ts    # O que mostrar em Meu progresso, a partir do progresso salvo (lógica pura)
 │   │   ├── appearance/              # Peças da tela Aparência: GameplayPreviewCanvas, PreviewPanel, controls, options, sections, useReducedMotion
@@ -154,7 +158,7 @@ PRGB/
 │   │   ├── exerciseIds.ts           # Ids dos exercícios (negativos, nunca renumerar: recordes e desafios guardam esses ids)
 │   │   ├── exercises.ts             # Catálogo de exercícios: gerado por regras, vira tablatura e passa pelo mesmo parser
 │   │   ├── practiceSession.ts       # Sessão de prática (lógica pura): itens, expansão por tons e jeitos, três montagens, fila e resumo
-│   │   ├── trail.ts                 # Trilha de evolução: 15 etapas e 148 passos (exercício + tom + jeito de tocar), em ordem de dificuldade, e o resumo do progresso
+│   │   ├── trail.ts                 # Trilha de evolução: 16 etapas e 154 passos (exercício + tom + jeito de tocar), em ordem de dificuldade, e o resumo do progresso
 │   │   ├── musicTheory.ts           # Escalas, posições no braço e formas de acorde (lógica pura)
 │   │   ├── achievements.ts          # Palhetas (conquistas): dados e regras puras, ids estáveis salvos no navegador (nunca renomear)
 │   │   ├── textSafety.ts            # Filtro de texto de outro jogador (caracteres de controle e bidi, links, termos bloqueados); usado pelas mensagens da sala
@@ -202,7 +206,10 @@ PRGB/
 │   ├── sessoes.md                   # Sessões de prática: como funciona, os três jeitos de montar e as duas formas de alongar
 │   └── trilha.md                    # Trilha de evolução: pesquisa, critérios, etapas e como estender
 ├── scripts/
-│   └── backup-db.sh                 # Backup local do banco (o plano gratuito não tem backup)
+│   ├── backup-db.sh                 # Backup local do banco: 7 dias e sem play_sessions (o plano gratuito não tem backup)
+│   ├── check-bundle-size.mjs        # Orçamento do JS: primeira carga (entrada + React), entrada, chunk do Supabase e total
+│   ├── check-precache.mjs           # Confere no dist que todo chunk (exceto nam-* e supabase-*) está no precache do sw.js
+│   └── sw.test.ts                   # Testes do service worker (vm, com cache e rede falsos)
 ├── .github/                         # CI (lint, build, testes, npm audit) e Dependabot
 ├── CHANGELOG.md                     # Resumo das rodadas
 │
@@ -477,7 +484,7 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 ### Rodada 15 — trilha de evolução e busca em destaque (em `main`)
 - [x] **Busca no acervo em destaque** — botão "Buscar uma música" na primeira tela, item "Buscar" no menu e cartão na seção "O que você quer tocar?"; some com `VITE_ACERVO_ENABLED=false`. Sem o nome do provedor na interface. Aumenta a exposição ao maior risco legal do projeto (ver Pendências) (@claude; já publicado na `main`; não testado: Firefox, Safari, celular real, busca com rede real)
 - [x] **Mais exercícios** — 58 exercícios novos: primeira posição, aranha, palhetada em semicolcheias, trinado, slides, pentatônicas emendadas e frases, três notas por corda (posições 2 a 7), acordes abertos e de pestana, progressões, ritmo e funk. Biblioteca: 154 exercícios, 3.339 variantes, todas conferidas pelos testes (@claude)
-- [x] **Trilha de evolução** — `trail.ts` e `TrailScreen`: 15 etapas, 148 passos, do mais fácil ao mais difícil, com estrelas e "Continue daqui"; nada bloqueado e sem texto de perda ou urgência (um teste confere). Pesquisa e critérios em `docs/trilha.md`. Testada no Edge em 1280, 390 e 320 px (abrir pela landing, Voltar, tocar um passo). **Não testado**: a ordem com quem toca, guitarra real, Firefox, Safari, celular físico, leitor de tela (@claude)
+- [x] **Trilha de evolução** — `trail.ts` e `TrailScreen`: 15 etapas, 148 passos (hoje 16 etapas e 154, ver Rodada 19), do mais fácil ao mais difícil, com estrelas e "Continue daqui"; nada bloqueado e sem texto de perda ou urgência (um teste confere). Pesquisa e critérios em `docs/trilha.md`. Testada no Edge em 1280, 390 e 320 px (abrir pela landing, Voltar, tocar um passo). **Não testado**: a ordem com quem toca, guitarra real, Firefox, Safari, celular físico, leitor de tela (@claude)
 
 ### Rodada 16 — sessões de prática (em `main`)
 - [x] **Sessão de prática** — fila de exercícios tocados em sequência, sem voltar ao menu: faixa "A seguir" com contagem de 10 s (pausar, pular, encerrar) na versão original, **substituída na Rodada 18**: os exercícios seguem direto, com contagem de 3 s, e o resumo vem só no fim (exercícios, tempo, estrelas, precisão média). Três jeitos de montar (etapa da trilha, por tempo de 10/15/20 min, à mão) e duas formas de alongar (rodar 3/6/12 tons de quarta em quarta; todos os jeitos de tocar). Estrelas, recordes e ensaio da semana contam como em qualquer partida; não vale para o ranking e nada novo é gravado. Detalhes em `docs/sessoes.md` (@claude; testada no Edge em 1280, 390 e 320 px com microfone sintético: montar, tocar duas peças, pausar a contagem, avanço automático, resumo, Voltar. **Não testado**: sessão longa de verdade, guitarra real, Firefox, Safari, celular físico, leitor de tela; a ordem e as fatias do "por tempo" não foram validadas com quem toca)
@@ -495,6 +502,12 @@ Formato: `- [ ] **Item** — descrição` + `(@agente, rodada, branch, status)`.
 - [ ] **Limite por tentativa falha (SEG-03)** — `update_nickname`, `create_profile` e `join_room` só contam chamadas bem-sucedidas; decisão de não entregar migration agora e a alternativa estão em `docs/operacao.md` seção 11.2 (@claude, decisão do humano)
 - [ ] **Imagem de compartilhamento (CONT-01)** — `public/og-image.png` ainda diz "amp valvulado"; regerar com "simulador de amplificador" (humano)
 - [ ] **Rate limit no Vercel Firewall (SEG-08)** e **texto legal sobre o backup local e o envio automático ao ranking (SEG-02, SEG-07b)** — ações e decisões do humano; `LEGAL_VERSION` não foi alterado
+- [x] **Jogo (F1)** — confirmação ao sair, legenda da 1ª partida, ajustes da sessão mantidos (`sessionSettings.ts`), timeout de 10 s no ranking (`RANKING_TIMEOUT_MS`; verificação automática silenciosa com `prepare(true)` e `abandonAutomatic()`), `judgeNotes()` separado do desenho no `PracticeGame` com `createLayer` (em `practiceLanes.ts`) para navegadores sem `OffscreenCanvas`, treino sem nota perdida na virada da volta, `AudioRouteNotice` no jogo (CORE-01, 03, 04, 07, 09, 10, 11; UX-02, 04, 07, 14, 15, 18, 19, 24, 25; SEG-07a) (@claude; testado no Edge com o build e por vitest; **não testado**: rede pendurada de verdade, Safari antigo, celular real, guitarra real)
+- [x] **Áudio (F2)** — interface desconectada detectada pelo `ended` da track (`setDisconnectListener`), saída indisponível com aviso, MediaStream liberado se a abertura falha, volume com 4 casas, Play Free com a leitura do pitch isolada, rack do amp sem alegações (CORE-02, 05, 06, 08, 12; CONT-17; UX-13, 24; A11Y-02, 08) (@claude; vitest com os 4 testes novos falhando no código antigo; **não testado**: USB real, Firefox, navegador)
+- [x] **Interface (F3)** — `LazyScreen`/`lazyWithRetry`/`LazyErrorBoundary`, "Tocar agora" com áudio, landing em grupos, nomes padronizados, estrelas e precisão explicadas, repertório com "Vale para o ranking", Aparência em português, alvos de 44 px (UX-01, 03, 05, 06, 08, 09, 11, 12, 13, 16, 17, 20, 21, 22, 23; ENG-02, 03, 08, 09; CONT-05; A11Y-01 a 05, 07) (@claude; testado no Edge com o build: landing em 320/390/1280 px, "Tocar agora" pedindo o microfone, falha de chunk com "Tentar de novo"; **não testado**: Firefox, Safari, celular real, leitor de tela)
+- [x] **Conteúdo (F4)** — tons pela armadura, níveis 1 e 2 até a casa 20, trilha com 16 etapas e 154 passos, "Brilha, brilha" tradicional, textos em cifra e com "casa", glossário e contagem falada (CONT-02, 03, 06, 12 a 16, 20; UX-09, 10). Quem tinha estrelas nos passos cujo tom mudou (113, 124, 131, 132, 133, 136, 140, 145) deixa de vê-las na trilha; seguem salvas no tom antigo (@claude; **não testado**: ninguém tocou)
+- [x] **Engenharia (F5)** — o SW não regrava o index (provado no Edge com dois builds), timeout de 3,5 s, build que falha com chunk lazy fora do precache, `check:precache` no CI, manifest sem `orientation`, patches de dependências, Node 22/24 no CI (ENG-01, 04, 06, 07, 10, 11, 12; CONT-09; SEG-09) (@claude; **não testado**: `skipWaiting`, Firefox, Safari)
+- [ ] **Resíduos da revisão** — rótulo de tom na biblioteca mostra a grafia maior (Db) também para exercícios em tom menor (o título diz C#m); pré-carregar chunks no idle/hover (ENG-03); decidir 3 tons (biblioteca) x 1 tom (sessão) (UX-09); 2 avisos `only-export-components` em `AudioSessionContext` e 3 em `ModalsContext`, `useGamePalette` e `GameHud` (ENG-08); `npm:@supabase/supabase-js` em `register-part/index.ts` ainda na versão antiga. Lista completa em `docs/revisao-critica.md`
 <!-- rodada 19: outros agentes -->
 
 ### Pendências conhecidas (sem dono)

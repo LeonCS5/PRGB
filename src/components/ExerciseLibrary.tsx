@@ -13,7 +13,7 @@ import {
   type ExerciseLevel,
   type ExercisePattern
 } from '../services/exercises';
-import { KEYS } from '../services/musicTheory';
+import { KEYS, keyName } from '../services/musicTheory';
 import { getPersonalBest } from '../services/records';
 import { expandItem, formatMinutes, KEY_CYCLES, sessionDurationMs, type KeyCycle, type SessionItem } from '../services/practiceSession';
 
@@ -162,7 +162,7 @@ const Controls: React.FC<ControlsProps> = ({ category, view, onViewChange, patte
       )}
       {hasKeys && (
         <ChipGroup legend={all ? 'Começar no tom' : 'Tom'} hint="Nota em que o exercício começa. Se não sabe, deixe em Lá." name="exercise-key" value={String(view.key)}
-          options={KEYS.map((name, index) => ({ value: String(index), label: name }))}
+          options={KEYS.map((_, index) => ({ value: String(index), label: keyName(index) }))}
           onChange={(value) => onViewChange({ ...view, key: Number(value) })} />
       )}
       {all && hasKeys && (
