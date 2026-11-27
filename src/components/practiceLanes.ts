@@ -10,8 +10,22 @@ import { STRING_THICKNESS_PX } from './gameplayPalette';
 import { traceNote, traceNoteDetail } from './noteStyles';
 
 export const HIT_LINE_X = 140; // practice hit target X
-export const PIXELS_PER_MS = 0.35; // at 1×; scaled by the playback speed (lowered from 0.45 for a wider reading window)
+export const PIXELS_PER_MS = 0.35; // at 1×; scaled by the playback speed (wider reading window)
 const MAX_NOTE_HEIGHT = 46;
+
+// Subtle 3D fretboard tilt across the entire track: top strings sit slightly further back
+// (compressed toward horizontal center) and bottom strings sit slightly closer.
+const PERSPECTIVE_TOP_SCALE = 0.945;
+const PERSPECTIVE_BOTTOM_SCALE = 1.02;
+
+export const perspectiveX = (x: number, y: number, lane: LaneLayout, width: number): number => {
+  const top = lane.top + lane.topMargin;
+  const span = Math.max(1, lane.height - lane.topMargin * 2);
+  const t = Math.max(0, Math.min(1, (y - top) / span));
+  const scale = PERSPECTIVE_TOP_SCALE + (PERSPECTIVE_BOTTOM_SCALE - PERSPECTIVE_TOP_SCALE) * t;
+  const cx = width * 0.5;
+  return cx + (x - cx) * scale;
+};
 
 export interface GamePalette {
   background: string;
@@ -86,6 +100,22 @@ export const drawLaneBackground = (
 ): void => {
   const lineWidth = STRING_THICKNESS_PX[strings.thickness];
   const availableHeight = lane.height - lane.topMargin * 2;
+  const boardTop = lane.top + lane.topMargin - 16;
+  const boardHeight = availableHeight + 32;
+
+  // 0. Subtle 3D fretboard surface behind the strings
+  const boardGrad = ctx.createLinearGradient(0, boardTop, 0, boardTop + boardHeight);
+  boardGrad.addColorStop(0, 'rgba(0, 0, 0, 0.22)');
+  boardGrad.addColorStop(0.5, 'rgba(255, 255, 255, 0.03)');
+  boardGrad.addColorStop(1, 'rgba(255, 255, 255, 0.06)');
+  ctx.fillStyle = boardGrad;
+  ctx.fillRect(0, boardTop, width, boardHeight);
+
+  // Subtle top & bottom fretboard edges
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+  ctx.fillRect(0, boardTop, width, 1.5);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.14)';
+  ctx.fillRect(0, boardTop + boardHeight - 1.5, width, 1.5);
 
   // 1. Draw horizontal string rails
   for (let s = 1; s <= lane.stringCount; s++) {
@@ -101,6 +131,14 @@ export const drawLaneBackground = (
     ctx.lineTo(width, y);
     ctx.stroke();
     if (strings.laneOpacity < 100) ctx.globalAlpha = 1;
+
+    // Subtle drop shadow under the string for depth above the fretboard
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
+    ctx.lineWidth = lineWidth + 1.5;
+    ctx.moveTo(0, y + 2);
+    ctx.lineTo(width, y + 2);
+    ctx.stroke();
 
     // Halo of the string: a wider translucent stroke, drawn once into the cached layer
     if (strings.glow > 0) {

@@ -16,7 +16,9 @@ import {
   MessageSquareWarning,
   Repeat,
   SkipForward,
-  X
+  X,
+  Minus,
+  Plus
 } from 'lucide-react';
 import { BrandMark } from './BrandMark';
 import { AudioRouteNotice } from './AudioRouting';
@@ -34,6 +36,7 @@ import {
   noteHeightFor,
   playHitFeedback,
   stringY,
+  perspectiveX,
   HIT_LINE_X,
   PIXELS_PER_MS,
   type HitEffects,
@@ -615,6 +618,25 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     const pixelsPerMs = PIXELS_PER_MS * speed;
     const shownPosition = Math.max(position, -Math.min(LEAD_IN_MOVING_MS * speed, (width - HIT_LINE_X - LEAD_IN_RIGHT_MARGIN) / pixelsPerMs));
 
+    // 2.5 Draw subtle 3D-tilted scrolling beat/measure lines across the fretboard
+    for (let laneIndex = 0; laneIndex < lanes.length; laneIndex++) {
+      const layout = layouts[laneIndex];
+      const boardTop = layout.top + layout.topMargin - 16;
+      const boardBottom = layout.top + layout.height - layout.topMargin + 16;
+      for (const beat of clockTab.beatGrid) {
+        const beatX = HIT_LINE_X + (beat.timeMs - shownPosition) * pixelsPerMs;
+        if (beatX < -60 || beatX > width + 60) continue;
+        const xTop = perspectiveX(beatX, boardTop, layout, width);
+        const xBottom = perspectiveX(beatX, boardBottom, layout, width);
+        ctx.beginPath();
+        ctx.strokeStyle = beat.accent ? 'rgba(255, 255, 255, 0.14)' : 'rgba(255, 255, 255, 0.05)';
+        ctx.lineWidth = beat.accent ? 1.5 : 1;
+        ctx.moveTo(xTop, boardTop);
+        ctx.lineTo(xBottom, boardBottom);
+        ctx.stroke();
+      }
+    }
+
     // 3. Draw the notes, lane by lane (judgeNotes has already decided their state this frame)
     for (let laneIndex = 0; laneIndex < lanes.length; laneIndex++) {
       const layout = layouts[laneIndex];
@@ -625,14 +647,16 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
       const drawNote = (graphic: NoteGraphic, noteX: number, noteY: number, state: NoteState) => {
         const { note } = graphic;
         if (noteX < -100 || noteX > width + 100 || !noteHeight) return;
+        const tiltedX = perspectiveX(noteX, noteY, layout, width);
         if (note.chord) {
           ctx.font = 'bold 15px Inter, sans-serif';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillStyle = palette.signal;
-          ctx.fillText(note.chord.label, noteX, layout.top + Math.max(11, layout.topMargin * 0.3));
+          const chordY = layout.top + Math.max(11, layout.topMargin * 0.3);
+          ctx.fillText(note.chord.label, perspectiveX(noteX, chordY, layout, width), chordY);
         }
-        drawNoteGraphic(ctx, graphic, kit, noteX, noteY, state, noteHeight, trail);
+        drawNoteGraphic(ctx, graphic, kit, tiltedX, noteY, state, noteHeight, trail);
       };
 
       for (const graphic of laneGraphics[laneIndex]) {
@@ -1021,7 +1045,45 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
               <Repeat size={16} aria-hidden="true" /><span>Modo treino</span>{isTraining && <span className="font-mono">· volta {lap}</span>}
             </button>
           )}
-          <label title={lockedHint} className={toolClass + ' max-sm:px-2' + ((isOnline || ranked.isOn) ? ' cursor-not-allowed! opacity-50' : '')}><span className="sr-only">Velocidade</span><select aria-label="Velocidade" value={speed} disabled={isOnline || ranked.isOn} aria-describedby={lockedHelp} onChange={event => changeSpeed(Number(event.target.value))} className="min-h-11 cursor-pointer bg-ink-800 font-mono disabled:cursor-not-allowed">{SPEED_OPTIONS.map(value => <option key={value} value={value}>{formatSpeedLabel(value)}</option>)}</select></label>
+          <div title={lockedHint} className={'inline-flex min-h-11 shrink-0 items-center rounded-xl border border-ink-700 bg-ink-800 text-xs font-semibold text-ink-200 transition hover:border-ink-500' + ((isOnline || ranked.isOn) ? ' cursor-not-allowed opacity-50' : '')}>
+            <button
+              type="button"
+              aria-label="Diminuir velocidade"
+              disabled={isOnline || ranked.isOn || SPEED_OPTIONS.indexOf(speed) <= 0}
+              onClick={() => {
+                const idx = SPEED_OPTIONS.indexOf(speed);
+                if (idx > 0) changeSpeed(SPEED_OPTIONS[idx - 1]);
+              }}
+              className="flex min-h-11 min-w-10 cursor-pointer items-center justify-center rounded-l-xl text-ink-300 transition hover:bg-ink-700/60 hover:text-ink-100 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Minus size={14} aria-hidden="true" />
+            </button>
+            <label className="flex min-h-11 items-center">
+              <span className="sr-only">Velocidade</span>
+              <select
+                aria-label="Velocidade"
+                value={speed}
+                disabled={isOnline || ranked.isOn}
+                aria-describedby={lockedHelp}
+                onChange={event => changeSpeed(Number(event.target.value))}
+                className="min-h-11 cursor-pointer bg-transparent px-1.5 text-center font-mono focus:outline-none disabled:cursor-not-allowed"
+              >
+                {SPEED_OPTIONS.map(value => <option key={value} value={value} className="bg-ink-800">{formatSpeedLabel(value)}</option>)}
+              </select>
+            </label>
+            <button
+              type="button"
+              aria-label="Aumentar velocidade"
+              disabled={isOnline || ranked.isOn || SPEED_OPTIONS.indexOf(speed) >= SPEED_OPTIONS.length - 1}
+              onClick={() => {
+                const idx = SPEED_OPTIONS.indexOf(speed);
+                if (idx >= 0 && idx < SPEED_OPTIONS.length - 1) changeSpeed(SPEED_OPTIONS[idx + 1]);
+              }}
+              className="flex min-h-11 min-w-10 cursor-pointer items-center justify-center rounded-r-xl text-ink-300 transition hover:bg-ink-700/60 hover:text-ink-100 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Plus size={14} aria-hidden="true" />
+            </button>
+          </div>
           <GameMoreSheet>{(close) => <>
             <button aria-label="Metrônomo" aria-pressed={metronomeEnabled} onClick={() => setMetronomeEnabled(!metronomeEnabled)} className={toolClass + (metronomeEnabled ? ' border-amp-400! text-amp-300!' : '')}><Clock size={16} /><span>Metrônomo</span></button>
             <button aria-label="Ouvir as notas da tab" aria-pressed={synthAudioEnabled} onClick={() => setSynthAudioEnabled(!synthAudioEnabled)} className={toolClass + (synthAudioEnabled ? ' border-signal-500 text-signal-300' : '')}>{synthAudioEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}<span>Ouvir as notas da tab</span></button>
