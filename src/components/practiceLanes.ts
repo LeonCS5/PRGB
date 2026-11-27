@@ -10,7 +10,7 @@ import { STRING_THICKNESS_PX } from './gameplayPalette';
 import { traceNote, traceNoteDetail } from './noteStyles';
 
 export const HIT_LINE_X = 140; // practice hit target X
-export const PIXELS_PER_MS = 0.35; // at 1×; scaled by the playback speed (wider reading window)
+export const PIXELS_PER_MS = 0.25; // at 1×; calm scroll speed to avoid eye strain / vertigo
 const MAX_NOTE_HEIGHT = 46;
 
 // Subtle 3D fretboard tilt across the entire track: top strings sit slightly further back
@@ -213,7 +213,8 @@ export interface NoteGraphic {
   detail: Path2D | null; // stroke-only marks inside the note (digital style)
 }
 
-// Pill shapes are shared between notes of the same size, so a song builds only a handful of Path2D
+// Pill shapes are shared between notes of the same size, so a song builds only a handful of Path2D.
+// Short single-tap notes render as compact circles (fret only); longer/sustained notes stretch into pills.
 export const buildNoteGraphics = (notes: NoteEvent[], speed: number, noteHeight: number, style: NoteStyle = 'classic'): NoteGraphic[] => {
   const paths = new Map<string, { path: Path2D; detail: Path2D | null }>();
   const scale = noteHeight / MAX_NOTE_HEIGHT;
@@ -222,13 +223,17 @@ export const buildNoteGraphics = (notes: NoteEvent[], speed: number, noteHeight:
   return notes.map((note) => {
     const technique = `${note.bendSemitones ? '↑' : ''}${note.harmonic ? 'H' : ''}${note.tapping ? 'T' : ''}`;
     const fret = note.dead ? 'x' : note.ghost ? `(${note.fret})` : `${note.fret}`;
-    const subtitle = note.dead ? '' : technique || note.noteName;
+    const durationPx = note.durationMs * PIXELS_PER_MS * speed * 0.85;
+    const isShortTap = !technique && durationPx < noteHeight * 1.45;
+    const subtitle = note.dead || isShortTap ? '' : technique || note.noteName;
     const fretWidth = fret.length * fretFontSize * 0.75;
-    const left = -(10 * scale + fretWidth / 2);
+    const left = isShortTap ? -Math.max(noteHeight, fretWidth + 14 * scale) / 2 : -(noteHeight / 2);
     const subtitleX = fretWidth / 2 + 8 * scale;
-    const labelWidth = 20 * scale + fretWidth + (subtitle ? 8 * scale + subtitle.length * subtitleFontSize * 0.65 : 0);
-    const width = Math.max((technique ? 104 : 70) * scale, labelWidth, note.durationMs * PIXELS_PER_MS * speed * 0.7);
-    const key = `${width}:${noteHeight}`;
+    const labelWidth = (noteHeight / 2) + fretWidth / 2 + (subtitle ? 8 * scale + subtitle.length * subtitleFontSize * 0.65 + 10 * scale : 0);
+    const width = isShortTap
+      ? Math.max(noteHeight, fretWidth + 14 * scale)
+      : Math.max((technique ? 100 : 72) * scale, labelWidth, durationPx);
+    const key = `${left}:${width}:${noteHeight}`;
     let shape = paths.get(key);
     if (!shape) {
       const path = new Path2D();
