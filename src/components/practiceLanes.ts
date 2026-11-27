@@ -10,8 +10,39 @@ import { STRING_THICKNESS_PX } from './gameplayPalette';
 import { traceNote, traceNoteDetail } from './noteStyles';
 
 export const HIT_LINE_X = 140; // practice hit target X
-export const PIXELS_PER_MS = 0.45; // at 1×; scaled by the playback speed
+export const PIXELS_PER_MS = 0.35; // at 1×; scaled by the playback speed (lowered from 0.45 for a wider reading window)
 const MAX_NOTE_HEIGHT = 46;
+
+// ── 3D perspective helpers ──────────────────────────────────────────────────
+// The highway is drawn in a Yousician-style pseudo-3D: notes spawn at a
+// vanishing area on the right and grow as they scroll left toward the hit line.
+// All math is pure functions so the judging logic stays in flat space (unchanged).
+
+/** How much a note shrinks at the far end of the highway (0 = invisible, 1 = no shrink). */
+export const PERSPECTIVE_FAR_SCALE = 0.35;
+/** Vertical compression at the far end: strings converge toward the centre. */
+export const PERSPECTIVE_FAR_SQUEEZE = 0.4;
+
+/**
+ * Returns the perspective scale factor for a note at `noteX` on a canvas of `width` pixels.
+ * The hit line (`HIT_LINE_X`) is scale 1; the right edge is `PERSPECTIVE_FAR_SCALE`.
+ */
+export const perspectiveScale = (noteX: number, width: number): number => {
+  if (noteX <= HIT_LINE_X) return 1;
+  const t = Math.min(1, (noteX - HIT_LINE_X) / Math.max(1, width - HIT_LINE_X));
+  return 1 - t * (1 - PERSPECTIVE_FAR_SCALE);
+};
+
+/**
+ * Vertically shifts a note's Y toward the lane centre as it recedes.
+ * `baseY` is the flat-space Y; `laneCentreY` is the vertical midpoint of the lane.
+ */
+export const perspectiveY = (baseY: number, laneCentreY: number, scale: number): number =>
+  laneCentreY + (baseY - laneCentreY) * (PERSPECTIVE_FAR_SQUEEZE + (1 - PERSPECTIVE_FAR_SQUEEZE) * scale);
+
+/** Centre Y of a lane (the midpoint between the first and last string). */
+export const laneCentre = (lane: LaneLayout): number =>
+  lane.top + lane.topMargin + (lane.stringCount - 1) * lane.stringSpacing / 2;
 
 export interface GamePalette {
   background: string;
@@ -74,6 +105,7 @@ export type Canvas2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContex
  * Static part of a lane (rails, string labels, hit line), drawn once into the cached background.
  * `label` names the player in duo mode. Play Free moves the line to where the notes are born.
  * `strings` only changes how the string lines look; the defaults draw exactly the original lane.
+ * String lines converge toward the centre at the right edge for a 3D-highway feel.
  */
 export const drawLaneBackground = (
   ctx: Canvas2D,
@@ -86,30 +118,38 @@ export const drawLaneBackground = (
 ): void => {
   const lineWidth = STRING_THICKNESS_PX[strings.thickness];
   const availableHeight = lane.height - lane.topMargin * 2;
+  const centre = laneCentre(lane);
 
-  // 1. Draw horizontal string rails
+  // 1. Draw horizontal string rails with perspective convergence
   for (let s = 1; s <= lane.stringCount; s++) {
-    const y = stringY(lane, s);
+    const yFlat = stringY(lane, s);
     const color = palette.strings[s - 1] || palette.muted;
 
-    // String line glow & rail
+    // The far-right Y converges toward the lane centre
+    const farScale = PERSPECTIVE_FAR_SCALE;
+    const yFar = centre + (yFlat - centre) * (PERSPECTIVE_FAR_SQUEEZE + (1 - PERSPECTIVE_FAR_SQUEEZE) * farScale);
+
+    // String line glow & rail — now a slanted line
     ctx.beginPath();
     ctx.strokeStyle = palette.rail;
     ctx.lineWidth = 14;
     if (strings.laneOpacity < 100) ctx.globalAlpha = strings.laneOpacity / 100;
-    ctx.moveTo(0, y);
-    ctx.lineTo(width, y);
+    ctx.moveTo(0, yFlat);
+    ctx.lineTo(hitLineX, yFlat);
+    // After the hit line the rails converge
+    ctx.lineTo(width, yFar);
     ctx.stroke();
     if (strings.laneOpacity < 100) ctx.globalAlpha = 1;
 
-    // Halo of the string: a wider translucent stroke, drawn once into the cached layer
+    // Halo of the string
     if (strings.glow > 0) {
       ctx.beginPath();
       ctx.strokeStyle = color;
       ctx.lineWidth = lineWidth + 6;
       ctx.globalAlpha = 0.32 * strings.glow / 100;
-      ctx.moveTo(0, y);
-      ctx.lineTo(width, y);
+      ctx.moveTo(0, yFlat);
+      ctx.lineTo(hitLineX, yFlat);
+      ctx.lineTo(width, yFar);
       ctx.stroke();
       ctx.globalAlpha = 1;
     }
@@ -119,8 +159,9 @@ export const drawLaneBackground = (
     ctx.strokeStyle = color;
     ctx.lineWidth = lineWidth;
     if (strings.lineStyle === 'dashed') ctx.setLineDash([14, 6]);
-    ctx.moveTo(0, y);
-    ctx.lineTo(width, y);
+    ctx.moveTo(0, yFlat);
+    ctx.lineTo(hitLineX, yFlat);
+    ctx.lineTo(width, yFar);
     ctx.stroke();
     if (strings.lineStyle === 'dashed') ctx.setLineDash([]);
 
@@ -130,9 +171,9 @@ export const drawLaneBackground = (
     ctx.textBaseline = 'middle';
     ctx.fillStyle = palette.background;
     const labelHeight = Math.min(26, lane.stringSpacing * 0.9);
-    ctx.fillRect(10, y - labelHeight / 2, 62, labelHeight);
+    ctx.fillRect(10, yFlat - labelHeight / 2, 62, labelHeight);
     ctx.fillStyle = color;
-    ctx.fillText(`${s} / ${['e', 'B', 'G', 'D', 'A', 'E'][s - 1] || s}`, 18, y);
+    ctx.fillText(`${s} / ${['e', 'B', 'G', 'D', 'A', 'E'][s - 1] || s}`, 18, yFlat);
   }
 
   // 2. Draw Practice Playhead / Target Hit Zone Bar

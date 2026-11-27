@@ -13,7 +13,7 @@ export interface SessionSettings {
 
 export const DEFAULT_SESSION_SETTINGS: SessionSettings = { speed: 1, metronome: false, synth: true, training: false };
 
-export const SPEED_OPTIONS: readonly number[] = [0.5, 0.75, 1];
+export const SPEED_OPTIONS: readonly number[] = [0.25, 0.5, 0.75, 1, 1.25, 1.5];
 
 // Old sessions are of no use: only the last few are kept
 const MAX_SESSIONS = 10;
