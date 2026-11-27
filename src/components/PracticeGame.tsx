@@ -36,9 +36,6 @@ import {
   stringY,
   HIT_LINE_X,
   PIXELS_PER_MS,
-  perspectiveScale,
-  perspectiveY,
-  laneCentre,
   type HitEffects,
   type LaneLayout,
   type NoteGraphic
@@ -623,33 +620,19 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
       const layout = layouts[laneIndex];
       const noteHeight = noteHeights[laneIndex];
       const noteStates = noteStatesRef.current[laneIndex];
-      const centre = laneCentre(layout);
 
-      // Draws one note pill with 3D perspective, culled off screen
+      // Draws one note pill, culled off screen
       const drawNote = (graphic: NoteGraphic, noteX: number, noteY: number, state: NoteState) => {
         const { note } = graphic;
         if (noteX < -100 || noteX > width + 100 || !noteHeight) return;
-        // ── perspective transform ──
-        const scale = perspectiveScale(noteX, width);
-        const pY = perspectiveY(noteY, centre, scale);
-        const scaledH = noteHeight * scale;
-
-        ctx.save();
         if (note.chord) {
-          ctx.font = `bold ${Math.round(15 * scale)}px Inter, sans-serif`;
+          ctx.font = 'bold 15px Inter, sans-serif';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillStyle = palette.signal;
-          ctx.globalAlpha = Math.max(0.3, scale);
-          ctx.fillText(note.chord.label, noteX, layout.top + Math.max(11, layout.topMargin * 0.3) * scale);
-          ctx.globalAlpha = 1;
+          ctx.fillText(note.chord.label, noteX, layout.top + Math.max(11, layout.topMargin * 0.3));
         }
-        // Scale the note around its own centre
-        ctx.translate(noteX, pY);
-        ctx.scale(scale, scale);
-        ctx.translate(-noteX, -pY);
-        drawNoteGraphic(ctx, graphic, kit, noteX, pY, state, scaledH, trail);
-        ctx.restore();
+        drawNoteGraphic(ctx, graphic, kit, noteX, noteY, state, noteHeight, trail);
       };
 
       for (const graphic of laneGraphics[laneIndex]) {

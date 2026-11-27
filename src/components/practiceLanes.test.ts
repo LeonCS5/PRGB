@@ -61,7 +61,7 @@ const [solo] = layoutLanes(400, [6]);
 const [first, second] = layoutLanes(400, [6, 4]);
 
 describe('drawLaneBackground', () => {
-  it('draws rails that converge past the hit line and match between explicit and default strings', () => {
+  it('draws the same instructions as before with the default string settings (solo, duo lane, Play Free line)', () => {
     const cases: Array<[LaneLayout, { text: string; color: string } | null, number | undefined]> = [
       [solo, null, undefined],
       [first, { text: 'JOGADOR 1 · CANAL 1', color: '#8cf1ff' }, undefined],
@@ -69,12 +69,15 @@ describe('drawLaneBackground', () => {
       [solo, null, 880]
     ];
     for (const [lane, label, hitLineX] of cases) {
+      const before = createRecorder();
+      legacyLane(before.ctx, lane, 1000, ORIGINAL_PALETTE, label, hitLineX);
       const withDefaults = createRecorder();
       drawLaneBackground(withDefaults.ctx, lane, 1000, ORIGINAL_PALETTE, label, hitLineX, DEFAULT_STRINGS);
       const omitted = createRecorder();
       drawLaneBackground(omitted.ctx, lane, 1000, ORIGINAL_PALETTE, label, hitLineX);
-      expect(omitted.log).toEqual(withDefaults.log);
-      expect(withDefaults.log.length).toBeGreaterThan(50);
+      expect(withDefaults.log).toEqual(before.log);
+      expect(omitted.log).toEqual(before.log);
+      expect(before.log.length).toBeGreaterThan(50);
     }
   });
 
