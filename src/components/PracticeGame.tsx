@@ -18,7 +18,8 @@ import {
   SkipForward,
   X,
   Minus,
-  Plus
+  Plus,
+  ZoomIn
 } from 'lucide-react';
 import { BrandMark } from './BrandMark';
 import { AudioRouteNotice } from './AudioRouting';
@@ -55,7 +56,7 @@ import { DEFAULT_PLAYER_NAMES, type GamePart, type PersonalBestOutcome, type Ran
 import { useRanking } from '../context/ranking';
 import type { RankedPhase } from '../context/rankedRun';
 import { useRankedRun } from '../context/useRankedRun';
-import { getSessionSettings, isLegendSeen, markLegendSeen, saveSessionSettings, SPEED_OPTIONS } from '../context/sessionSettings';
+import { getSessionSettings, isLegendSeen, markLegendSeen, saveSessionSettings, SPEED_OPTIONS, ZOOM_OPTIONS } from '../context/sessionSettings';
 import { buildCountIn, MetronomeScheduler, SoundFX } from '../services/synthAudio';
 import { isExerciseSongId } from '../services/exerciseIds';
 import { isRankableSongId } from '../services/rankable';
@@ -237,14 +238,15 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   // Each exercise of a practice session remounts the game: the choices made in the session come back as the start
   const [startSettings] = useState(() => getSessionSettings(session?.queue.id));
   const [speed, setSpeed] = useState(startSettings.speed);
+  const [zoom, setZoom] = useState(startSettings.zoom ?? 1);
   const [synthAudioEnabled, setSynthAudioEnabled] = useState(startSettings.synth);
   const [metronomeEnabled, setMetronomeEnabled] = useState(startSettings.metronome);
   // Training mode loops an exercise for as long as the player wants: each lap starts as the last one ends
   const [isTraining, setIsTraining] = useState(startSettings.training);
   const queueId = session?.queue.id ?? null;
   useEffect(() => {
-    if (queueId !== null) saveSessionSettings(queueId, { speed, metronome: metronomeEnabled, synth: synthAudioEnabled, training: isTraining });
-  }, [queueId, speed, metronomeEnabled, synthAudioEnabled, isTraining]);
+    if (queueId !== null) saveSessionSettings(queueId, { speed, metronome: metronomeEnabled, synth: synthAudioEnabled, training: isTraining, zoom });
+  }, [queueId, speed, metronomeEnabled, synthAudioEnabled, isTraining, zoom]);
   const [lap, setLap] = useState(1);
   const lapRef = useRef(1);
   // The clock turns a little before the lap ends, so the old lap's last notes and the new lap's first ones are both
@@ -363,8 +365,8 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   const fallbackLayouts = useMemo(() => layoutLanes(400, lanes.map((lane) => lane.part.tab.stringCount)), [lanes]);
 
   const laneGraphics = useMemo(
-    () => lanes.map((lane, index) => buildNoteGraphics(lane.part.tab.notes, speed, noteHeights[index], look.noteStyle)),
-    [lanes, speed, noteHeights, look.noteStyle]
+    () => lanes.map((lane, index) => buildNoteGraphics(lane.part.tab.notes, speed, noteHeights[index], look.noteStyle, zoom)),
+    [lanes, speed, noteHeights, look.noteStyle, zoom]
   );
 
   // Every judgement of a pending note goes through here, with the full pitch of the note's player
@@ -553,7 +555,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
         if (note.dead) continue;
         for (const { lapNumber, at } of passes) {
           const key = synthKey(laneIndex, note.id, lapNumber);
-          if (note.timeMs >= at - 40 && note.timeMs <= at + 40 && !synthPlayedNotesRef.current.has(key)) {
+          if (note.timeMs <= at && note.timeMs >= at - 60 && !synthPlayedNotesRef.current.has(key)) {
             synthPlayedNotesRef.current.add(key);
             SoundFX.playGuitarNote(note.freqHz, note.durationMs, 0.25);
           }
@@ -615,7 +617,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     ctx.textBaseline = 'middle';
     ctx.font = 'bold 13px Inter, sans-serif';
     const position = positionRef.current;
-    const pixelsPerMs = PIXELS_PER_MS * speed;
+    const pixelsPerMs = PIXELS_PER_MS * speed * zoom;
     const shownPosition = Math.max(position, -Math.min(LEAD_IN_MOVING_MS * speed, (width - HIT_LINE_X - LEAD_IN_RIGHT_MARGIN) / pixelsPerMs));
 
     // 2.5 Draw subtle 3D-tilted scrolling beat/measure lines across the fretboard
@@ -626,8 +628,8 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
       for (const beat of clockTab.beatGrid) {
         const beatX = HIT_LINE_X + (beat.timeMs - shownPosition) * pixelsPerMs;
         if (beatX < -60 || beatX > width + 60) continue;
-        const xTop = perspectiveX(beatX, boardTop, layout, width);
-        const xBottom = perspectiveX(beatX, boardBottom, layout, width);
+        const xTop = perspectiveX(beatX, boardTop, layout);
+        const xBottom = perspectiveX(beatX, boardBottom, layout);
         ctx.beginPath();
         ctx.strokeStyle = beat.accent ? 'rgba(255, 255, 255, 0.14)' : 'rgba(255, 255, 255, 0.05)';
         ctx.lineWidth = beat.accent ? 1.5 : 1;
@@ -647,14 +649,14 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
       const drawNote = (graphic: NoteGraphic, noteX: number, noteY: number, state: NoteState) => {
         const { note } = graphic;
         if (noteX < -100 || noteX > width + 100 || !noteHeight) return;
-        const tiltedX = perspectiveX(noteX, noteY, layout, width);
+        const tiltedX = perspectiveX(noteX, noteY, layout);
         if (note.chord) {
           ctx.font = 'bold 15px Inter, sans-serif';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
           ctx.fillStyle = palette.signal;
           const chordY = layout.top + Math.max(11, layout.topMargin * 0.3);
-          ctx.fillText(note.chord.label, perspectiveX(noteX, chordY, layout, width), chordY);
+          ctx.fillText(note.chord.label, perspectiveX(noteX, chordY, layout), chordY);
         }
         drawNoteGraphic(ctx, graphic, kit, tiltedX, noteY, state, noteHeight, trail);
       };
@@ -1084,6 +1086,18 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
               <Plus size={14} aria-hidden="true" />
             </button>
           </div>
+          <label title="Quantas notas aparecem na pista (menor = mais notas visíveis)" className={toolClass + ' max-sm:px-2'}>
+            <ZoomIn size={15} aria-hidden="true" />
+            <span className="sr-only">Zoom da pista</span>
+            <select
+              aria-label="Zoom da pista"
+              value={zoom}
+              onChange={event => setZoom(Number(event.target.value))}
+              className="min-h-11 cursor-pointer bg-ink-800 font-mono"
+            >
+              {ZOOM_OPTIONS.map(value => <option key={value} value={value}>{formatSpeedLabel(value)}</option>)}
+            </select>
+          </label>
           <GameMoreSheet>{(close) => <>
             <button aria-label="Metrônomo" aria-pressed={metronomeEnabled} onClick={() => setMetronomeEnabled(!metronomeEnabled)} className={toolClass + (metronomeEnabled ? ' border-amp-400! text-amp-300!' : '')}><Clock size={16} /><span>Metrônomo</span></button>
             <button aria-label="Ouvir as notas da tab" aria-pressed={synthAudioEnabled} onClick={() => setSynthAudioEnabled(!synthAudioEnabled)} className={toolClass + (synthAudioEnabled ? ' border-signal-500 text-signal-300' : '')}>{synthAudioEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}<span>Ouvir as notas da tab</span></button>

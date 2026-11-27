@@ -13,18 +13,17 @@ export const HIT_LINE_X = 140; // practice hit target X
 export const PIXELS_PER_MS = 0.25; // at 1×; calm scroll speed to avoid eye strain / vertigo
 const MAX_NOTE_HEIGHT = 46;
 
-// Subtle 3D fretboard tilt across the entire track: top strings sit slightly further back
-// (compressed toward horizontal center) and bottom strings sit slightly closer.
+// Subtle 3D fretboard tilt across the track: pivots around HIT_LINE_X so the hit target
+// stays aligned across every string while beat/bar lines tilt gently with depth.
 const PERSPECTIVE_TOP_SCALE = 0.945;
 const PERSPECTIVE_BOTTOM_SCALE = 1.02;
 
-export const perspectiveX = (x: number, y: number, lane: LaneLayout, width: number): number => {
+export const perspectiveX = (x: number, y: number, lane: LaneLayout): number => {
   const top = lane.top + lane.topMargin;
   const span = Math.max(1, lane.height - lane.topMargin * 2);
   const t = Math.max(0, Math.min(1, (y - top) / span));
   const scale = PERSPECTIVE_TOP_SCALE + (PERSPECTIVE_BOTTOM_SCALE - PERSPECTIVE_TOP_SCALE) * t;
-  const cx = width * 0.5;
-  return cx + (x - cx) * scale;
+  return HIT_LINE_X + (x - HIT_LINE_X) * scale;
 };
 
 export interface GamePalette {
@@ -215,7 +214,7 @@ export interface NoteGraphic {
 
 // Pill shapes are shared between notes of the same size, so a song builds only a handful of Path2D.
 // Short single-tap notes render as compact circles (fret only); longer/sustained notes stretch into pills.
-export const buildNoteGraphics = (notes: NoteEvent[], speed: number, noteHeight: number, style: NoteStyle = 'classic'): NoteGraphic[] => {
+export const buildNoteGraphics = (notes: NoteEvent[], speed: number, noteHeight: number, style: NoteStyle = 'classic', zoom: number = 1): NoteGraphic[] => {
   const paths = new Map<string, { path: Path2D; detail: Path2D | null }>();
   const scale = noteHeight / MAX_NOTE_HEIGHT;
   const fretFontSize = 23 * scale;
@@ -223,7 +222,7 @@ export const buildNoteGraphics = (notes: NoteEvent[], speed: number, noteHeight:
   return notes.map((note) => {
     const technique = `${note.bendSemitones ? '↑' : ''}${note.harmonic ? 'H' : ''}${note.tapping ? 'T' : ''}`;
     const fret = note.dead ? 'x' : note.ghost ? `(${note.fret})` : `${note.fret}`;
-    const durationPx = note.durationMs * PIXELS_PER_MS * speed * 0.85;
+    const durationPx = note.durationMs * PIXELS_PER_MS * speed * zoom * 0.85;
     const isShortTap = !technique && durationPx < noteHeight * 1.45;
     const subtitle = note.dead || isShortTap ? '' : technique || note.noteName;
     const fretWidth = fret.length * fretFontSize * 0.75;

@@ -9,11 +9,13 @@ export interface SessionSettings {
   metronome: boolean;
   synth: boolean;
   training: boolean;
+  zoom?: number;
 }
 
-export const DEFAULT_SESSION_SETTINGS: SessionSettings = { speed: 1, metronome: false, synth: true, training: false };
+export const DEFAULT_SESSION_SETTINGS: SessionSettings = { speed: 1, metronome: false, synth: true, training: false, zoom: 1 };
 
 export const SPEED_OPTIONS: readonly number[] = [0.25, 0.4, 0.5, 0.65, 0.75, 0.85, 1, 1.15, 1.25, 1.5];
+export const ZOOM_OPTIONS: readonly number[] = [0.6, 0.8, 1, 1.25, 1.5];
 
 // Old sessions are of no use: only the last few are kept
 const MAX_SESSIONS = 10;
