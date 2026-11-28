@@ -12,7 +12,9 @@ const BUDGETS = [
   { name: 'supabase client (supabase-*)', test: (file) => file.startsWith('supabase-'), max: 65 * KB }
 ];
 const OTHER_CHUNK_MAX = 30 * KB; // every other lazy chunk (screens, pieces, engines)
-const TOTAL_MAX = 340 * KB; // every chunk together: only matters for the offline precache, not for the first visit
+// Every chunk together: only matters for the offline precache, not for the first visit.
+// 340 -> 350 kB for the lane techniques (blocks, slides, palm mute), the spacing map, the guide shadow and its options.
+const TOTAL_MAX = 350 * KB;
 const FIRST_LOAD_MAX = 140 * KB; // entry + react: what a first visitor downloads before the page works
 
 const files = readdirSync(DIR).filter((file) => file.endsWith('.js'));
