@@ -11,6 +11,29 @@ describe('validateAppearance', () => {
     }
   });
 
+  it('defaults the guide shadow on (intensity normal) and the hit sounds on', () => {
+    expect(DEFAULT_APPEARANCE.guide).toMatchObject({ enabled: true, intensity: 2, style: 'shadow' });
+    expect(DEFAULT_APPEARANCE.hitSounds).toBe(true);
+  });
+
+  it('reads old saved looks without the new fields as the defaults, and validates the new ones field by field', () => {
+    const old = { themeId: 'refined', effects: { hitPulse: true } };
+    const migrated = validateAppearance(old);
+    expect(migrated.guide).toEqual(DEFAULT_APPEARANCE.guide);
+    expect(migrated.hitSounds).toBe(true);
+    expect(migrated.themeId).toBe('refined');
+    expect(validateAppearance({ guide: { enabled: false, intensity: 3, style: 'shadow' }, hitSounds: false }).guide).toEqual({ ...DEFAULT_APPEARANCE.guide, enabled: false, intensity: 3, style: 'shadow' });
+    expect(validateAppearance({ guide: { enabled: 'no', intensity: 9 }, hitSounds: 'off' }).guide).toEqual(DEFAULT_APPEARANCE.guide);
+    expect(validateAppearance({ guide: 'x', hitSounds: 0 })).toEqual(DEFAULT_APPEARANCE);
+    expect(validateAppearance({ hitSounds: false }).hitSounds).toBe(false);
+  });
+
+  it('keeps the guide style, and an old look without it (or with an unknown one) gets the default', () => {
+    expect(validateAppearance({ guide: { enabled: true, intensity: 2, style: 'hologram' } }).guide.style).toBe('hologram');
+    expect(validateAppearance({ guide: { enabled: true, intensity: 2 } }).guide.style).toBe('shadow');
+    expect(validateAppearance({ guide: { enabled: true, intensity: 2, style: 'neon' } }).guide.style).toBe('shadow');
+  });
+
   it('keeps valid fields and resets only the invalid ones', () => {
     const result = validateAppearance({
       themeId: 'electric-neon', uiStyle: 'banana', font: 'technical', background: 42, noteStyle: 'neon',

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ChevronDown, Eye } from 'lucide-react';
 import { applyPreset, isPresetCustomized, resetAppearance, setAppearance, useAppearance, useGameplayAppearance } from '../appearance/useAppearance';
 import { useGamePalette } from '../appearance/useGamePalette';
+import { GuideSection } from './appearance/GuideSection';
 import { PreviewCanvasCard, PreviewSamples } from './appearance/PreviewPanel';
 import { CATEGORIES, type CategoryId } from './appearance/options';
 import {
@@ -11,9 +12,11 @@ import { useReducedMotion } from './appearance/useReducedMotion';
 
 export interface AppearanceScreenProps {
   onExit: () => void;
+  titleId?: string; // lets a dialog around the screen (the game's) name itself by the heading
+  exitLabel?: string; // the game opens this screen over itself: "Voltar à música" instead of "Voltar ao início"
 }
 
-export const AppearanceScreen: React.FC<AppearanceScreenProps> = ({ onExit }) => {
+export const AppearanceScreen: React.FC<AppearanceScreenProps> = ({ onExit, exitLabel = 'Voltar ao início', titleId }) => {
   const settings = useAppearance();
   const gameplay = useGameplayAppearance();
   const palette = useGamePalette();
@@ -28,12 +31,12 @@ export const AppearanceScreen: React.FC<AppearanceScreenProps> = ({ onExit }) =>
   const section = { settings, onChange: setAppearance };
 
   return (
-    <main className="h-full overflow-y-auto overflow-x-hidden">
+    <main className="relative h-full overflow-y-auto overflow-x-hidden">
       <div className="mx-auto max-w-7xl px-4 pb-10 pt-6 sm:px-8 lg:px-12">
         <button type="button" onClick={onExit} className="flex min-h-11 items-center gap-2 rounded-lg px-3 text-ink-200 hover:bg-ink-800">
-          <ArrowLeft size={18} aria-hidden="true" /> Voltar ao início
+          <ArrowLeft size={18} aria-hidden="true" /> {exitLabel}
         </button>
-        <h1 ref={heading} tabIndex={-1} className="mt-4 font-display text-3xl font-bold">Aparência</h1>
+        <h1 id={titleId} ref={heading} tabIndex={-1} className="mt-4 font-display text-3xl font-bold">Aparência</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-300">Escolha como o PRGB parece. As mudanças valem na hora e ficam salvas neste navegador.</p>
 
         <div className="mt-5 grid gap-5 lg:grid-cols-[13rem_minmax(0,1fr)_21rem] lg:items-start xl:grid-cols-[14rem_minmax(0,1fr)_24rem]">
@@ -77,6 +80,7 @@ export const AppearanceScreen: React.FC<AppearanceScreenProps> = ({ onExit }) =>
             {category === 'temas' && <ThemesSection {...section} customized={customized} onPreset={applyPreset} onReset={resetAppearance} />}
             {category === 'interface' && <InterfaceSection {...section} />}
             {category === 'notas' && <NotesSection {...section} originalStrings={palette.strings} />}
+            {category === 'sombra' && <GuideSection {...section} />}
             {category === 'efeitos' && <EffectsSection {...section} effectsPaused={effectsPaused} />}
             {category === 'fundo' && <BackgroundSection {...section} />}
             {category === 'acessibilidade' && <AccessibilitySection {...section} systemReducesMotion={systemReducesMotion} />}

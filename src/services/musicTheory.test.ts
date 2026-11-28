@@ -7,6 +7,7 @@ import {
   chordIntervals,
   chordName,
   fretNote,
+  keyChipLabel,
   keyName,
   movableChord,
   notesPerString,
@@ -196,6 +197,19 @@ describe('key spelling', () => {
 
   it('writes the minor keys by their own signature, so C#m and G#m are not Dbm and Abm', () => {
     expect(ALL_KEYS.map((key) => keyName(key, true))).toEqual(['Cm', 'C#m', 'Dm', 'Ebm', 'Em', 'Fm', 'F#m', 'Gm', 'G#m', 'Am', 'Bbm', 'Bm']);
+  });
+
+  it('labels a key chip of the library like the titles of its exercises: Db for the major, C#m for the minor', () => {
+    expect(ALL_KEYS.map((key) => keyChipLabel(key, true, false))).toEqual(ALL_KEYS.map((key) => keyName(key)));
+    expect(ALL_KEYS.map((key) => keyChipLabel(key, false, true))).toEqual(ALL_KEYS.map((key) => keyName(key, true)));
+    expect(keyChipLabel(1, false, true)).toBe('C#m'); // a minor-only category never says Db
+    expect(keyChipLabel(1, true, false)).toBe('Db');
+  });
+
+  it('shows both spellings of a key when a category has major and minor exercises and they differ', () => {
+    expect(keyChipLabel(1, true, true)).toBe('Db · C#m');
+    expect(keyChipLabel(9, true, true)).toBe('A'); // the same letter either way: nothing to add
+    expect(keyChipLabel(0, true, true)).toBe('C');
   });
 
   it('names a chord in the spelling of its key and never mixes the two in one key', () => {

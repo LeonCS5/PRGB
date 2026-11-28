@@ -23,7 +23,7 @@ export const comboGlowStyle = (combo: number, effects: EffectSettings): CSSPrope
   const percent = Math.round(alpha * 100);
   const radius = 6 + Math.round(comboGlowTarget(combo) * 10);
   return {
-    textShadow: `0 0 ${radius}px color-mix(in srgb, var(--color-signal-400) ${percent}%, transparent)`,
+    textShadow: `0 0 ${radius / 16}rem color-mix(in srgb, var(--color-signal-400) ${percent}%, transparent)`,
     transition: HUD_GLOW_TRANSITION
   };
 };

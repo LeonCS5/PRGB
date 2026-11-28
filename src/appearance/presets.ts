@@ -1,15 +1,16 @@
-import { DEFAULT_APPEARANCE, DEFAULT_EFFECTS, DEFAULT_STRINGS } from './defaults';
-import type { AppearanceSettings, ThemeId } from './types';
+import { DEFAULT_APPEARANCE, DEFAULT_EFFECTS, DEFAULT_GUIDE, DEFAULT_STRINGS } from './defaults';
+import type { AppearanceSettings, GuideSettings, NoteSize, TechniqueSettings, ThemeId } from './types';
 
 // Each theme is a complete look: colors + component style + type + notes + strings + background + effects.
-// A preset never carries reduceEffects: it is an accessibility choice of the player, kept when a preset is applied.
-export type PresetLook = Omit<AppearanceSettings, 'presetId' | 'reduceEffects'>;
+// A preset never carries reduceEffects, hitSounds, noteSize or techniques: they are choices of the player (accessibility and taste), kept when a preset is applied.
+export type PresetLook = Omit<AppearanceSettings, 'presetId' | 'reduceEffects' | 'hitSounds' | 'noteSize' | 'techniques'>;
 
 const look = (overrides: Partial<PresetLook> & { themeId: ThemeId }): PresetLook => ({
   ...DEFAULT_APPEARANCE,
   ...overrides,
   strings: { ...DEFAULT_STRINGS, ...overrides.strings },
-  effects: { ...DEFAULT_EFFECTS, ...overrides.effects }
+  effects: { ...DEFAULT_EFFECTS, ...overrides.effects },
+  guide: { ...DEFAULT_GUIDE, ...overrides.guide, shadow: { ...DEFAULT_GUIDE.shadow, ...overrides.guide?.shadow } }
 });
 
 export const PRESET_LOOKS: Readonly<Record<ThemeId, PresetLook>> = {
@@ -29,9 +30,10 @@ export const PRESET_LOOKS: Readonly<Record<ThemeId, PresetLook>> = {
   })
 };
 
-export const getPreset = (id: ThemeId, reduceEffects = false): AppearanceSettings => {
+// The guide, like the hit sounds, is the player's own taste and many options deep: picking a theme must not wipe it
+export const getPreset = (id: ThemeId, reduceEffects = false, hitSounds = DEFAULT_APPEARANCE.hitSounds, guide: GuideSettings = PRESET_LOOKS[id].guide, noteSize: NoteSize = DEFAULT_APPEARANCE.noteSize, techniques: TechniqueSettings = DEFAULT_APPEARANCE.techniques): AppearanceSettings => {
   const preset = PRESET_LOOKS[id];
-  return { ...preset, strings: { ...preset.strings }, effects: { ...preset.effects }, reduceEffects, presetId: id };
+  return { ...preset, strings: { ...preset.strings }, effects: { ...preset.effects }, guide: { ...guide, shadow: { ...guide.shadow } }, reduceEffects, hitSounds, noteSize, techniques: { ...techniques }, presetId: id };
 };
 
 const sameLook = (a: PresetLook, b: PresetLook): boolean =>
@@ -40,6 +42,6 @@ const sameLook = (a: PresetLook, b: PresetLook): boolean =>
   && (Object.keys(a.strings) as (keyof PresetLook['strings'])[]).every((key) => a.strings[key] === b.strings[key])
   && (Object.keys(a.effects) as (keyof PresetLook['effects'])[]).every((key) => a.effects[key] === b.effects[key]);
 
-/** True when the player changed anything from the preset they started from (or never used one). */
+/** True when the player changed anything from the preset they started from (or never used one). The guide is not part of a preset's look. */
 export const isPresetCustomized = (settings: AppearanceSettings): boolean =>
   settings.presetId === null || !sameLook(settings, PRESET_LOOKS[settings.presetId]);

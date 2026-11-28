@@ -11,10 +11,11 @@ import {
   drawLaneBackground,
   layoutLanes,
   noteHeightFor,
-  PIXELS_PER_MS,
+  readRootFontPx,
   stringY,
   type LaneLayout,
 } from './practiceLanes';
+import { basePixelsPerMs } from './noteSpacing';
 import { useGameplayLook } from './useGameplayLook';
 import { paintNoteRect } from './noteStyles';
 import { useAudioSession, useLatestPitch } from '../context/AudioSessionContext';
@@ -29,7 +30,10 @@ export interface FreePlayProps {
   onOpenAmpRack?: () => void;
 }
 
-const NOW_LINE_MARGIN = 120; // room right of the line, so a note still ringing stays in view
+// Room right of the line, so a note still ringing stays in view: a share of the width, never under 7.5 rem
+const NOW_LINE_MARGIN_SHARE = 0.09;
+const NOW_LINE_MARGIN_REM = 7.5;
+const NOTE_NAME_FLOOR_REM = 0.625;
 const RECENT_NOTES = 12;
 const TOOL_CLASS = 'flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-700 bg-ink-800 px-3 text-xs font-semibold text-ink-200 transition hover:border-ink-500';
 
@@ -40,14 +44,17 @@ interface Scene {
   background: OffscreenCanvas | HTMLCanvasElement;
   layout: LaneLayout;
   noteHeight: number;
+  lineX: number; // where a note is born, and the line the player plays against
+  pixelsPerMs: number; // the history scrolls across the track as the game's window of music does
+  rootPx: number;
 }
 
 // Keep more room for the lane on narrow or short screens.
-const SPARE_READING = 'hidden sm:block [@media(max-height:500px)]:hidden';
+const SPARE_READING = 'hidden sm:block [@media(max-height:31.25rem)]:hidden';
 
 const Reading: React.FC<{ label: string; className?: string; children: React.ReactNode }> = ({ label, className = '', children }) => (
   <div className={`col-span-2 min-w-0 rounded-xl border border-ink-700 bg-ink-900 px-2 py-1 sm:col-span-1 sm:px-3 sm:py-2 ${className}`}>
-    <p className="text-[10px] tracking-wider text-ink-300">{label}</p>
+    <p className="text-[0.625rem] tracking-wider text-ink-300">{label}</p>
     {/* Reserve the meter's height so changing readings do not resize the canvas. */}
     <div className="mt-0.5 min-h-7 break-words font-mono text-sm font-bold text-ink-100 sm:min-h-0">{children}</div>
   </div>
@@ -60,19 +67,19 @@ const PitchReadings: React.FC<{ total: number }> = ({ total }) => {
     ? `Corda ${pitch.stringEstimate} · casa ${pitch.fretEstimate}`
     : 'Fora do braço';
   return (
-    <div className="mt-2 grid grid-cols-6 gap-2 sm:mt-3 sm:flex [@media(max-height:500px)]:mt-1">
+    <div className="mt-2 grid grid-cols-6 gap-2 sm:mt-3 sm:flex [@media(max-height:31.25rem)]:mt-1">
       <div className="col-span-2 flex shrink-0 flex-col items-center justify-center rounded-xl border border-signal-500/30 bg-signal-500/5 py-1 sm:w-32 sm:py-0">
-        <p className="text-[10px] tracking-wider text-ink-300">NOTA</p>
-        <p className="font-display text-3xl font-bold text-signal-300 sm:text-6xl [@media(max-height:500px)]:text-2xl">{pitch ? pitch.noteName : '--'}</p>
+        <p className="text-[0.625rem] tracking-wider text-ink-300">NOTA</p>
+        <p className="font-display text-3xl font-bold text-signal-300 sm:text-6xl [@media(max-height:31.25rem)]:text-2xl">{pitch ? pitch.noteName : '--'}</p>
       </div>
-      <div className="contents min-w-0 flex-1 gap-2 sm:grid sm:grid-cols-3 lg:grid-cols-6 [@media(max-height:500px)]:grid-cols-4">
+      <div className="contents min-w-0 flex-1 gap-2 sm:grid sm:grid-cols-3 lg:grid-cols-6 [@media(max-height:31.25rem)]:grid-cols-4">
         <Reading label="FREQUÊNCIA">{pitch ? `${pitch.frequency.toFixed(1)} Hz` : '--'}</Reading>
         <Reading label="AFINAÇÃO">
           {pitch
             ? <span className={Math.abs(pitch.cents) <= 6 ? 'text-hit' : 'text-near'}>{pitch.cents > 0 ? '+' : ''}{pitch.cents} cents</span>
             : '--'}
         </Reading>
-        <Reading label="POSIÇÃO" className="max-sm:col-span-3"><span className="text-xs sm:whitespace-nowrap sm:text-[11px]">{pitch ? position : '--'}</span></Reading>
+        <Reading label="POSIÇÃO" className="max-sm:col-span-3"><span className="text-xs sm:whitespace-nowrap sm:text-[0.6875rem]">{pitch ? position : '--'}</span></Reading>
         <Reading label="ENTRADA" className="max-sm:col-span-3"><InputLevelMeter /></Reading>
         <Reading label="CLAREZA" className={SPARE_READING}>{pitch ? `${Math.round(pitch.clarity * 100)}%` : '--'}</Reading>
         <Reading label="NOTAS" className={SPARE_READING}><span className="text-amp-300">{total}</span></Reading>
@@ -121,9 +128,11 @@ export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings,
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.fillStyle = palette.background;
       ctx.fillRect(0, 0, width, height);
-      const [layout] = layoutLanes(height, [6]);
-      drawLaneBackground(ctx, layout, width, palette, null, width - NOW_LINE_MARGIN, strings);
-      sceneRef.current = { width, height, dpr, background, layout, noteHeight: noteHeightFor(layout) };
+      const rootPx = readRootFontPx();
+      const [layout] = layoutLanes(height, [6], rootPx);
+      const lineX = width - Math.max(NOW_LINE_MARGIN_REM * rootPx, width * NOW_LINE_MARGIN_SHARE);
+      drawLaneBackground(ctx, layout, width, palette, null, lineX, strings, rootPx);
+      sceneRef.current = { width, height, dpr, background, layout, noteHeight: noteHeightFor(layout, 1, rootPx), lineX, pixelsPerMs: basePixelsPerMs(lineX, 0), rootPx };
       // A resize wipes the canvas after this frame's drawing, so without this it would paint blank once
       canvas.getContext('2d')?.drawImage(background, 0, 0);
     };
@@ -139,10 +148,10 @@ export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings,
   useEffect(() => {
     const drawNote = (ctx: CanvasRenderingContext2D, scene: Scene, note: PlayedNote, nowMs: number) => {
       if (note.string === null) return;
-      const { layout, noteHeight, width } = scene;
-      const x = width - NOW_LINE_MARGIN - (nowMs - note.startMs) * PIXELS_PER_MS;
+      const { layout, noteHeight, lineX, pixelsPerMs, rootPx } = scene;
+      const x = lineX - (nowMs - note.startMs) * pixelsPerMs;
       // Wide enough for the fret and the note name, even on a quick pluck
-      const noteWidth = Math.max(noteHeight * 1.5, (note.endMs - note.startMs) * PIXELS_PER_MS);
+      const noteWidth = Math.max(noteHeight * 1.5, (note.endMs - note.startMs) * pixelsPerMs);
       if (x + noteWidth < 0) return;
       const y = stringY(layout, note.string);
       const scale = noteHeight / 46;
@@ -154,7 +163,7 @@ export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings,
       const fret = String(note.fret ?? '');
       ctx.fillText(fret, textX, y);
       const fretWidth = ctx.measureText(fret).width;
-      ctx.font = `700 ${Math.max(10, Math.round(11 * scale))}px Inter, sans-serif`;
+      ctx.font = `700 ${Math.max(NOTE_NAME_FLOOR_REM * rootPx, Math.round(11 * scale))}px Inter, sans-serif`;
       ctx.fillText(note.noteName, textX + fretWidth + 4 * scale, y);
     };
 
@@ -196,7 +205,7 @@ export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings,
 
   return (
     <div className="flex h-dvh w-full flex-col overflow-hidden bg-ink-950 text-ink-100">
-      <header className="shrink-0 border-b border-ink-700 bg-ink-900 px-3 py-2 sm:px-6 sm:py-3 [@media(max-height:500px)]:py-1">
+      <header className="shrink-0 border-b border-ink-700 bg-ink-900 px-3 py-2 sm:px-6 sm:py-3 [@media(max-height:31.25rem)]:py-1">
         <div className="flex items-center gap-3">
           <button type="button" onClick={onExit} aria-label="PRGB: voltar ao início" className="flex min-h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg">
             <ArrowLeft size={18} aria-hidden="true" />
@@ -208,7 +217,7 @@ export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings,
           </div>
           {activeInput && (
             <button type="button" onClick={onOpenAudioSettings} title="Escolher entrada e saída de áudio"
-              className="ml-auto hidden min-w-0 cursor-pointer rounded-lg border border-ink-700 bg-ink-850 px-3 py-1 text-left font-mono text-[11px] leading-4 text-ink-200 transition hover:border-ink-500 sm:block">
+              className="ml-auto hidden min-w-0 cursor-pointer rounded-lg border border-ink-700 bg-ink-850 px-3 py-1 text-left font-mono text-[0.6875rem] leading-4 text-ink-200 transition hover:border-ink-500 sm:block">
               <span className="block truncate">Entrada: {audioDeviceName(activeInput.label)}</span>
               <span className="block truncate">Saída: {outputName || 'padrão do sistema'}</span>
               <span className="sr-only">Escolher entrada e saída de áudio</span>
@@ -227,7 +236,7 @@ export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings,
 
       <footer className="shrink-0 border-t border-ink-700 bg-ink-900 px-3 py-2 sm:px-6">
         <div className="flex min-h-7 items-center gap-2">
-          <span className="shrink-0 text-[10px] tracking-widest text-ink-300">ÚLTIMAS</span>
+          <span className="shrink-0 text-[0.625rem] tracking-widest text-ink-300">ÚLTIMAS</span>
           {recent.length === 0 && <span className="truncate text-xs text-ink-300">As notas que você tocar aparecem aqui.</span>}
           {/* Aligned right so that the newest note stays in view when they don't all fit */}
           <div className="flex min-w-0 flex-1 justify-end gap-1.5 overflow-hidden">
@@ -240,7 +249,7 @@ export const FreePlay: React.FC<FreePlayProps> = ({ onExit, onOpenAudioSettings,
           {isAudioRunning ? (
             <span className="flex shrink-0 items-center gap-1.5 px-1 font-mono text-xs text-hit"><Mic size={14} aria-hidden="true" /> Ao vivo</span>
           ) : (
-            <button type="button" onClick={() => void startAudio()} className={TOOL_CLASS}><Mic size={16} aria-hidden="true" /> Conectar guitarra</button>
+            <button type="button" onClick={() => void startAudio()} className="flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl bg-amp-400 px-4 text-xs font-bold text-ink-950 transition hover:bg-amp-300"><Mic size={16} aria-hidden="true" /> Conectar guitarra</button>
           )}
           <button type="button" onClick={clear} className={TOOL_CLASS}><Trash2 size={16} aria-hidden="true" /> Limpar</button>
           <button type="button" onClick={onOpenAudioSettings} className={TOOL_CLASS}><Sliders size={16} aria-hidden="true" /> Áudio</button>

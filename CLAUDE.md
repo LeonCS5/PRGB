@@ -42,6 +42,8 @@ npm run build    # Build de produção (tsc + vite build)
 npm run lint     # oxlint (sem eslint)
 npm test         # Vitest (testes dos services)
 npm run preview  # Preview da build de produção
+npm run e2e      # Ponta a ponta no navegador (Playwright, e2e/*.e2e.ts); sem Supabase
+npm run e2e:supabase  # Ranking, conta e dupla contra o Supabase LOCAL (Docker); nunca toca a produção
 ```
 
 ---
@@ -59,7 +61,7 @@ src/
 │   ├── legal.ts                     # Cópia legal (LGPD): Política de Privacidade, Termos, LEGAL_VERSION
 │   └── songs/                       # Repertório próprio (domínio público): catálogo em index.ts (catalog-classic, catalog-folk, catalog-originals), uma peça por arquivo, carga lazy
 │
-├── appearance/                      # Aparência: tipos, padrões, validação, temas, presets, hook e script de boot (apply, bootScript, defaults, presets, themes, types, useAppearance, useGamePalette, validate; docs/aparencia.md)
+├── appearance/                      # Aparência: tipos, padrões, validação, temas, presets, hook e script de boot (apply, bootScript, defaults, presets, themes, types, useAppearance, useGamePalette, validate; docs/aparencia.md) (também guidePresets: predefinições da sombra-guia)
 │
 ├── context/
 │   ├── AudioSessionContext.tsx      # AudioEngine, PRGB Amp, device/canal, erros; pitch via useLatestPitch
@@ -82,6 +84,9 @@ src/
 │
 ├── components/
 │   ├── PracticeGame.tsx             # ⭐ Canvas game principal (rails de notas, scoring, metrônomo)
+│   ├── GameToolbar.tsx / gameToolbarKit.ts / GameScaleControls.tsx / QuickAppearancePanel.tsx / resumeCountdown.ts  # Barra do jogo, atalhos (Espaço, M, N, A, setas), velocidade e zoom, e a "Aparência rápida" durante a música
+│   ├── guideShadow.ts / countIn.ts / clockView.ts / noteSpacing.ts  # Sombra-guia (nota a tocar), contagem do começo (5 s de pista vazia), o que a tela mostra do relógio (positionRef não é estado) e o espaçamento automático das notas por seção (janela de música fixa, com piso de legibilidade em tela estreita, `S(t)`; rápido diminui, lento aumenta até 1,5) / techniques.ts (blocos de ligados e slides, colchete de palm mute, bend)
+│   ├── laneDraw.ts / synthSchedule.ts / gameScaleKit.ts / appearance/guideSummaries.ts  # Desenho das notas e dos blocos de técnicas fora do componente, notas do som de guia que estão para chegar (busca binária), texto de velocidade e espaçamento, e os resumos das opções da sombra-guia
 │   ├── AudioSettingsModal.tsx       # Modal de configuração de interface de áudio + afinador
 │   ├── BrandMark.tsx                # Logo PRGB
 │   ├── CaptchaField.tsx             # Verificação contra robôs na entrada do ranking
@@ -107,7 +112,7 @@ src/
 │   ├── SiteNav.tsx                  # Menu superior, estado do áudio e barra de abas do celular
 │   ├── SongSearchModal.tsx          # Modal de busca de músicas no acervo
 │   ├── AmpRack.tsx          # Modal do rack completo do amp modeler PRGB Amp
-│   ├── AppearanceScreen.tsx         # Tela Aparência (lazy); peças em components/appearance/ (GameplayPreviewCanvas, PreviewPanel, controls, options, sections, useReducedMotion)
+│   ├── AppearanceScreen.tsx         # Tela Aparência (lazy); peças em components/appearance/ (GameplayPreviewCanvas, PreviewPanel, controls, options, sections, GuideSection, useReducedMotion)
 │   ├── AudioRoutePanel.tsx / AudioRouting.tsx / NeuralAmpSection.tsx  # Rota de áudio, medidor de entrada e modelo neural do jogador
 │   ├── ErrorBoundary.tsx / NotFound.tsx / StorageNotice.tsx / FeedbackModal.tsx  # Recuperação de erro, 404, aviso de armazenamento e "Reportar problema"
 │   ├── OnDemand.tsx                 # Monta modais e telas só depois da primeira abertura (lazy + Suspense)
@@ -123,6 +128,7 @@ src/
 ├── services/
 │   ├── audioOutput.ts               # Saída de áudio: direta no Chromium, por <audio> no Firefox
 │   ├── audioEngine.ts               # ⭐ Engine de captura de áudio + detecção de pitch (NSDF/MPM)
+│   ├── fixedCadence.ts              # Cadência da análise do pitch: ~60 por segundo no relógio do áudio, seja qual for a taxa da tela
 │   ├── challenge.ts                 # Links de desafio (score pessoal codificado em URL)
 │   ├── demoSong.ts                  # Exercício original offline (sem rede, sem direitos de terceiros)
 │   ├── exerciseIds.ts               # Ids dos exercícios (nunca renumerar)
@@ -139,7 +145,7 @@ src/
 │   ├── nickname.ts                  # Validação, normalização e filtro de apelidos
 │   ├── noteTrail.ts                 # Histórico das notas tocadas no Play Free (lógica pura)
 │   ├── records.ts                   # Recordes pessoais locais (localStorage)
-│   ├── scoring.ts                   # Motor de scoring: judgeNote, multiplier, accuracy
+│   ├── scoring.ts                   # Motor de scoring: judgeNote, multiplier, accuracy; notas ligadas (hammer-on, pull-off, slide)
 │   ├── tabsApi.ts                   # Client da API de tablaturas: busca, meta, download de tabs, normalização
 │   ├── turnstile.ts                 # CAPTCHA da Cloudflare, carregado sob demanda
 │   ├── synthAudio.ts                # Sintetizador de notas, MetronomeScheduler e efeitos sonoros do jogo

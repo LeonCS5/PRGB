@@ -111,9 +111,9 @@ interface DeviceRowProps {
 const DeviceRow: React.FC<DeviceRowProps> = ({ group, label, format, checked, disabled, onSelect }) => (
   <label className={`flex min-h-11 items-center gap-2 rounded-lg px-2 py-1 text-sm transition ${disabled ? 'cursor-not-allowed text-ink-400' : 'cursor-pointer hover:bg-ink-800'} ${checked ? 'bg-signal-500/10 text-ink-100' : 'text-ink-200'}`}>
     <input type="radio" name={`prgb-audio-${group}`} checked={checked} disabled={disabled} onChange={onSelect} className="size-4 shrink-0 accent-signal-400" />
-    <span className="w-12 shrink-0 font-mono text-[10px] uppercase tracking-wider text-ink-300">{group === 'input' ? 'Entrada' : 'Saída'}</span>
+    <span className="w-12 shrink-0 font-mono text-[0.625rem] uppercase tracking-wider text-ink-300">{group === 'input' ? 'Entrada' : 'Saída'}</span>
     <span className="min-w-0 flex-1 truncate">{label}</span>
-    {format && <span className="shrink-0 font-mono text-[11px] text-ink-300">{format}</span>}
+    {format && <span className="shrink-0 font-mono text-[0.6875rem] text-ink-300">{format}</span>}
   </label>
 );
 
@@ -141,8 +141,8 @@ const SliderRow: React.FC<SliderRowProps> = ({ label, value, min, max, step, rea
 
 const Stage: React.FC<{ label: string; value: string; active: boolean }> = ({ label, value, active }) => (
   <div className={`min-w-0 flex-1 rounded-lg border px-2 py-1.5 ${active ? 'border-hit/50 bg-hit/5' : 'border-ink-700 bg-ink-950'}`}>
-    <p className="text-[10px] tracking-wider text-ink-300">{label}</p>
-    <p className="truncate font-mono text-xs font-bold text-ink-100">{value}</p>
+    <p className="text-[0.625rem] tracking-wider text-ink-300">{label}</p>
+    <p title={value} className="truncate font-mono text-xs font-bold text-ink-100">{value}</p>
   </div>
 );
 
@@ -154,11 +154,11 @@ const SignalPath: React.FC = () => {
 
   return (
     <div className="mt-3 rounded-xl border border-ink-700 bg-ink-900 p-3">
-      <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-ink-300">Caminho do som</p>
+      <p className="mb-1.5 text-[0.6875rem] font-bold uppercase tracking-wider text-ink-300">Caminho do som</p>
       <div className="grid grid-cols-2 gap-1.5 sm:flex sm:items-center sm:gap-1">
         <Stage label="GUITARRA" value={formatDb(signal.inputPeak)} active={signal.inputPeak > 0.002} />
         <ArrowRight size={14} className="hidden shrink-0 text-ink-400 sm:block" aria-hidden="true" />
-        <Stage label="GATE" value={signal.gateOpen ? 'Aberto' : 'Fechado'} active={signal.gateOpen} />
+        <Stage label="RUÍDO" value={signal.gateOpen ? 'Passando' : 'Cortado'} active={signal.gateOpen} />
         <ArrowRight size={14} className="hidden shrink-0 text-ink-400 sm:block" aria-hidden="true" />
         <Stage label="AMP" value={formatDb(signal.outputPeak)} active={signal.outputPeak > 0.01} />
         <ArrowRight size={14} className="hidden shrink-0 text-ink-400 sm:block" aria-hidden="true" />
@@ -221,11 +221,11 @@ export const AudioRoutePanel: React.FC<AudioRoutePanelProps> = ({ currentDeviceI
       <SignalPath />
 
       <div className="mt-4">
-        <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-ink-300">Dispositivos</p>
+        <p className="mb-1 text-[0.6875rem] font-bold uppercase tracking-wider text-ink-300">Dispositivos</p>
         {!hasNames && <p className="mb-2 text-xs leading-5 text-ink-300">Conecte o áudio para o navegador mostrar os nomes dos dispositivos.</p>}
         <div className="space-y-2">
           {groups.map((group) => (
-            <fieldset key={group.name} className="rounded-xl border border-ink-700 bg-ink-900 p-1.5">
+            <fieldset key={group.name} className="min-w-0 rounded-xl border border-ink-700 bg-ink-900 p-1.5">
               <legend className="px-1.5 text-xs font-bold text-ink-100">{group.name}</legend>
               {group.outputs.map((device) => (
                 <DeviceRow key={device.deviceId} group="output" label={parseDeviceLabel(device.label).endpoint || 'Saída de áudio'}
@@ -312,18 +312,18 @@ export const AdvancedAudioOptions: React.FC = () => {
       </summary>
       <div className="grid gap-4 px-4 pb-4 md:grid-cols-2">
         <div className="space-y-2">
-          <p title="Atraso entre tocar e o PRGB ouvir a nota. O teste de latência preenche isto por você." className="text-[11px] font-bold uppercase tracking-wider text-ink-300">Compensação de latência</p>
+          <p title="Atraso entre tocar e o PRGB ouvir a nota. O teste de latência preenche isto por você." className="text-[0.6875rem] font-bold uppercase tracking-wider text-ink-300">Compensação de latência</p>
           <SliderRow label="Entrada" value={audioOptions.inputLatencySamples} min={0} max={LATENCY_SAMPLES_MAX} step={LATENCY_SAMPLES_STEP}
             readout={`${audioOptions.inputLatencySamples} amostras`}
             onChange={(inputLatencySamples) => void changeAudioOptions({ inputLatencySamples })} />
           <SliderRow label="Saída" value={audioOptions.outputLatencySamples} min={0} max={LATENCY_SAMPLES_MAX} step={LATENCY_SAMPLES_STEP}
             readout={`${audioOptions.outputLatencySamples} amostras`}
             onChange={(outputLatencySamples) => void changeAudioOptions({ outputLatencySamples })} />
-          <p className="text-[11px] leading-4 text-ink-300">Compensação é o atraso entre tocar e o PRGB ouvir a nota. Só muda a pontuação: {formatMs(((audioOptions.inputLatencySamples + audioOptions.outputLatencySamples) / sampleRate) * 1000)} a mais para as notas contarem.</p>
+          <p className="text-[0.6875rem] leading-4 text-ink-300">Compensação é o atraso entre tocar e o PRGB ouvir a nota. Só muda a pontuação: {formatMs(((audioOptions.inputLatencySamples + audioOptions.outputLatencySamples) / sampleRate) * 1000)} a mais para as notas contarem.</p>
         </div>
 
         <div className="space-y-2">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-ink-300">Motor de áudio</p>
+          <p className="text-[0.6875rem] font-bold uppercase tracking-wider text-ink-300">Motor de áudio</p>
           <label className="flex min-h-9 cursor-pointer items-center gap-2 text-xs text-ink-200">
             <input type="checkbox" checked={audioOptions.resampleTo48k} disabled={isApplying}
               onChange={(event) => void applyEngineOption({ resampleTo48k: event.target.checked })} className="size-4 accent-amp-400" />
@@ -336,7 +336,7 @@ export const AdvancedAudioOptions: React.FC = () => {
           </label>
           <label className="block text-xs text-ink-200">
             <span title="Quantas amostras de áudio o navegador junta antes de processar">Tamanho do buffer</span>
-            <span className="block text-[11px] leading-4 text-ink-300">Buffer menor responde mais rápido, mas pode causar estalos.</span>
+            <span className="block text-[0.6875rem] leading-4 text-ink-300">Buffer menor responde mais rápido, mas pode causar estalos.</span>
             <select value={audioOptions.bufferSamples} disabled={isApplying}
               onChange={(event) => void applyEngineOption({ bufferSamples: Number(event.target.value) })}
               className="mt-1 w-full rounded-lg border border-ink-700 bg-ink-800 px-2 py-2 text-xs text-ink-100">
@@ -346,7 +346,7 @@ export const AdvancedAudioOptions: React.FC = () => {
             </select>
           </label>
           {info && (
-            <p className="font-mono text-[11px] leading-4 text-ink-300">
+            <p className="font-mono text-[0.6875rem] leading-4 text-ink-300">
               Medido agora: {formatMs(info.engineLatencyMs)} no motor + {formatMs(info.outputLatencyMs)} na saída, a {formatAudioFormat({ sampleRate: info.sampleRate })}
             </p>
           )}

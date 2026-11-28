@@ -27,6 +27,19 @@ export const keyName = (key: number, minor = false): string => {
   return `${names[pitch]}${minor ? 'm' : ''}`;
 };
 
+/**
+ * What a key chip of the library says. The chips of a category are shared by its exercises, and a key is spelled one way
+ * for a major exercise (Db) and the other for a minor one (C#m): a category of minor exercises shows the minor
+ * spelling, one with both shows both when they differ, so the chip never disagrees with the title of a card.
+ */
+export const keyChipLabel = (key: number, hasMajor: boolean, hasMinor: boolean): string => {
+  const major = keyName(key);
+  const minor = keyName(key, true);
+  if (hasMinor && !hasMajor) return minor;
+  if (!hasMinor || major === minor.slice(0, -1)) return major;
+  return `${major} · ${minor}`;
+};
+
 const LOW_E = 5;
 const A_STRING = 4;
 const LAST_FRET = 22;

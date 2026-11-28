@@ -34,3 +34,9 @@ checklist-software.md
 
 # Cópias do banco: têm dados pessoais e nunca vão para o repositório
 backups/
+
+# Playwright
+dist-e2e
+dist-e2e-local
+test-results
+playwright-report

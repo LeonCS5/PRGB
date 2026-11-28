@@ -53,7 +53,7 @@ export const LegalPage: React.FC<LegalPageProps> = ({ document, sectionId }) => 
           <h2 id="legal-contents" className="font-mono text-xs tracking-widest text-ink-300">NESTA PÁGINA</h2>
           <ol className="mt-3 grid gap-1 text-sm sm:grid-cols-2">
             {document.sections.map((section) => (
-              <li key={section.id}><a href={`#${section.id}`} className="inline-block py-1 text-signal-300 underline-offset-4 hover:underline">{section.title}</a></li>
+              <li key={section.id}><a href={`#${section.id}`} className="inline-flex min-h-11 items-center text-signal-300 underline-offset-4 hover:underline">{section.title}</a></li>
             ))}
           </ol>
         </nav>

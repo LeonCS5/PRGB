@@ -1,12 +1,13 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { DEFAULT_STRINGS } from '../appearance/defaults';
-import { drawLaneBackground, HIT_LINE_X, layoutLanes, stringY, type GamePalette, type LaneLayout } from './practiceLanes';
+import { drawLaneBackground, hitLineX, layoutLanes, stringY, type GamePalette, type LaneLayout } from './practiceLanes';
 import { createRecorder, installPath2D, ORIGINAL_PALETTE } from './testCanvas';
 
 beforeAll(installPath2D);
 
-// The lane the game drew before the string settings existed, copied from practiceLanes as it was
-const legacyLane = (ctx: CanvasRenderingContext2D, lane: LaneLayout, width: number, palette: GamePalette, label: { text: string; color: string } | null, hitLineX: number = HIT_LINE_X): void => {
+// The lane the game drew before the string settings existed, copied from practiceLanes as it was (the hit line is now
+// a share of the width, `hitLineX(width)`, and the name of the player sits beside it)
+const legacyLane = (ctx: CanvasRenderingContext2D, lane: LaneLayout, width: number, palette: GamePalette, label: { text: string; color: string } | null, lineX: number = hitLineX(width)): void => {
   const availableHeight = lane.height - lane.topMargin * 2;
   for (let s = 1; s <= lane.stringCount; s++) {
     const y = stringY(lane, s);
@@ -33,19 +34,19 @@ const legacyLane = (ctx: CanvasRenderingContext2D, lane: LaneLayout, width: numb
     ctx.fillText(`${s} / ${['e', 'B', 'G', 'D', 'A', 'E'][s - 1] || s}`, 18, y);
   }
   const top = lane.top + lane.topMargin;
-  const grad = ctx.createLinearGradient(hitLineX - 4, 0, hitLineX + 4, 0);
+  const grad = ctx.createLinearGradient(lineX - 4, 0, lineX + 4, 0);
   grad.addColorStop(0, palette.signal + '1a');
   grad.addColorStop(0.5, palette.signal);
   grad.addColorStop(1, palette.signal + '1a');
   ctx.fillStyle = grad as unknown as string;
-  ctx.fillRect(hitLineX - 8, top - 20, 16, availableHeight + 40);
+  ctx.fillRect(lineX - 8, top - 20, 16, availableHeight + 40);
   ctx.beginPath();
   ctx.strokeStyle = palette.signal;
   ctx.lineWidth = 3;
   ctx.shadowColor = palette.signal;
   ctx.shadowBlur = 16;
-  ctx.moveTo(hitLineX, top - 20);
-  ctx.lineTo(hitLineX, top + availableHeight + 20);
+  ctx.moveTo(lineX, top - 20);
+  ctx.lineTo(lineX, top + availableHeight + 20);
   ctx.stroke();
   ctx.shadowBlur = 0;
   if (label) {
@@ -53,7 +54,7 @@ const legacyLane = (ctx: CanvasRenderingContext2D, lane: LaneLayout, width: numb
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = label.color;
-    ctx.fillText(label.text, HIT_LINE_X + 18, lane.top + Math.max(10, lane.topMargin / 2 - 8));
+    ctx.fillText(label.text, lineX + 18, lane.top + Math.max(10, lane.topMargin / 2 - 8));
   }
 };
 
@@ -68,13 +69,13 @@ describe('drawLaneBackground', () => {
       [second, null, undefined],
       [solo, null, 880]
     ];
-    for (const [lane, label, hitLineX] of cases) {
+    for (const [lane, label, lineX] of cases) {
       const before = createRecorder();
-      legacyLane(before.ctx, lane, 1000, ORIGINAL_PALETTE, label, hitLineX);
+      legacyLane(before.ctx, lane, 1000, ORIGINAL_PALETTE, label, lineX);
       const withDefaults = createRecorder();
-      drawLaneBackground(withDefaults.ctx, lane, 1000, ORIGINAL_PALETTE, label, hitLineX, DEFAULT_STRINGS);
+      drawLaneBackground(withDefaults.ctx, lane, 1000, ORIGINAL_PALETTE, label, lineX, DEFAULT_STRINGS);
       const omitted = createRecorder();
-      drawLaneBackground(omitted.ctx, lane, 1000, ORIGINAL_PALETTE, label, hitLineX);
+      drawLaneBackground(omitted.ctx, lane, 1000, ORIGINAL_PALETTE, label, lineX);
       expect(withDefaults.log).toEqual(before.log);
       expect(omitted.log).toEqual(before.log);
       expect(before.log.length).toBeGreaterThan(50);
@@ -83,7 +84,7 @@ describe('drawLaneBackground', () => {
 
   const draw = (strings: Partial<typeof DEFAULT_STRINGS>) => {
     const { ctx, log } = createRecorder();
-    drawLaneBackground(ctx, solo, 1000, ORIGINAL_PALETTE, null, HIT_LINE_X, { ...DEFAULT_STRINGS, ...strings });
+    drawLaneBackground(ctx, solo, 1000, ORIGINAL_PALETTE, null, hitLineX(1000), { ...DEFAULT_STRINGS, ...strings });
     return log;
   };
 

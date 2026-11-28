@@ -37,6 +37,24 @@ describe('presets', () => {
     expect(getPreset('refined').strings.glow).toBe(0);
   });
 
+  it('keeps the hit sounds choice when a preset is applied and treats it as outside the look', () => {
+    expect(getPreset('refined', false, false).hitSounds).toBe(false);
+    expect(getPreset('refined').hitSounds).toBe(true);
+    expect(isPresetCustomized({ ...getPreset('refined'), hitSounds: false })).toBe(false);
+  });
+
+  it('every preset starts with the guide shadow on, and the guide is not part of what makes a look customized', () => {
+    for (const id of THEME_IDS) expect(PRESET_LOOKS[id].guide).toMatchObject({ enabled: true, intensity: 2, style: 'shadow' });
+    const base = getPreset('refined');
+    expect(isPresetCustomized({ ...base, guide: { ...base.guide, enabled: false } })).toBe(false);
+    expect(isPresetCustomized({ ...base, guide: { ...base.guide, intensity: 3 } })).toBe(false);
+  });
+
+  it('takes the guide the player already has when one is given', () => {
+    const own = { ...getPreset('original').guide, enabled: false, style: 'hologram' as const };
+    expect(getPreset('refined', false, true, own).guide).toEqual(own);
+  });
+
   it('derives "customized" by comparing with the preset', () => {
     const base = getPreset('midnight-arcade');
     expect(isPresetCustomized({ ...base, reduceEffects: true })).toBe(false);

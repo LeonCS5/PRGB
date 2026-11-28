@@ -9,6 +9,7 @@ import { AppearanceScreen } from './AppearanceScreen';
 import {
   AccessibilitySection, BackgroundSection, EffectsSection, InterfaceSection, NotesSection, ThemesSection
 } from './appearance/sections';
+import { GuideSection } from './appearance/GuideSection';
 import { PreviewSamples } from './appearance/PreviewPanel';
 import { CATEGORIES } from './appearance/options';
 import * as preview from './gameplayPreview';
@@ -21,11 +22,11 @@ const noop = () => {};
 const base = (overrides: Partial<AppearanceSettings> = {}): AppearanceSettings => ({ ...DEFAULT_APPEARANCE, ...overrides });
 
 describe('AppearanceScreen', () => {
-  it('names the screen, lists the six categories and marks the open one', () => {
+  it('names the screen, lists the seven categories and marks the open one', () => {
     const html = renderToStaticMarkup(createElement(AppearanceScreen, { onExit: noop }));
     expect(html).toContain('>Aparência</h1>');
     for (const category of CATEGORIES) expect(html).toContain(category.label);
-    expect(CATEGORIES).toHaveLength(6);
+    expect(CATEGORIES).toHaveLength(7);
     expect(html.match(/aria-current="true"/g)).toHaveLength(1);
     expect(html).toMatch(/aria-current="true".*?<\/svg>Temas/);
     expect(html).toContain('Voltar ao início');
@@ -126,5 +127,26 @@ describe('PreviewSamples', () => {
     expect(html).toContain('Secundário');
     expect(html).toContain('Cores do tema');
     expect(html).toContain('Estilo Arcade');
+  });
+});
+
+describe('guide shadow and hit sound controls', () => {
+  it('shows the guide switch, with its intensity only while it is on', () => {
+    const render = (settings: AppearanceSettings) => renderToStaticMarkup(createElement(GuideSection, { settings, onChange: noop }));
+    const on = render(DEFAULT_APPEARANCE);
+    expect(on).toContain('Sombra-guia');
+    expect(on).toContain('Intensidade da sombra-guia');
+    expect(on).toContain('Estilo da sombra-guia');
+    expect(on).toContain('Holograma');
+    const off = render({ ...DEFAULT_APPEARANCE, guide: { ...DEFAULT_APPEARANCE.guide, enabled: false } });
+    expect(off).toContain('Sombra-guia');
+    expect(off).not.toContain('Intensidade da sombra-guia');
+    expect(off).not.toContain('Estilo da sombra-guia');
+  });
+
+  it('shows the hit sounds switch in accessibility', () => {
+    const html = renderToStaticMarkup(createElement(AccessibilitySection, { settings: DEFAULT_APPEARANCE, onChange: noop, systemReducesMotion: false }));
+    expect(html).toContain('Sons de acerto e erro');
+    expect(html).toContain('metrônomo');
   });
 });

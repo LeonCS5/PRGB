@@ -72,7 +72,7 @@ export interface SwitchFieldProps {
 }
 
 export const SwitchField: React.FC<SwitchFieldProps> = ({ id, label, hint, checked, onChange }) => (
-  <label htmlFor={id} className="flex min-h-11 cursor-pointer items-start gap-3 rounded-xl border border-ink-700 bg-ink-900 p-3">
+  <label htmlFor={id} className="relative flex min-h-11 cursor-pointer items-start gap-3 rounded-xl border border-ink-700 bg-ink-900 p-3">
     <input id={id} type="checkbox" role="switch" checked={checked} onChange={(event) => onChange(event.target.checked)} className="peer sr-only" />
     <span aria-hidden="true" className={`mt-0.5 flex h-6 w-11 shrink-0 items-center rounded-full border p-0.5 transition peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-signal-400 ${checked ? 'border-amp-400 bg-amp-500/30' : 'border-ink-500 bg-ink-800'}`}>
       <span className={`size-4.5 rounded-full transition-transform motion-reduce:transition-none ${checked ? 'translate-x-5 bg-amp-300' : 'translate-x-0 bg-ink-300'}`} />
