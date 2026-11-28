@@ -69,9 +69,37 @@ Modelo de aviso curto: "Em [data], identificamos [o que ocorreu]. Foram afetados
 
 ## 7. Rotação de chaves
 
-- **Chave pública do Supabase (`anon`):** criar a chave nova no painel › atualizar `VITE_SUPABASE_ANON_KEY` na Vercel › publicar › revogar a antiga. O bundle de produção ainda usa a chave no formato antigo (JWT). O Supabase anunciou o fim das chaves legadas para o fim de 2026 **(a confirmar na documentação)**: migrar para a chave publicável antes disso e revisar o uso da service role em `supabase/functions/register-part/index.ts`.
+- **Chave pública do Supabase (`anon`):** migrar para a chave publicável (`sb_publishable_...`) seguindo o runbook da seção 7.1. O bundle de produção ainda usa a chave legada (JWT).
 - **Segredo do Turnstile:** Cloudflare › Turnstile › `PRGB` › Rotate secret, colar o novo em Supabase › Authentication › Attack Protection e testar criando uma conta pelo site.
 - **Sessões e chaves de assinatura do JWT:** rotacionar uma chave não encerra sessões, porque a chave anterior segue válida até ser revogada. Para invalidar tokens já emitidos é preciso **revogar** a chave antiga (Authentication › JWT Signing Keys) ou excluir as contas afetadas. O efeito sobre contas anônimas não foi testado: teste com uma conta descartável antes de depender disso num incidente, e leia a documentação de signing keys do Supabase.
+
+### 7.1 Runbook: migrar da chave `anon` legada para a chave publicável
+
+**Situação (conferida na documentação do Supabase, guia "Migrating to publishable and secret API keys", em 2026-11-27):** as chaves legadas `anon` e `service_role` seguem funcionando junto com as novas; o guia diz "até o fim de 2026", mas páginas mais recentes e terceiros falam em início de 2027 **(prazo não confirmado: tratar como fim de 2026)**. A chave publicável tem os mesmos privilégios da `anon`, então as políticas de RLS se comportam igual, e o login do jogador (JWT próprio do usuário) não muda.
+
+**O que o código já faz (nada a mudar no repositório):**
+- `VITE_SUPABASE_ANON_KEY` é só uma string repassada ao `createClient`; nenhum código valida formato JWT. O nome da variável fica; só o valor muda.
+- `register-part` já lê `SUPABASE_SECRET_KEYS` (chave secreta nova) e cai em `SUPABASE_SERVICE_ROLE_KEY`. Só lê `song_parts` e `profiles` e valida o token do jogador com `auth.getUser`.
+- A CSP não muda (mesmo host do Supabase).
+
+**Risco principal: `verify_jwt` da `register-part`.** A verificação embutida da plataforma só entende chaves JWT legadas. O app chama a função com o token de sessão do jogador (um JWT de verdade) em `Authorization`, e a chave publicável vai no cabeçalho `apikey`; em princípio isso passa. **Não foi testado**: a documentação recomenda `verify_jwt = false` só para quem envia a chave nova em `Authorization`. Se o teste do passo 4 falhar com `Invalid JWT`, a saída é `verify_jwt = false` em `supabase/config.toml` e republicar a função; isso é seguro aqui porque `handler.ts` já exige o `Authorization: Bearer` e valida o token com `auth.getUser` (conta apagada é recusada). Faça isso **só** se o teste falhar, e teste de novo.
+
+**Atualização (2026-11-27): a combinação foi testada no Supabase local** (CLI 3.4.0, `verify_jwt = true` como em `supabase/config.toml`): o app com a **chave publicável** em `apikey` e o JWT do jogador em `Authorization` chamou a `register-part` e recebeu 200, numa partida ranqueada completa (`e2e/supabase/ranking.e2e.ts`). Isso reduz o risco do passo 4, mas **não prova a produção**: o gateway hospedado pode se comportar diferente. O teste do passo 6 com conta real continua necessário.
+
+**Passo a passo (feito pelo humano, nesta ordem):**
+1. **Painel do Supabase › Project Settings › API Keys:** criar a chave publicável (aba "Publishable and secret API keys"). Copiar só a publishable. Não apagar nem desativar a legada ainda.
+2. **Teste local:** em `.env.local`, trocar o valor de `VITE_SUPABASE_ANON_KEY` pela publicável, `npm run dev`, criar uma conta de teste no ranking (consentimento 18+), jogar o exercício original ranqueado, abrir o placar, criar e entrar numa sala de dupla (dois navegadores). Voltar o `.env.local` se algo falhar.
+3. **Vercel › Settings › Environment Variables:** trocar `VITE_SUPABASE_ANON_KEY` pela publicável, primeiro só em **Preview** (as previews são protegidas por login; ver a seção 4). Fazer o deploy de uma branch e repetir os testes do passo 2 no endereço da preview, incluindo a chamada que passa pela Edge Function `register-part` (abrir a Ode à Alegria/exercício original ranqueado para o jogo registrar a faixa).
+4. **Conferir a função:** nos logs da Edge Function (Supabase › Edge Functions › `register-part` › Logs) não pode haver 401 `Invalid JWT` nas chamadas novas. Se houver, aplicar o ajuste de `verify_jwt` descrito acima.
+5. **Produção:** trocar o valor em **Production** na Vercel e fazer um novo deploy (variáveis `VITE_` são embutidas no build, então só valem depois do deploy). Conferir com o hash/conteúdo do bundle publicado (seção "Deploy" do AGENTS.md): o bundle deve conter `sb_publishable_` e não o JWT antigo.
+6. **Teste em produção:** conta nova, partida ranqueada, placar, sala de dupla, exportar e excluir a conta. Jogadores com sessão salva devem continuar logados, porque a sessão é do Auth e não da chave **(não testado)**.
+7. **Observar 7 dias** o painel de logs (Auth, API e Edge Functions) antes de revogar a legada. Se o painel mostrar o último uso de cada chave **(a confirmar)**, a `anon` legada deve ter parado de ser usada.
+8. **Revogar a legada:** Project Settings › API Keys › desativar a `anon` e a `service_role` legadas (a desativação pode ser revertida no painel se algo ainda depender delas). Só depois disso rotacionar o segredo do JWT, se for o caso (seção 7, assinatura de JWT).
+9. **Registrar** a data da troca na seção 1 (inventário) e marcar o item do backlog no `AGENTS.md`.
+
+**Rollback:** colocar o valor legado de volta em `VITE_SUPABASE_ANON_KEY` na Vercel e refazer o deploy (a legada fica ativa até o passo 8). Depois do passo 8, reativar as chaves legadas no painel e repetir o deploy.
+
+**`register-part` e a chave secreta (mínimo privilégio):** hoje a função usa um cliente com poder total (secret key/service role, ignora RLS) para três consultas só de leitura. Riscos: um bug na função daria acesso a todo o banco, e a chave fica nos segredos da função. Melhoria opcional, sem urgência: criar uma função SQL `security definer` que só devolve a faixa e conferir o perfil, e chamá-la com a chave publicável + token do jogador (sem secret key). Antes disso, ao migrar para a chave secreta nova, confirmar nos segredos da função que `SUPABASE_SECRET_KEYS` existe e que `SUPABASE_SERVICE_ROLE_KEY` legada só é usada como reserva; depois do passo 8 a reserva deixa de funcionar e `SUPABASE_SECRET_KEYS` passa a ser obrigatória.
 
 ## 8. Continuidade e acesso de emergência
 
@@ -141,3 +169,19 @@ Os rewrites de `/api/tabs`, `/cdn/tabs` e `/cdn2/tabs` no `vercel.json` funciona
 - A Edge Function `register-part` aceita origens `localhost` por padrão em `ALLOWED_ORIGINS`. Em produção, defina o segredo só com `https://prgb.vercel.app` (e previews, se precisar) para tirar `localhost`.
 - Não há `Strict-Transport-Security` explícito nem `upgrade-insecure-requests` na CSP do `vercel.json`. A Vercel já serve HTTPS e envia HSTS nos domínios dela; se o domínio próprio for usado, confirme o cabeçalho com `curl -I`.
 - `submit_feedback` pode ser esgotado por script (60 relatos por hora para todos, já registrado no backlog). Só CAPTCHA validado numa Edge Function ou limite por IP resolve, e ambos mexem na Política: decisão do dono.
+
+## 12. E2E local contra o Supabase (Docker)
+
+`npm run e2e:supabase` roda os testes de ponta a ponta de `e2e/supabase/` (ranking, conta e dupla online) contra um Supabase **local**, nunca contra o projeto hospedado. Os testes que não precisam de Supabase seguem em `npm run e2e`, que ignora esta pasta.
+
+**O que precisa:** Docker Desktop aberto e o Supabase CLI do projeto (`devDependency`, usado por `npx supabase`). O script (`scripts/e2e-supabase.mjs`) confere o Docker, roda `supabase start` se a stack não estiver de pé (a primeira vez baixa várias imagens), serve a Edge Function `register-part` localmente (`ALLOWED_ORIGINS` só com a origem do preview de teste, em um arquivo temporário apagado no fim) e chama o Playwright com `playwright.supabase.config.ts`. **O Docker fica como está no fim**: `npm run e2e:supabase -- --stop` para a stack; `-- --reset` recria o banco local a partir das migrations (`supabase db reset --local`). O que vier depois de `--` vai para o Playwright (por exemplo `-g "dupla"`).
+
+**Como não toca na produção:**
+- O script recusa qualquer comando com `link`, `login`, `push`, `deploy` ou `--linked`, e o `project_id` de `supabase/config.toml` só dá nome aos contêineres locais.
+- A URL e a chave publicável vêm de `supabase status` em tempo de execução, só na memória do processo: nenhum arquivo guarda chave. O build do app de teste (`dist-e2e-local/`, ignorado pelo git) recebe essas variáveis no ambiente do processo, que vencem qualquer `.env`; o `globalSetup` confere no bundle que não há host `supabase.co` nem chave em formato JWT, e recusa rodar se `VITE_SUPABASE_URL` não for `http://127.0.0.1` ou `localhost`.
+- Toda requisição fora do preview e da API local é abortada e vira falha do teste. A CSP é a do `vercel.json`, com o host do Supabase trocado pelo local.
+- No fim, o `globalSetup` apaga as contas anônimas que a execução criou (e, por cascata, perfis, pontuações, sessões e vagas de sala).
+
+**O que cobre (8 testes, ~1,5 min):** placar aberto sem conta; criar conta (consentimento 18+, perfil e `consent_version` no banco); partida ranqueada do exercício original aceita pelo servidor (a `register-part` responde 200 com a chave publicável), no placar da semana e geral; exportar os dados e excluir a conta (nada sobra em `profiles`, `scores_*`, `play_sessions` e `auth.users`); limite por hora (`update_nickname`, 10 por jogador: o 11º é recusado com `rate_limited`); dupla online com dois contextos de navegador (criar, entrar, escolher faixa, ficar pronto, começar no mesmo relógio, mesmo placar da equipe nas duas telas, sair e voltar com o código, sala cheia e código desconhecido). O microfone é um oscilador que toca as notas do exercício no relógio do jogo (Chrome só apita), porque o servidor recusa partida sem nota acertada (`empty_run`).
+
+**Limites conhecidos:** só testado no Edge do Windows com Docker Desktop; o CI tem um job `e2e-supabase` separado e com `continue-on-error`, **ainda não executado no GitHub**; o CAPTCHA fica desligado no ambiente local (`VITE_TURNSTILE_SITE_KEY` vazio), então o caminho do Turnstile não é exercitado; o `create_profile` (5 por hora) não é testado porque um jogador só cria um perfil; o Edge precisa da permissão `local-network-access` porque a página servida pelo Playwright chama a API em outra porta.

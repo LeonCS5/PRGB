@@ -80,6 +80,20 @@ São 154 passos. Cada etapa tem a sua meta (`goal`) escrita de acordo com os pas
 - **Passo novo na trilha:** uma linha em `TRAIL` (`trail.ts`), no lugar que a dificuldade pedir. Mudar a **tonalidade** ou o **jeito de tocar** de um passo existente troca o conteúdo ao qual o progresso se refere; faça isso só junto com uma decisão sobre as estrelas já ganhas.
 - **Etapa nova:** `id` único e estável; os testes conferem a ordem de nível.
 
+## Como o jogo julga ligados e slides
+
+Nos exercícios de ligados e de slide só a primeira nota é palhetada. O jogo trata a nota de destino de outro jeito (`classifyAttackRequirement` em `scoring.ts`):
+
+- **Quando é uma nota ligada:** ela é marcada como hammer-on ou pull-off (`hp`), ou a nota anterior, na mesma corda, tem um slide para ela. A anterior precisa durar até ela (folga de 60 ms), em outra altura, e não pode ser nota morta nem parte de acorde. Slide que sai para o nada ou entra de baixo ou de cima não conta; qualquer outro slide vale como ligado, porque os dados não distinguem o slide que repalheta o destino, e uma nota repalhetada também muda de altura.
+- **O que ela pede:** a nota exata (um semitom de diferença é a nota anterior ainda soando, e não acerta), lida por pelo menos duas leituras seguidas, depois de uma mudança de nota que nenhum acerto anterior usou. Não pede um ataque novo.
+- **Tempo:** a janela de acerto vai 60 ms mais longe depois da linha, porque a leitura chega depois e o início da nota é fraco. Perfeito continua só na janela de sempre; fora dela é Bom.
+- **Origem do slide:** a nota de onde o slide parte aceita como Bom as alturas por onde ele passa até o destino.
+- **O que não muda:** as janelas e os pontos das notas palhetadas, o limite de pontos que o servidor confere e o que vale para o ranking.
+
+**Quantas leituras por segundo.** O ataque, a espera do legato (duas leituras) e a regra da nota estável contam leituras, e foram calibrados para cerca de 60 por segundo. O laço de leitura só analisa nesse ritmo, medido no relógio do áudio (`fixedCadence.ts`), seja a tela de 60, 144 ou 165 Hz; numa tela de 30 Hz analisa uma vez por quadro, que é o máximo possível. Antes disso, numa tela rápida o jogo contava uma palhetada como mais de um ataque com mais frequência (em 165 Hz, 20 ataques para 16 palhetadas, contra 16 agora). Se você tem uma tela acima de 60 Hz, refaça o teste de latência.
+
+Limites conhecidos: com guitarra de verdade nada disso foi testado, só sinais sintéticos; um palm mute ou uma nota muito baixa pode ficar abaixo do volume mínimo da leitura (`MIN_PITCH_VOLUME`) e não ser lida; ligados acima de 20 notas por segundo ainda perdem notas.
+
 ## Limites
 
 - Não testado com guitarra real. A ordem foi conferida por regras (nível, tom, padrões) e pelos testes, não por quem toca.
