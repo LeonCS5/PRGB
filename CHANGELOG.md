@@ -1,6 +1,56 @@
 # Changelog
 
-O histórico detalhado, com dono e status de cada item, fica em [AGENTS.md](AGENTS.md) › Problemas Conhecidos. Este arquivo resume cada rodada. As versões passam a ser marcadas com tags (`v0.N.0`, uma por rodada) a partir da rodada 13.
+O histórico detalhado, com dono e status de cada item, fica em [AGENTS.md](AGENTS.md) › Problemas Conhecidos. Este arquivo resume cada versão.
+
+As versões seguem o [versionamento semântico](https://semver.org/lang/pt-BR/). A **1.0.0** é a primeira versão numerada e corresponde à rodada 20 (as rodadas 1 a 19, abaixo, não têm número nem tag). Daqui para frente, MINOR (1.1.0…) traz recursos novos, PATCH (1.0.1…) traz correções e MAJOR (2.0.0) marca uma mudança que quebra dados salvos ou o uso do jogo.
+
+## [1.0.0] — 2026-11-28 (rodada 20)
+
+Pista, técnicas, sombra-guia, começo da música, barra do jogo e testes de ponta a ponta.
+
+### Adicionado
+- **Técnicas na pista:** hammer-on, pull-off e slide viram um **bloco único** segmentado (um segmento por nota, com selo H, P ou slide na divisão); palm mute com um colchete "PM" sobre o trecho; vibrato em onda; bend com o tamanho (`↑¼`, `↑½`, `↑1`, `↑1½`). Forma e letra além da cor, opção "Mostrar as técnicas" e legenda dos símbolos na Aparência.
+- **Sombra-guia:** salta de corda em corda e chega à nota exatamente na hora de tocá-la, cobrindo todas as notas de um acorde. Estilos Sombra e Holograma, três intensidades, cinco predefinições (Discreta, Destaque, Cinema, Contorno e Neon), muitas opções de forma, cor, contorno, rastro e movimento e "Preservar a nota", que a mantém atrás da nota-alvo.
+- **Tamanho das notas** (Pequeno 80%, Normal 100%, Grande 125%, Enorme 150%) e cartão **Espaçamento** com o modo Auto.
+- **Sons de acerto e erro** que podem ser desligados (o som das notas e o metrônomo não entram).
+- **Começo da música:** 5 s de pista vazia, com a contagem no centro da tela perdendo opacidade até a música começar, sem mudar a altura da pista.
+- **Barra do jogo reorganizada** em grupos, com atalhos (`Espaço`, `M`, `N`, `A`, `↑` e `↓`), cartões de Velocidade e Espaçamento e aviso rápido sobre a pista.
+- **Aparência rápida durante a música:** uma gaveta (folha no celular) que pausa o jogo, mostra as opções ao vivo e retoma com uma contagem de 3 s; "Todas as opções" abre a tela cheia sem perder a partida.
+- **Velocidades de 0,25× a 2×** (o ranking e a dupla online valem a 1×).
+- **Testes de ponta a ponta:** `npm run e2e` (Playwright, 31 testes) e `npm run e2e:supabase` (ranking, conta e dupla online contra um Supabase local em Docker, 8 testes, sem tocar a produção). O Supabase CLI entrou como dependência de desenvolvimento.
+
+### Alterado
+- **Espaçamento das notas:** passou a ser medido em tempo de música (cerca de 4 s à frente, igual em qualquer tela), e não em pixels fixos. A pista andava na velocidade ao quadrado; agora a velocidade só muda a rapidez. O modo Auto aproxima as notas nos trechos rápidos (até 0,7×) e as afasta nos lentos (até 1,5×), com transições de 1,5 s; um piso de legibilidade encurta a janela visível em telas estreitas.
+- **Linha de acerto proporcional** à largura da tela (cerca de 28%).
+- **Medidas relativas:** o canvas e as telas passaram a usar frações da nota, da corda e `rem`, no lugar de pixels fixos. A fonte base cresce a partir de 2200 px e o jogo ganhou um layout próprio para janelas baixas.
+- **Julgamento de notas ligadas:** a nota de destino de um hammer-on, pull-off ou slide não exige nova palhetada, mas exige a nota exata, uma mudança de nota confirmada por duas leituras seguidas e tem 60 ms a mais de tolerância no fim. As janelas Perfect e Good e a pontuação das notas normais não mudaram.
+- **Cadência fixa de 60 Hz** na análise do pitch, no relógio do áudio: em telas de 144 e 165 Hz ela rodava até 2,7 vezes mais e inflava os ataques falsos (de 23 a 24 para 13 a 18 numa palhetada a cada 0,5 s, medido com microfone falso). Quem tem tela acima de 60 Hz deve refazer o teste de latência.
+- **Sincronia:** o som de guia e o metrônomo são agendados no relógio do `AudioContext`, descontam a latência de saída e são cancelados ao pausar e ao buscar.
+- **Desempenho:** o relógio da música saiu do estado do React (de cerca de 190 para cerca de 4 renders por segundo tocando); o desenho e o som de guia não alocam mais por quadro.
+- **Aparência:** trocar de tema preserva a sombra-guia, o tamanho das notas, as técnicas e os sons; abas abertas ao mesmo tempo passam a se acompanhar.
+- **Telas fora do jogo** (revisão em `docs/ux-revisao.md`): "Tocar de novo" em primeiro no resultado, "Conectar guitarra" como ação principal no Play Free e no painel de Áudio, textos do Amp em português, alvos de 44 px, "Progresso" no menu e dica do que falta no "Continuar" da dupla.
+- **Orçamento de bundle:** o total de todos os chunks passou de 340 para 350 kB (só pesa no cache offline); a primeira carga continua em 140 kB.
+
+### Corrigido
+- Clicar num interruptor da Aparência rolava a página inteira e deixava uma área vazia (o campo oculto do interruptor não tinha posição relativa).
+- Trocar de tema apagava a sombra-guia configurada.
+- O aviso de rota de áudio e a legenda da primeira partida cobriam a pista e mudavam o tamanho dela.
+- Em janelas baixas e telas grandes a pista ficava pequena ou com texto minúsculo.
+
+### Segurança e operação
+- A chave pública do Supabase no site publicado passou da `anon` legada (JWT) para a **chave publicável**, em Production e Preview, conferida pelo conteúdo do bundle. A chave legada continua ativa para observação (pelo menos 7 dias) antes de ser desativada; o passo a passo e o rollback estão em `docs/operacao.md` seção 7.1. O teste no site publicado (conta, partida ranqueada, placar e dupla) ainda é manual.
+- Nada mudou no banco, nas políticas de acesso, na pontuação máxima aceita pelo servidor nem no que sai do dispositivo. Nenhuma chave foi adicionada a arquivos versionados.
+
+### Conhecido
+- **O jogo ainda não foi testado com guitarra e interface de áudio reais**, nem no Firefox, no Safari ou em celular físico, nem com leitor de tela de verdade. Os testes usam sinais sintéticos, microfone falso e o Edge no Windows. O número 1.0.0 marca o início do versionamento, não uma garantia de maturidade.
+- Notas erradas ainda pontuam mais do que deveriam em alguns exercícios de técnica (a origem de um slide aceita as alturas do caminho, `slideRange`).
+- O envio da pontuação ao ranking não tem limite de tempo (a tela fica em "Enviando…" com rede ruim).
+- Um zumbido de rede elétrica (50 ou 60 Hz) pode ser lido como uma nota grave.
+- O botão Voltar do navegador sai de uma partida em andamento sem pedir confirmação.
+- Falha ao carregar um pedaço do site pela primeira vez recarrega a página sem avisar, e há casos de tela em branco quando falha um arquivo essencial.
+- O som de guia e o metrônomo ainda podem sair do tempo quando a velocidade não é 1×.
+- A sombra-guia no estilo Sombra é pesada em algumas telas, e o rodapé do jogo ainda aperta em janelas muito baixas.
+- Os primeiros 5 commits desta rodada são experimentos de perspectiva 3D e permanecem no histórico como estão.
 
 ## Rodada 19 — revisão crítica
 
