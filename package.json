@@ -1,7 +1,9 @@
 {
   "name": "prgb",
   "private": true,
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "version": "0.0.0",
   "type": "module",
   "scripts": {
@@ -11,6 +13,8 @@
     "test": "vitest run",
     "check:bundle": "node scripts/check-bundle-size.mjs",
     "check:precache": "node scripts/check-precache.mjs",
+    "e2e": "playwright test",
+    "e2e:supabase": "node scripts/e2e-supabase.mjs",
     "gen:appearance-boot": "node scripts/gen-appearance-boot.mjs",
     "preview": "vite preview"
   },
@@ -22,12 +26,14 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.13",
+    "@playwright/test": "^1.65.1",
     "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
     "oxlint": "^1.81.0",
+    "supabase": "^3.4.0",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.2",
     "vite": "^8.3.8",

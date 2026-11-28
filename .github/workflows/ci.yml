@@ -36,3 +36,53 @@ jobs:
       - run: npm test
       # Only what reaches the browser; a dev-only advisory should not block a release
       - run: npm audit --omit=dev --audit-level=high
+
+  # End-to-end in a real browser (Playwright, fake microphone, production build). Kept apart from `check` so it
+  # never slows it down, and non-blocking until a few runs on GitHub show it is stable there.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
+
+  # End-to-end of the ranking, the account and the online pair against a LOCAL Supabase (Docker of the runner). It
+  # only touches the stack it starts itself, never the hosted project; no secret is used. Apart from `check` and `e2e`,
+  # and non-blocking until it has run on GitHub a few times (it has never run there yet).
+  e2e-supabase:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      # Starts `supabase start` and `functions serve`, runs the tests, and stops what it started
+      - run: npm run e2e:supabase -- --stop
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report-supabase
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
