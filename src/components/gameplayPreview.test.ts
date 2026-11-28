@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { DEFAULT_EFFECTS, DEFAULT_STRINGS } from '../appearance/defaults';
+import { DEFAULT_APPEARANCE, DEFAULT_EFFECTS, DEFAULT_GUIDE, DEFAULT_STRINGS } from '../appearance/defaults';
 import { NOTE_STYLES, STRING_SCHEMES, type GameplayAppearance } from '../appearance/types';
 import { buildGameplayLook, isCurrentLook } from './gameplayLook';
 import { drawGameplayPreview } from './gameplayPreview';
@@ -7,8 +7,37 @@ import { createRecorder, installPath2D, ORIGINAL_PALETTE } from './testCanvas';
 
 beforeAll(installPath2D);
 
+// The sample notes alone: the technique blocks have their own tests below
+const NO_TECHNIQUES = { show: false, legend: false };
+
 const appearance = (over: Partial<GameplayAppearance> = {}): GameplayAppearance => ({
-  noteStyle: 'classic', strings: DEFAULT_STRINGS, effects: DEFAULT_EFFECTS, ...over
+  noteStyle: 'classic', noteSize: 100, techniques: NO_TECHNIQUES, strings: DEFAULT_STRINGS, effects: DEFAULT_EFFECTS, guide: DEFAULT_GUIDE, hitSounds: true, reducedMotion: false, ...over
+});
+
+describe('the technique blocks of the preview', () => {
+  const draw = (show: boolean) => {
+    const { ctx, log } = createRecorder();
+    drawGameplayPreview(ctx, 520, 240, appearance({ techniques: { ...DEFAULT_APPEARANCE.techniques, show } }), ORIGINAL_PALETTE);
+    return log;
+  };
+
+  it('draws a hammer-on / pull-off block and a slide block with the game functions when the techniques are on', () => {
+    const on = draw(true);
+    const off = draw(false);
+    const texts = (log: string[]) => log.filter((line) => line.startsWith('fillText('));
+    expect(texts(on).length).toBeGreaterThan(texts(off).length);
+    // the frets of the examples (5 H 7 P 5 and 3 / 5) and the letters of the two techniques
+    for (const mark of ['H', 'P']) expect(texts(on).some((line) => line.includes(`'${mark}'`) || line.includes(`"${mark}"`) || line.includes(`(${mark},`) ), mark).toBe(true);
+  });
+
+  it('leaves the picture as it was when the techniques are off', () => {
+    const off = draw(false);
+    expect(off.filter((line) => line.startsWith('fillText(')).length).toBe(6 + 6 * 2);
+  });
+
+  it('draws the same thing twice (the blocks are built once, not rewritten)', () => {
+    expect(draw(true)).toEqual(draw(true));
+  });
 });
 
 describe('drawGameplayPreview', () => {

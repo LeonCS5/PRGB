@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import type { GameplayAppearance } from '../../appearance/types';
 import { anyEffectOn, drawPulseRing } from '../gameEffects';
-import { drawGameplayPreview } from '../gameplayPreview';
+import { drawGameplayPreview, drawPreviewGuide, PREVIEW_GUIDE_LOOP_MS } from '../gameplayPreview';
 import { stringY, layoutLanes, type GamePalette } from '../practiceLanes';
 
 export interface GameplayPreviewCanvasProps {
@@ -68,7 +68,9 @@ export const GameplayPreviewCanvas: React.FC<GameplayPreviewCanvasProps> = ({ ap
     const container = containerRef.current;
     const canvas = canvasRef.current;
     if (!container || !canvas) return;
-    const animated = anyEffectOn(appearance.effects);
+    // The guide hops on its own loop unless motion is reduced; then it sits still in the base picture
+    const guideMoves = appearance.guide.enabled && !appearance.reducedMotion;
+    const animated = anyEffectOn(appearance.effects) || guideMoves;
     let base: OffscreenCanvas | null = null;
     let frame = 0;
     let lastDraw = -Infinity;
@@ -82,6 +84,7 @@ export const GameplayPreviewCanvas: React.FC<GameplayPreviewCanvasProps> = ({ ap
         const dpr = canvas.width / Math.max(1, container.clientWidth);
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         drawEffectsFrame(ctx, container.clientWidth, container.clientHeight, appearance, palette, now);
+        if (guideMoves) drawPreviewGuide(ctx, container.clientWidth, container.clientHeight, appearance, palette, now % PREVIEW_GUIDE_LOOP_MS);
       }
     };
 
@@ -97,7 +100,7 @@ export const GameplayPreviewCanvas: React.FC<GameplayPreviewCanvasProps> = ({ ap
       if (!ctx) return;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       // The pulse ring is part of the static drawing; in the animated case the loop draws it moving instead
-      drawGameplayPreview(ctx, width, height, animated ? { ...appearance, effects: { ...appearance.effects, hitPulse: false } } : appearance, palette);
+      drawGameplayPreview(ctx, width, height, animated ? { ...appearance, effects: { ...appearance.effects, hitPulse: false } } : appearance, palette, guideMoves ? null : undefined);
       paint(animated ? performance.now() : null);
     };
 

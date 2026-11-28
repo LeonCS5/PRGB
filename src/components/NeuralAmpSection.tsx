@@ -28,17 +28,20 @@ const FileRow: React.FC<FileRowProps> = ({ label, accept, loaded, disabled, onLo
   const inputId = useId();
   return (
     <div className="flex min-h-11 items-center gap-2 rounded-xl border border-ink-700 bg-ink-850 px-3 py-1.5">
-      <label htmlFor={inputId} className="min-w-0 flex-1 text-xs text-ink-200">
+      <div className="min-w-0 flex-1 text-xs text-ink-200">
         <span className="block font-semibold">{label}</span>
-        <span className="block truncate font-mono text-[11px] text-ink-300">{loaded ?? 'Nenhum arquivo'}</span>
+        <span className="block truncate font-mono text-[0.6875rem] text-ink-300">{loaded ?? 'Nenhum arquivo'}</span>
+      </div>
+      <label className={'relative flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg bg-ink-700 px-3 text-xs font-semibold text-ink-100 transition has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-signal-300 ' + (disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-ink-600')}>
+        {loaded ? 'Trocar' : 'Escolher'}
+        <input id={inputId} type="file" accept={accept} disabled={disabled} aria-label={`${loaded ? 'Trocar' : 'Escolher'} arquivo: ${label}`}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = '';
+            if (file) onLoad(file);
+          }}
+          className="sr-only" />
       </label>
-      <input id={inputId} type="file" accept={accept} disabled={disabled}
-        onChange={(event) => {
-          const file = event.target.files?.[0];
-          event.target.value = '';
-          if (file) onLoad(file);
-        }}
-        className="min-h-11 w-40 min-w-11 cursor-pointer text-[11px] text-ink-300 file:mr-2 file:min-h-11 file:min-w-11 file:cursor-pointer file:rounded-lg file:border-0 file:bg-ink-700 file:px-2 file:py-1.5 file:text-xs file:font-semibold file:text-ink-100 disabled:cursor-not-allowed disabled:opacity-50" />
       {loaded && (
         <button type="button" onClick={onClear} disabled={disabled} aria-label={`Remover ${label}`}
           className="flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg text-ink-300 transition hover:bg-ink-800 hover:text-ink-100 disabled:cursor-not-allowed disabled:opacity-50">

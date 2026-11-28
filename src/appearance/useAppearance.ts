@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { applyAppearanceToDocument, prefersReducedMotion } from './apply';
 import { DEFAULT_APPEARANCE } from './defaults';
 import { getPreset, isPresetCustomized } from './presets';
-import type { AppearanceSettings, EffectSettings, GameplayAppearance, StringSettings, ThemeId } from './types';
+import type { AppearanceSettings, EffectSettings, GameplayAppearance, GuideSettings, GuideShadowSettings, StringSettings, TechniqueSettings, ThemeId } from './types';
 import { APPEARANCE_STORAGE_KEY, APPEARANCE_VERSION, parseStoredAppearance, parseThemeId, serializeAppearance, validateAppearance } from './validate';
 
 export { isPresetCustomized };
@@ -10,9 +10,11 @@ export { isPresetCustomized };
 // Key of the temporary theme lab (removed): a theme picked there is carried over once
 const LEGACY_LAB_KEY = 'prgb:theme-lab:v1';
 
-export interface AppearancePatch extends Partial<Omit<AppearanceSettings, 'strings' | 'effects'>> {
+export interface AppearancePatch extends Partial<Omit<AppearanceSettings, 'strings' | 'effects' | 'guide' | 'techniques'>> {
+  techniques?: Partial<TechniqueSettings>;
   strings?: Partial<StringSettings>;
   effects?: Partial<EffectSettings>;
+  guide?: Partial<Omit<GuideSettings, 'shadow'>> & { shadow?: Partial<GuideShadowSettings> };
 }
 
 let state: AppearanceSettings = DEFAULT_APPEARANCE;
@@ -69,6 +71,17 @@ const watchReducedMotion = (): void => {
   }
 };
 
+// Another tab saved a look: take it, or this tab would write its older copy over it on the next change
+const watchStorage = (): void => {
+  try {
+    window.addEventListener('storage', (event) => {
+      if (event.storageArea === localStorage && (event.key === null || event.key === APPEARANCE_STORAGE_KEY)) reloadAppearance();
+    });
+  } catch {
+    // No window (tests, workers): there is no other tab to follow.
+  }
+};
+
 /** Reads the saved look again (and migrates the old lab key). Runs by itself on first use. */
 export const reloadAppearance = (): void => {
   const parsed = parseStoredAppearance(readStorage());
@@ -93,6 +106,7 @@ const ensureLoaded = (): void => {
   if (!watching) {
     watching = true;
     watchReducedMotion();
+    watchStorage();
   }
 };
 
@@ -122,7 +136,9 @@ export const setAppearance = (patch: AppearancePatch): void => {
     ...current,
     ...patch,
     strings: { ...current.strings, ...patch.strings },
-    effects: { ...current.effects, ...patch.effects }
+    effects: { ...current.effects, ...patch.effects },
+    techniques: { ...current.techniques, ...patch.techniques },
+    guide: { ...current.guide, ...patch.guide, shadow: { ...current.guide.shadow, ...patch.guide?.shadow } }
   }));
 };
 
@@ -130,9 +146,10 @@ export const resetAppearance = (): void => {
   commit(DEFAULT_APPEARANCE);
 };
 
-/** Takes a preset whole; the reduce-effects switch is the player's accessibility choice and stays as it was. */
+/** Takes a preset whole; the reduce-effects switch, the hit sounds and the guide are the player's own choices and stay as they were. */
 export const applyPreset = (id: ThemeId): void => {
-  commit(getPreset(parseThemeId(id, 'original'), getAppearance().reduceEffects));
+  const { reduceEffects, hitSounds, guide, noteSize, techniques } = getAppearance();
+  commit(getPreset(parseThemeId(id, 'original'), reduceEffects, hitSounds, guide, noteSize, techniques));
 };
 
 /** For the local data export: what is saved, or null when nothing is. */
@@ -164,12 +181,17 @@ export const toGameplayAppearance = (
   reduced: boolean = prefersReducedMotion()
 ): GameplayAppearance => {
   if (!settings.reduceEffects && !reduced) {
-    return { noteStyle: settings.noteStyle, strings: settings.strings, effects: settings.effects };
+    return { noteStyle: settings.noteStyle, noteSize: settings.noteSize, techniques: settings.techniques, strings: settings.strings, effects: settings.effects, guide: settings.guide, hitSounds: settings.hitSounds, reducedMotion: false };
   }
   return {
     noteStyle: settings.noteStyle,
+    noteSize: settings.noteSize,
+    techniques: settings.techniques,
     strings: { ...settings.strings, glow: 0 },
-    effects: { ...settings.effects, hitPulse: false, perfectSpark: false, comboGlow: false, noteTrail: false, reactiveBackground: false }
+    effects: { ...settings.effects, hitPulse: false, perfectSpark: false, comboGlow: false, noteTrail: false, reactiveBackground: false },
+    guide: settings.guide,
+    hitSounds: settings.hitSounds,
+    reducedMotion: true
   };
 };
 

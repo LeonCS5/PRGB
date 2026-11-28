@@ -25,7 +25,7 @@ const JudgementCounts: React.FC<{ score: ScoreState }> = ({ score }) => (
       { label: 'Errou', value: score.miss, color: 'text-miss' }
     ].map((item) => (
       <div key={item.label} className="rounded-lg bg-ink-850 py-2">
-        <dt className="text-[10px] text-ink-300">{item.label}</dt>
+        <dt className="text-[0.625rem] text-ink-300">{item.label}</dt>
         <dd className={'text-lg font-bold ' + item.color}>{item.value}</dd>
       </div>
     ))}
@@ -177,14 +177,16 @@ const SoloResult: React.FC<ResultPanelProps> = ({ titleId, summary, parts, chall
         {ranked && <RankedResult submission={ranked} onRetry={() => onRetryRanked?.()} />}
       </div>
       <div className="mt-6">
+        <button type="button" onClick={onPlayAgain} className={primaryButton}>Tocar de novo</button>
+        <button type="button" onClick={onChooseSong} className={secondaryButton + ' mb-3'}>{isExercise ? 'Escolher outro exercício' : 'Escolher outra música'}</button>
         {isConfigured && isRankableSongId(tab.songId) && (
           <button type="button" onClick={() => openLeaderboard({ songId: tab.songId, partId, title: tab.title, trackName: tab.trackName })}
-            className={secondaryButton + ' mt-0 mb-3 flex items-center justify-center gap-2 font-semibold'}>
+            className={secondaryButton + ' mb-3 flex items-center justify-center gap-2 font-semibold'}>
             <ListOrdered size={16} aria-hidden="true" /> Ver ranking
           </button>
         )}
         {canChallenge ? (
-          <button type="button" onClick={() => setIsSharing(true)} className={secondaryButton + ' mt-0 mb-3 flex items-center justify-center gap-2 border-amp-500/40 font-semibold text-amp-300'}>
+          <button type="button" onClick={() => setIsSharing(true)} className={secondaryButton + ' mb-3 flex items-center justify-center gap-2 border-amp-500/40 font-semibold text-amp-300'}>
             <Swords size={16} aria-hidden="true" /> {challenge ? 'Responder ao desafio' : 'Desafiar um amigo'}
           </button>
         ) : (
@@ -192,8 +194,6 @@ const SoloResult: React.FC<ResultPanelProps> = ({ titleId, summary, parts, chall
             {counts ? `Desafios valem só na velocidade 1×. Toque em 1× para ${challenge ? 'responder' : 'desafiar um amigo'}.` : summary.laps > 1 ? 'O modo treino não vale para desafio.' : summary.jumped ? 'Jogada com saltos não vale para desafio.' : 'Jogada com troca de velocidade não vale para desafio.'}
           </p>
         )}
-        <button type="button" onClick={onPlayAgain} className={primaryButton}>Tocar de novo</button>
-        <button type="button" onClick={onChooseSong} className={secondaryButton}>{isExercise ? 'Escolher outro exercício' : 'Escolher outra música'}</button>
       </div>
     </>
   );

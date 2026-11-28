@@ -59,7 +59,7 @@ export const AudioChip: React.FC<Pick<SiteNavProps, 'isAudioRunning' | 'onAudio'
 export const ProgressButton: React.FC<{ onOpen: () => void }> = ({ onOpen }) => (
   <button type="button" onClick={onOpen} aria-label="Meu progresso" title="Meu progresso"
     className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-lg px-2 text-sm font-semibold text-ink-200 transition hover:bg-ink-800 hover:text-amp-300">
-    <Award size={18} className="shrink-0 text-amp-400" aria-hidden="true" /><span className="hidden 2xl:inline">Meu progresso</span>
+    <Award size={18} className="shrink-0 text-amp-400" aria-hidden="true" /><span className="hidden whitespace-nowrap 2xl:inline">Progresso</span>
   </button>
 );
 
@@ -67,7 +67,7 @@ export const ProgressButton: React.FC<{ onOpen: () => void }> = ({ onOpen }) => 
 export const AppearanceButton: React.FC<{ onOpen: () => void }> = ({ onOpen }) => (
   <button type="button" onClick={onOpen} aria-label="Aparência" title="Aparência"
     className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center gap-2 rounded-lg px-2 text-sm font-semibold text-ink-200 transition hover:bg-ink-800 hover:text-amp-300">
-    <Palette size={18} className="shrink-0 text-amp-400" aria-hidden="true" /><span className="hidden 2xl:inline">Aparência</span>
+    <Palette size={18} className="shrink-0 text-amp-400" aria-hidden="true" /><span className="hidden whitespace-nowrap 2xl:inline">Aparência</span>
   </button>
 );
 
@@ -80,7 +80,7 @@ export const TabBar: React.FC<SiteNavProps> = (props) => {
     <nav aria-label="Principal" className="fixed inset-x-0 bottom-0 z-40 flex border-t border-ink-700 bg-ink-950/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
       {[...items.filter((item) => item.label !== 'Ranking' && item.label !== 'Modos' && item.label !== 'Trilha'), audio, ...items.filter((item) => item.label === 'Ranking')].map((item) => (
         <NavEntry key={item.label} item={item} iconSize={20}
-          className="flex min-h-14 min-w-0 flex-1 cursor-pointer flex-col items-center justify-center gap-0.5 text-[11px] font-semibold text-ink-200 transition hover:text-amp-300" />
+          className="flex min-h-14 min-w-0 flex-1 cursor-pointer flex-col items-center justify-center gap-0.5 text-[0.6875rem] font-semibold text-ink-200 transition hover:text-amp-300" />
       ))}
     </nav>
   );

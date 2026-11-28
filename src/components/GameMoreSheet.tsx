@@ -51,7 +51,7 @@ export const GameMoreSheet: React.FC<GameMoreSheetProps> = ({ children }) => {
               <X size={18} aria-hidden="true" /> Fechar
             </button>
           </div>
-          <div className="grid gap-2 [&>button]:w-full [&>button]:justify-start">{children(close)}</div>
+          <div className="grid gap-2 [&_button]:w-full [&_button]:justify-start">{children(close)}</div>
         </ModalFrame>
       )}
     </>

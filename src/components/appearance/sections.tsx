@@ -5,8 +5,9 @@ import type { AppearanceSettings, StringScheme, ThemeId } from '../../appearance
 import type { AppearancePatch } from '../../appearance/useAppearance';
 import { STRING_SCHEME_COLORS } from '../gameplayPalette';
 import { OptionGroup, RangeField, SwitchField } from './controls';
+import { TechniqueLegend } from './TechniqueLegend';
 import {
-  BACKGROUND_OPTIONS, CONTRAST_OPTIONS, EFFECT_ITEMS, FONT_OPTIONS, INTENSITY_OPTIONS, LINE_OPTIONS, NOTE_OPTIONS,
+  BACKGROUND_OPTIONS, CONTRAST_OPTIONS, EFFECT_ITEMS, FONT_OPTIONS, INTENSITY_OPTIONS, LINE_OPTIONS, NOTE_OPTIONS, NOTE_SIZE_OPTIONS,
   SCHEME_OPTIONS, THICKNESS_OPTIONS, UI_OPTIONS
 } from './options';
 
@@ -86,7 +87,7 @@ export const ThemesSection: React.FC<ThemesSectionProps> = ({ settings, customiz
 };
 
 // Fixed per option (not the current setting), so each card shows what it would look like
-const radiusClass = { soft: 'rounded-[12px]', sharp: 'rounded-[2px]', arcade: 'rounded-[8px]' } as const;
+const radiusClass = { soft: 'rounded-[0.75rem]', sharp: 'rounded-[0.125rem]', arcade: 'rounded-[0.5rem]' } as const;
 const fontClass = {
   modern: "font-['Inter',ui-sans-serif,system-ui,sans-serif]",
   technical: "font-['IBM_Plex_Sans',ui-sans-serif,system-ui,sans-serif]",
@@ -129,6 +130,19 @@ export const NotesSection: React.FC<SectionProps & { originalStrings: readonly s
       <Heading id="appearance-title-notas" title="Notas e cordas">Como as notas e as seis cordas aparecem na pista. Só o desenho muda, nunca a pontuação.</Heading>
       <OptionGroup legend="Estilo da nota" name="appearance-note" options={NOTE_OPTIONS} value={settings.noteStyle}
         onChange={(noteStyle) => onChange({ noteStyle })} />
+      <OptionGroup legend="Tamanho das notas" name="appearance-note-size" options={NOTE_SIZE_OPTIONS} value={settings.noteSize}
+        onChange={(noteSize) => onChange({ noteSize })} columns="grid-cols-2 sm:grid-cols-4" />
+      <div className="space-y-3">
+        <SwitchField id="appearance-techniques-show" label="Mostrar as técnicas na pista"
+          hint="Ligados (H e P) como uma peça só, slides, vibrato, palm mute (PM) e o tamanho do bend. Desligado, a pista mostra só os números. Só o desenho muda, nunca a pontuação."
+          checked={settings.techniques.show} onChange={(show) => onChange({ techniques: { show } })} />
+        {settings.techniques.show && (
+          <SwitchField id="appearance-techniques-legend" label="Legenda dos símbolos"
+            hint="Mostra o que cada símbolo quer dizer, aqui e na primeira partida."
+            checked={settings.techniques.legend} onChange={(legend) => onChange({ techniques: { legend } })} />
+        )}
+        {settings.techniques.show && settings.techniques.legend && <TechniqueLegend />}
+      </div>
       <div>
         <OptionGroup legend="Esquema de cores das cordas" name="appearance-scheme" options={SCHEME_OPTIONS} value={strings.scheme}
           onChange={(scheme) => onChange({ strings: { scheme } })}
@@ -178,7 +192,7 @@ export const EffectsSection: React.FC<SectionProps & { effectsPaused: boolean }>
 const backgroundThumb = {
   solid: 'bg-ink-950',
   gradient: 'bg-ink-950 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--color-amp-500)_18%,transparent)_0%,transparent_60%),linear-gradient(0deg,color-mix(in_srgb,var(--color-ink-600)_70%,transparent)_0%,transparent_50%)]',
-  grid: 'bg-ink-950 bg-[linear-gradient(color-mix(in_srgb,var(--color-ink-100)_14%,transparent)_1px,transparent_1px),linear-gradient(90deg,color-mix(in_srgb,var(--color-ink-100)_14%,transparent)_1px,transparent_1px)] bg-[length:12px_12px]',
+  grid: 'bg-ink-950 bg-[linear-gradient(color-mix(in_srgb,var(--color-ink-100)_14%,transparent)_1px,transparent_1px),linear-gradient(90deg,color-mix(in_srgb,var(--color-ink-100)_14%,transparent)_1px,transparent_1px)] bg-[length:0.75rem_0.75rem]',
   ambient: 'bg-ink-950 bg-[radial-gradient(ellipse_60%_55%_at_12%_0%,color-mix(in_srgb,var(--color-amp-500)_38%,transparent),transparent_70%),radial-gradient(ellipse_55%_55%_at_92%_100%,color-mix(in_srgb,var(--color-signal-500)_30%,transparent),transparent_70%)]'
 } as const;
 
@@ -197,6 +211,9 @@ export const AccessibilitySection: React.FC<SectionProps & { systemReducesMotion
     <SwitchField id="appearance-reduce-effects" label="Desativar todos os efeitos decorativos"
       hint="Desliga brilhos, rastros, faíscas e sombras de enfeite. O jogo continua igual, só mais quieto."
       checked={settings.reduceEffects} onChange={(reduceEffects) => onChange({ reduceEffects })} />
+    <SwitchField id="appearance-hit-sounds" label="Sons de acerto e erro"
+      hint="Os sons curtos de Perfeito, Bom e Errou. Desligue para jogar em silêncio: o som das notas da tab e o metrônomo continuam como estão."
+      checked={settings.hitSounds} onChange={(hitSounds) => onChange({ hitSounds })} />
     <p className="text-sm leading-6 text-ink-200">
       O PRGB já respeita a preferência de movimento reduzido do sistema{systemReducesMotion ? ': ela está ligada neste aparelho, então os efeitos já estão desligados' : ''}.
     </p>

@@ -16,15 +16,15 @@ export interface SoloHudProps {
 export const SoloHud: React.FC<SoloHudProps> = ({ score, goal }) => {
   const { effects } = useGameplayAppearance();
   return (
-    <div className="mt-3 grid grid-cols-4 gap-3 border-t border-ink-700 pt-3 font-mono [@media(max-height:500px)]:mt-1 [@media(max-height:500px)]:pt-1">
+    <div className="mt-3 grid grid-cols-4 gap-3 border-t border-ink-700 pt-3 font-mono [@media(max-height:45rem)]:mt-1.5 [@media(max-height:45rem)]:gap-2 [@media(max-height:45rem)]:pt-1.5 short:mt-0! short:flex short:shrink-0 short:gap-4 short:border-t-0 short:pt-0!">
       {[
         { label: 'PONTUAÇÃO', value: formatPoints(score.score), color: 'text-amp-300' },
         { label: 'COMBO', value: comboText(score.combo), color: 'text-near' },
         { label: 'PRECISÃO', value: accuracyPercent(score) + '%', color: 'text-hit' },
         { label: 'MAX COMBO', value: score.maxCombo, color: 'text-signal-300' }
       ].map(item => <div key={item.label}>
-        <p className="text-[11px] tracking-wider text-ink-300">{item.label}</p>
-        <p className={'mt-0.5 text-xl font-bold sm:text-2xl ' + item.color} style={item.label === 'COMBO' ? comboGlowStyle(score.combo, effects) : undefined}>{item.value}</p>
+        <p className="text-[0.6875rem] tracking-wider text-ink-300">{item.label}</p>
+        <p className={'mt-0.5 text-xl font-bold sm:text-2xl [@media(max-height:45rem)]:sm:text-xl ' + item.color} style={item.label === 'COMBO' ? comboGlowStyle(score.combo, effects) : undefined}>{item.value}</p>
         {item.label === 'PONTUAÇÃO' && goal != null && <p className="truncate text-xs text-amp-200">Meta: {formatPoints(goal)}</p>}
       </div>)}
     </div>
@@ -35,9 +35,9 @@ const PLAYER_TEXT_COLORS: [string, string] = ['text-player-1', 'text-player-2'];
 
 const PlayerScore: React.FC<{ name: string; score: ScoreState; player: PlayerSlot }> = ({ name, score, player }) => (
   <div className={'min-w-0 ' + (player === 1 ? 'text-right' : '')}>
-    <p className={'truncate text-[11px] font-bold tracking-wider sm:text-xs ' + PLAYER_TEXT_COLORS[player]}>{name}</p>
+    <p className={'truncate text-[0.6875rem] font-bold tracking-wider sm:text-xs ' + PLAYER_TEXT_COLORS[player]}>{name}</p>
     <p className="mt-0.5 text-lg font-bold text-ink-100 sm:text-2xl">{formatPoints(score.score)}</p>
-    <p className="truncate text-[11px] text-ink-300 sm:text-xs">
+    <p className="truncate text-[0.6875rem] text-ink-300 sm:text-xs">
       <span className="text-near">{comboText(score.combo)}</span> · <span className="text-hit">{accuracyPercent(score)}%</span>
     </p>
   </div>
@@ -49,10 +49,10 @@ export interface DuoHudProps {
 }
 
 export const DuoHud: React.FC<DuoHudProps> = ({ scores, names }) => (
-  <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3 border-t border-ink-700 pt-3 font-mono [@media(max-height:500px)]:mt-1 [@media(max-height:500px)]:pt-1">
+  <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3 border-t border-ink-700 pt-3 font-mono [@media(max-height:31.25rem)]:mt-1 [@media(max-height:31.25rem)]:pt-1">
     <PlayerScore name={names[0]} score={scores[0]} player={0} />
     <div className="rounded-xl border border-amp-500/30 bg-amp-500/10 px-3 py-1 text-center sm:px-6">
-      <p className="text-[11px] tracking-wider text-amp-300">PLACAR DA EQUIPE</p>
+      <p className="text-[0.6875rem] tracking-wider text-amp-300">PLACAR DA EQUIPE</p>
       <p className="text-2xl font-bold text-amp-300 sm:text-3xl">{formatPoints(scores[0].score + scores[1].score)}</p>
     </div>
     <PlayerScore name={names[1]} score={scores[1]} player={1} />
@@ -67,7 +67,7 @@ export interface LiveTunerProps {
 export const LiveTuner: React.FC<LiveTunerProps> = ({ player = 0, label }) => {
   const latestPitch = useLatestPitch(player);
   return <div role="group" aria-label={label ? `Afinador de ${label}` : 'Afinador'} className="flex shrink-0 items-center gap-2 rounded-xl border border-signal-500/20 bg-signal-500/5 px-2 py-2 font-mono sm:px-4">
-    {label && <span className={'text-[11px] font-bold ' + PLAYER_TEXT_COLORS[player]}>{label}</span>}
+    {label && <span className={'text-[0.6875rem] font-bold ' + PLAYER_TEXT_COLORS[player]}>{label}</span>}
     <span className="text-lg font-bold text-signal-300">{latestPitch ? latestPitch.noteName : '--'}</span>
     <span className="hidden text-xs text-ink-300 sm:inline">{latestPitch ? latestPitch.frequency + ' Hz' : 'Toque uma corda'}</span>
     {latestPitch && <span className={'size-2 rounded-full ' + (Math.abs(latestPitch.cents) <= 6 ? 'bg-hit' : 'bg-signal-400')} />}

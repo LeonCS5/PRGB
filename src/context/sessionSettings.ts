@@ -9,13 +9,16 @@ export interface SessionSettings {
   metronome: boolean;
   synth: boolean;
   training: boolean;
-  zoom?: number;
+  zoom: number; // visual only: how far apart the notes are drawn, never the scoring. ZOOM_AUTO lets the game pick per song
 }
 
-export const DEFAULT_SESSION_SETTINGS: SessionSettings = { speed: 1, metronome: false, synth: true, training: false, zoom: 1 };
+// The zoom that is not a number of times: the game measures the song and spaces the notes so they do not overlap
+export const ZOOM_AUTO = 0;
 
-export const SPEED_OPTIONS: readonly number[] = [0.25, 0.4, 0.5, 0.65, 0.75, 0.85, 1, 1.15, 1.25, 1.5];
-export const ZOOM_OPTIONS: readonly number[] = [0.6, 0.8, 1, 1.25, 1.5];
+export const DEFAULT_SESSION_SETTINGS: SessionSettings = { speed: 1, metronome: false, synth: true, training: false, zoom: ZOOM_AUTO };
+
+export const SPEED_OPTIONS: readonly number[] = [0.25, 0.5, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 2];
+export const ZOOM_OPTIONS: readonly number[] = [ZOOM_AUTO, 0.75, 1, 1.25, 1.5];
 
 // Old sessions are of no use: only the last few are kept
 const MAX_SESSIONS = 10;
@@ -28,6 +31,7 @@ export const getSessionSettings = (queueId: number | null | undefined): SessionS
 
 export const saveSessionSettings = (queueId: number, settings: SessionSettings): void => {
   if (!SPEED_OPTIONS.includes(settings.speed)) return;
+  if (!ZOOM_OPTIONS.includes(settings.zoom)) return;
   settingsBySession.delete(queueId);
   settingsBySession.set(queueId, { ...settings });
   while (settingsBySession.size > MAX_SESSIONS) {

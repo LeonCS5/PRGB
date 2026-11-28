@@ -1,8 +1,8 @@
-import { DEFAULT_APPEARANCE, DEFAULT_EFFECTS, DEFAULT_STRINGS } from './defaults';
+import { DEFAULT_APPEARANCE, DEFAULT_EFFECTS, DEFAULT_GUIDE, DEFAULT_GUIDE_SHADOW, DEFAULT_STRINGS } from './defaults';
 import {
-  BACKGROUND_STYLES, EFFECT_INTENSITIES, FONT_PACKS, GAMEPLAY_CONTRASTS, LINE_STYLES, NOTE_STYLES, STRING_SCHEMES,
+  BACKGROUND_STYLES, EFFECT_INTENSITIES, FONT_PACKS, GAMEPLAY_CONTRASTS, GUIDE_CHORD_COVERS, GUIDE_COLORS, GUIDE_EASINGS, GUIDE_SHAPES, GUIDE_STYLES, LINE_STYLES, NOTE_SIZES, NOTE_STYLES, STRING_SCHEMES,
   STRING_THICKNESS, THEME_IDS, UI_STYLES,
-  type AppearanceSettings, type EffectIntensity, type EffectSettings, type StringSettings, type ThemeId
+  type AppearanceSettings, type EffectIntensity, type EffectSettings, type GuideSettings, type GuideShadowSettings, type GuideStyle, type StringSettings, type TechniqueSettings, type ThemeId
 } from './types';
 
 export const APPEARANCE_STORAGE_KEY = 'prgb:appearance:v1';
@@ -53,6 +53,57 @@ const validateEffects = (raw: unknown): EffectSettings => {
   };
 };
 
+// Whole steps inside the range, like the sliders; anything else goes back to the default of that field
+const inSteps = (value: unknown, min: number, max: number, step: number, fallback: number): number =>
+  inRange(value, min, max, fallback) === value && ((value as number) - min) % step === 0 ? (value as number) : fallback;
+
+const validateGuideShadow = (raw: unknown): GuideShadowSettings => {
+  const input = isRecord(raw) ? raw : {};
+  const d = DEFAULT_GUIDE_SHADOW;
+  return {
+    opacity: inSteps(input.opacity, 20, 100, 5, d.opacity),
+    color: oneOf(input.color, GUIDE_COLORS, d.color),
+    width: inSteps(input.width, 80, 180, 5, d.width),
+    height: inSteps(input.height, 80, 180, 5, d.height),
+    blur: inSteps(input.blur, 0, 100, 5, d.blur),
+    offsetX: inSteps(input.offsetX, -50, 50, 5, d.offsetX),
+    offsetY: inSteps(input.offsetY, -50, 50, 5, d.offsetY),
+    shape: oneOf(input.shape, GUIDE_SHAPES, d.shape),
+    outline: bool(input.outline, d.outline),
+    outlineWidth: inSteps(input.outlineWidth, 1, 6, 1, d.outlineWidth),
+    outlineColor: oneOf(input.outlineColor, GUIDE_COLORS, d.outlineColor),
+    trail: bool(input.trail, d.trail),
+    trailLength: inSteps(input.trailLength, 20, 100, 10, d.trailLength),
+    trailOpacity: inSteps(input.trailOpacity, 10, 100, 10, d.trailOpacity),
+    pulse: bool(input.pulse, d.pulse),
+    pulseStrength: inSteps(input.pulseStrength, 10, 100, 10, d.pulseStrength),
+    hopMs: inSteps(input.hopMs, 100, 600, 50, d.hopMs),
+    easing: oneOf(input.easing, GUIDE_EASINGS, d.easing),
+    chordCover: oneOf(input.chordCover, GUIDE_CHORD_COVERS, d.chordCover),
+    showNext: bool(input.showNext, d.showNext),
+    glow: inSteps(input.glow, 0, 100, 10, d.glow),
+    preserveNote: bool(input.preserveNote, d.preserveNote)
+  };
+};
+
+const validateGuide = (raw: unknown): GuideSettings => {
+  const input = isRecord(raw) ? raw : {};
+  return {
+    enabled: bool(input.enabled, DEFAULT_GUIDE.enabled),
+    intensity: oneOf<EffectIntensity>(input.intensity, EFFECT_INTENSITIES, DEFAULT_GUIDE.intensity),
+    style: oneOf<GuideStyle>(input.style, GUIDE_STYLES, DEFAULT_GUIDE.style),
+    shadow: validateGuideShadow(input.shadow)
+  };
+};
+
+const validateTechniques = (raw: unknown): TechniqueSettings => {
+  const input = isRecord(raw) ? raw : {};
+  return {
+    show: bool(input.show, DEFAULT_APPEARANCE.techniques.show),
+    legend: bool(input.legend, DEFAULT_APPEARANCE.techniques.legend)
+  };
+};
+
 const validatePresetId = (value: unknown): ThemeId | null => {
   if (value === null) return null;
   if (typeof value === 'string') return parseThemeId(value, DEFAULT_APPEARANCE.presetId ?? 'original');
@@ -68,8 +119,12 @@ export const validateAppearance = (raw: unknown): AppearanceSettings => {
     font: oneOf(input.font, FONT_PACKS, DEFAULT_APPEARANCE.font),
     background: oneOf(input.background, BACKGROUND_STYLES, DEFAULT_APPEARANCE.background),
     noteStyle: oneOf(input.noteStyle, NOTE_STYLES, DEFAULT_APPEARANCE.noteStyle),
+    noteSize: oneOf(input.noteSize, NOTE_SIZES, DEFAULT_APPEARANCE.noteSize),
+    techniques: validateTechniques(input.techniques),
     strings: validateStrings(input.strings),
     effects: validateEffects(input.effects),
+    guide: validateGuide(input.guide),
+    hitSounds: bool(input.hitSounds, DEFAULT_APPEARANCE.hitSounds),
     reduceEffects: bool(input.reduceEffects, DEFAULT_APPEARANCE.reduceEffects),
     presetId: validatePresetId(input.presetId)
   };

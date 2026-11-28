@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  DEFAULT_SESSION_SETTINGS, getSessionSettings, isLegendSeen, LEGEND_KEY, markLegendSeen, saveSessionSettings
+  DEFAULT_SESSION_SETTINGS, getSessionSettings, isLegendSeen, LEGEND_KEY, markLegendSeen, saveSessionSettings, ZOOM_AUTO, ZOOM_OPTIONS
 } from './sessionSettings';
 
 describe('session settings', () => {
@@ -13,18 +13,38 @@ describe('session settings', () => {
   });
 
   it('gives the next exercise of a session what the player chose in the one before', () => {
-    saveSessionSettings(9002, { speed: 0.75, metronome: true, synth: false, training: true });
-    expect(getSessionSettings(9002)).toEqual({ speed: 0.75, metronome: true, synth: false, training: true });
+    saveSessionSettings(9002, { speed: 0.75, metronome: true, synth: false, training: true, zoom: 1.25 });
+    expect(getSessionSettings(9002)).toEqual({ speed: 0.75, metronome: true, synth: false, training: true, zoom: 1.25 });
     expect(getSessionSettings(9003)).toEqual(DEFAULT_SESSION_SETTINGS);
   });
 
   it('ignores a speed the game does not offer', () => {
-    saveSessionSettings(9004, { speed: 3, metronome: true, synth: true, training: false });
+    saveSessionSettings(9004, { speed: 3, metronome: true, synth: true, training: false, zoom: 1 });
     expect(getSessionSettings(9004)).toEqual(DEFAULT_SESSION_SETTINGS);
   });
 
+  it('starts on the automatic zoom, and remembers it like any other choice', () => {
+    expect(DEFAULT_SESSION_SETTINGS.zoom).toBe(ZOOM_AUTO);
+    expect(ZOOM_OPTIONS[0]).toBe(ZOOM_AUTO);
+    saveSessionSettings(9006, { speed: 1, metronome: false, synth: true, training: false, zoom: 1.5 });
+    saveSessionSettings(9006, { speed: 1, metronome: false, synth: true, training: false, zoom: ZOOM_AUTO });
+    expect(getSessionSettings(9006).zoom).toBe(ZOOM_AUTO);
+  });
+
+  it('still accepts the fixed zooms the game offered before Auto', () => {
+    for (const zoom of [0.75, 1, 1.25, 1.5]) {
+      saveSessionSettings(9007, { speed: 1, metronome: false, synth: true, training: false, zoom });
+      expect(getSessionSettings(9007).zoom).toBe(zoom);
+    }
+  });
+
+  it('ignores a zoom the game does not offer', () => {
+    saveSessionSettings(9005, { speed: 1, metronome: true, synth: true, training: false, zoom: 4 });
+    expect(getSessionSettings(9005)).toEqual(DEFAULT_SESSION_SETTINGS);
+  });
+
   it('forgets the oldest sessions', () => {
-    saveSessionSettings(100, { speed: 0.5, metronome: false, synth: true, training: false });
+    saveSessionSettings(100, { speed: 0.5, metronome: false, synth: true, training: false, zoom: 1 });
     for (let id = 101; id < 115; id++) saveSessionSettings(id, DEFAULT_SESSION_SETTINGS);
     expect(getSessionSettings(100).speed).toBe(1);
   });

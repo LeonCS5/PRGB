@@ -13,7 +13,7 @@ import {
   type ExerciseLevel,
   type ExercisePattern
 } from '../services/exercises';
-import { KEYS, keyName } from '../services/musicTheory';
+import { KEYS, keyChipLabel } from '../services/musicTheory';
 import { getPersonalBest } from '../services/records';
 import { expandItem, formatMinutes, KEY_CYCLES, sessionDurationMs, type KeyCycle, type SessionItem } from '../services/practiceSession';
 
@@ -150,6 +150,8 @@ interface ControlsProps {
 
 const Controls: React.FC<ControlsProps> = ({ category, view, onViewChange, pattern, sequence }) => {
   const hasKeys = category.groups.some((group) => group.exercises.some((exercise) => exercise.keyed));
+  const hasMinorKeys = category.groups.some((group) => group.exercises.some((exercise) => exercise.keyed && exercise.minorKey));
+  const hasMajorKeys = category.groups.some((group) => group.exercises.some((exercise) => exercise.keyed && !exercise.minorKey));
   const canSequence = sequence !== undefined && (hasKeys || category.patterns.length > 1);
   if (!hasKeys && category.patterns.length === 0) return null;
   const all = canSequence && sequence.all;
@@ -162,7 +164,7 @@ const Controls: React.FC<ControlsProps> = ({ category, view, onViewChange, patte
       )}
       {hasKeys && (
         <ChipGroup legend={all ? 'Começar no tom' : 'Tom'} hint="Nota em que o exercício começa. Se não sabe, deixe em Lá." name="exercise-key" value={String(view.key)}
-          options={KEYS.map((_, index) => ({ value: String(index), label: keyName(index) }))}
+          options={KEYS.map((_, index) => ({ value: String(index), label: keyChipLabel(index, hasMajorKeys, hasMinorKeys) }))}
           onChange={(value) => onViewChange({ ...view, key: Number(value) })} />
       )}
       {all && hasKeys && (
@@ -200,7 +202,7 @@ export const ExerciseLibrary: React.FC<ExerciseLibraryProps> = ({ view, onViewCh
           <h1 className="font-display text-xl font-bold tracking-tight">Exercícios</h1>
           {onSession && (
             <button type="button" onClick={onSession} aria-label="Montar sessão" title="Montar sessão" className="ml-auto flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-ink-600 px-3 text-sm font-semibold text-ink-100 hover:bg-ink-800">
-              <ListChecks size={16} className="text-signal-300" aria-hidden="true" /><span className="hidden min-[360px]:inline">Montar sessão</span>
+              <ListChecks size={16} className="text-signal-300" aria-hidden="true" /><span className="hidden min-[22.5rem]:inline">Montar sessão</span>
             </button>
           )}
         </div>

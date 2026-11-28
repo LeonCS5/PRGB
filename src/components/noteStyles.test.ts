@@ -3,8 +3,9 @@ import { DEFAULT_STRINGS } from '../appearance/defaults';
 import { NOTE_STYLES, STRING_SCHEMES, type NoteStyle } from '../appearance/types';
 import type { NoteEvent } from '../services/tabsApi';
 import { contrastRatio, resolveGameplayPalette } from './gameplayPalette';
-import { buildNoteKit, drawNoteGraphic, noteColors, paintNoteRect, traceNote, trailFor, type NoteState } from './noteStyles';
+import { buildNoteKit, createBlockDraw, drawAloneSlide, drawNoteGraphic, drawPalmMuteBracket, drawTechniqueBlock, noteColors, paintNoteRect, traceNote, trailFor, type NoteState } from './noteStyles';
 import { buildNoteGraphics, type GamePalette, type NoteGraphic } from './practiceLanes';
+import { analyzeTechniques } from './techniques';
 import { createRecorder, installPath2D, ORIGINAL_PALETTE, type RecordedPath2D } from './testCanvas';
 
 beforeAll(installPath2D);
@@ -25,10 +26,10 @@ const legacyDrawNote = (ctx: CanvasRenderingContext2D, palette: GamePalette, not
   if (note.grace) ctx.scale(0.75, 0.75);
   if (state === 'perfect') {
     ctx.shadowColor = palette.hit;
-    ctx.shadowBlur = 18;
+    ctx.shadowBlur = 18 * noteHeight / 46;
   } else if (state === 'good') {
     ctx.shadowColor = palette.near;
-    ctx.shadowBlur = 12;
+    ctx.shadowBlur = 12 * noteHeight / 46;
   } else if (state === 'miss') {
     ctx.globalAlpha = 0.35;
   } else if (state === 'skipped' || note.ghost) {
@@ -62,7 +63,7 @@ const legacyDrawNote = (ctx: CanvasRenderingContext2D, palette: GamePalette, not
 describe('classic note style', () => {
   it('records the same instructions as the drawing the game had before, for every state and kind of note', () => {
     const notes = [event(), event({ id: 'g', grace: true, string: 1 }), event({ id: 'h', ghost: true, string: 6 }), event({ id: 'x', dead: true, string: 9 }), event({ id: 'b', bendSemitones: 2 })];
-    const graphics = buildNoteGraphics(notes, 1, 40);
+    const graphics = buildNoteGraphics(notes, 40);
     const kit = buildNoteKit(ORIGINAL_PALETTE, 'classic', 0);
     for (const graphic of graphics) {
       for (const state of STATES) {
@@ -77,7 +78,7 @@ describe('classic note style', () => {
   });
 
   it('builds the pill path the game always had (radius = half the height, no detail)', () => {
-    const [graphic] = buildNoteGraphics([event()], 1, 46);
+    const [graphic] = buildNoteGraphics([event()], 46);
     expect(pathLog(graphic.path)).toHaveLength(1);
     expect(pathLog(graphic.path)[0]).toMatch(/^roundRect\(-?[\d.]+,-23,[\d.]+,46,23\)$/);
     expect(graphic.detail).toBeNull();
@@ -109,7 +110,7 @@ describe('note styles', () => {
 
   it('digital builds a detail path and the others do not', () => {
     for (const style of NOTE_STYLES) {
-      const [graphic] = buildNoteGraphics([event()], 1, 46, style);
+      const [graphic] = buildNoteGraphics([event()], 46, style);
       expect(graphic.detail !== null).toBe(style === 'digital');
     }
   });
@@ -144,12 +145,12 @@ describe('note styles', () => {
 
   it('never uses shadowBlur outside classic; neon gets a wider translucent stroke instead', () => {
     for (const style of NOTE_STYLES) {
-      const [g] = buildNoteGraphics([event()], 1, 40, style);
+      const [g] = buildNoteGraphics([event()], 40, style);
       const { ctx, log } = createRecorder();
       drawNoteGraphic(ctx, g, buildNoteKit(ORIGINAL_PALETTE, style, 100), 100, 50, 'perfect', 40, null);
       expect(log.some((line) => line.startsWith('shadowBlur')), style).toBe(style === 'classic');
     }
-    const [graphic] = buildNoteGraphics([event()], 1, 40, 'neon');
+    const [graphic] = buildNoteGraphics([event()], 40, 'neon');
     const neon = createRecorder();
     drawNoteGraphic(neon.ctx, graphic, buildNoteKit(ORIGINAL_PALETTE, 'neon', 100), 100, 50, 'pending', 40, null);
     const widths = neon.log.filter((line) => line.startsWith('lineWidth=')).map((line) => Number(line.slice(10)));
@@ -160,7 +161,7 @@ describe('note styles', () => {
   });
 
   it('digital strokes its corner marks after the outline', () => {
-    const [graphic] = buildNoteGraphics([event()], 1, 40, 'digital');
+    const [graphic] = buildNoteGraphics([event()], 40, 'digital');
     const { ctx, log } = createRecorder();
     drawNoteGraphic(ctx, graphic, buildNoteKit(ORIGINAL_PALETTE, 'digital', 0), 0, 0, 'pending', 40, null);
     expect(log.filter((line) => line.startsWith('stroke(')).length).toBe(2);
@@ -169,7 +170,7 @@ describe('note styles', () => {
 
 describe('note trail', () => {
   it('adds 2 to 3 faint copies behind a pending note and nothing for a judged one', () => {
-    const [graphic] = buildNoteGraphics([event()], 1, 40);
+    const [graphic] = buildNoteGraphics([event()], 40);
     const kit = buildNoteKit(ORIGINAL_PALETTE, 'classic', 0);
     const fills = (state: NoteState, intensity: 1 | 2 | 3) => {
       const { ctx, log } = createRecorder();
@@ -183,12 +184,109 @@ describe('note trail', () => {
   });
 
   it('keeps the transform balanced and the copies faint', () => {
-    const [graphic] = buildNoteGraphics([event()], 1, 40);
+    const [graphic] = buildNoteGraphics([event()], 40);
     const { ctx, log } = createRecorder();
     drawNoteGraphic(ctx, graphic, buildNoteKit(ORIGINAL_PALETTE, 'classic', 0), 0, 0, 'pending', 40, trailFor(2));
     const moved = log.filter((line) => line.startsWith('translate(')).map((line) => Number(line.slice(10).split(',')[0]));
-    expect(moved.slice(1).reduce((sum, value) => sum + value, 0)).toBe(0);
+    // The recorder logs each shift rounded, and the gap now follows the size of the note: balanced up to that rounding
+    expect(moved.slice(1).reduce((sum, value) => sum + value, 0)).toBeCloseTo(0, 4);
     const alphas = log.filter((line) => line.startsWith('globalAlpha=')).map((line) => Number(line.slice(12)));
     expect(Math.max(...alphas.slice(0, 3))).toBeLessThanOrEqual(0.16);
+  });
+});
+
+describe('techniques: one block, one bracket', () => {
+  const chain = [5, 7, 8, 7, 5].map((fret, index) => event({ id: `c${index}`, timeMs: index * 250, durationMs: 250, string: 4, fret, hammerOnOrPullOff: index > 0 }));
+  const kit = buildNoteKit(ORIGINAL_PALETTE, 'classic', 0);
+  const blockOf = () => {
+    const graphics = buildNoteGraphics(chain, 46, 'classic', 1, 1, 0, 14, true);
+    const { blocks } = analyzeTechniques(chain);
+    const draw = createBlockDraw(blocks[0].indexes.map((index) => graphics[index]), blocks[0].links);
+    for (let index = 0; index < draw.xs.length; index++) draw.xs[index] = 200 + index * 90;
+    return draw;
+  };
+  const count = (log: string[], prefix: string) => log.filter((line) => line.startsWith(prefix)).length;
+
+  it('draws the chain as a single pill with one outline, clipped once, and a segment per note inside', () => {
+    const { ctx, log } = createRecorder();
+    drawTechniqueBlock(ctx, kit, blockOf(), 100, 12);
+    expect(count(log, 'clip(')).toBe(1);
+    expect(count(log, 'roundRect(')).toBe(2); // the outline path, once to clip and once to stroke
+    expect(count(log, 'fillRect(')).toBe(5 + 4 * 2); // a color per segment, plus the lighter tint and the divider of the four that follow the first
+  });
+
+  it('writes the fret of every segment and the tag of every division, and nothing else as a note', () => {
+    const { ctx, log } = createRecorder();
+    drawTechniqueBlock(ctx, kit, blockOf(), 100, 12);
+    const texts = log.filter((line) => line.startsWith('fillText(')).map((line) => line.split(',')[0].replace('fillText(', ''));
+    expect(texts).toEqual(['5', '7', '8', '7', '5', 'H', 'H', 'P', 'P']);
+  });
+
+  it('never draws a segment closer than a short note is wide, so the numbers do not run into each other', () => {
+    const draw = blockOf();
+    for (let index = 0; index < draw.xs.length; index++) draw.xs[index] = 200 + index * 5; // far tighter than a note
+    const { ctx } = createRecorder();
+    drawTechniqueBlock(ctx, kit, draw, 100, 12);
+    for (let index = 1; index < draw.px.length; index++) expect(draw.px[index] - draw.px[index - 1]).toBeGreaterThanOrEqual(draw.height * 1.05 - 1e-9);
+    expect(draw.px[0]).toBe(draw.xs[0]);
+  });
+
+  it('keeps the block as small as its smallest segment', () => {
+    const graphics = buildNoteGraphics(chain, 46, 'classic', { spanPx: () => 20, shrink: (each) => (each.id === 'c2' ? 0.6 : 1) }, 1, 0, 14, true);
+    expect(createBlockDraw(graphics, []).height).toBeCloseTo(46 * 0.6, 6);
+  });
+
+  it('colors each segment by the state of its note', () => {
+    const draw = blockOf();
+    draw.states[1] = 'perfect';
+    draw.states[3] = 'miss';
+    const { ctx, log } = createRecorder();
+    drawTechniqueBlock(ctx, kit, draw, 100, 12);
+    expect(log).toContain(`fillStyle=${ORIGINAL_PALETTE.hit}`);
+    expect(log).toContain('globalAlpha=0.35');
+  });
+
+  it('draws a palm mute as one bracket with a single PM label', () => {
+    const { ctx, log } = createRecorder();
+    drawPalmMuteBracket(ctx, kit, 6, 100, 700, 80, 46, 12, 0);
+    expect(log.filter((line) => line.startsWith('fillText(PM'))).toHaveLength(1);
+    expect(log).toContain('setLineDash([6.44,4.6])');
+    expect(count(log, 'lineTo(')).toBe(3); // the bracket: along the top and a tick at each end
+  });
+
+  it('keeps the PM label in view while the stretch scrolls past the left edge', () => {
+    const { ctx, log } = createRecorder();
+    drawPalmMuteBracket(ctx, kit, 6, -300, 900, 80, 46, 12, 0);
+    const label = log.find((line) => line.startsWith('fillText(PM'))!;
+    expect(Number(label.split(',')[1])).toBeGreaterThan(0);
+  });
+
+  it('draws a slide in or out as a short wedge with its tag', () => {
+    const { ctx, log } = createRecorder();
+    drawAloneSlide(ctx, { kind: 'slide', from: 0, to: 0, up: true, slide: 'in' }, kit, 3, 300, 100, 46, 12, 'pending');
+    expect(log.filter((line) => line.startsWith('fillText(')).map((line) => line.split(',')[0])).toEqual(['fillText(/']);
+    expect(count(log, 'closePath')).toBe(1);
+  });
+
+  it('leaves notes with no technique exactly as they were drawn', () => {
+    const plain = [event({ id: 'a' }), event({ id: 'b', timeMs: 400 })];
+    const off = buildNoteGraphics(plain, 46, 'classic', 1, 1, 0, 14, false);
+    const on = buildNoteGraphics(plain, 46, 'classic', 1, 1, 0, 14, true);
+    expect(on.map((graphic) => graphic.marks)).toEqual([null, null]);
+    expect(on.map((graphic) => graphic.height)).toEqual(off.map((graphic) => graphic.height));
+  });
+
+  it('writes the size of a bend on the note only when the techniques are shown', () => {
+    const bend = [event({ bendSemitones: 2 })];
+    expect(buildNoteGraphics(bend, 46, 'classic', 1, 1, 0, 14, true)[0].subtitle).toBe('↑1');
+    expect(buildNoteGraphics(bend, 46, 'classic', 1, 1, 0, 14, false)[0].subtitle).toBe('↑');
+  });
+
+  it('gives a vibrato its wave on the note itself', () => {
+    const [graphic] = buildNoteGraphics([event({ vibrato: true })], 46, 'classic', 1, 1, 0, 14, true);
+    expect(graphic.marks?.vibrato).toBe(true);
+    const { ctx, log } = createRecorder();
+    drawNoteGraphic(ctx, graphic, kit, 100, 100, 'pending', 46, null);
+    expect(count(log, 'lineTo(')).toBeGreaterThan(8); // the wave
   });
 });

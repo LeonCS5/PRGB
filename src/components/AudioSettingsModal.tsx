@@ -95,7 +95,7 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
                 setIsConnecting(false);
               }
             }} className="min-h-11 rounded-xl bg-amp-500 px-4 py-2 text-sm font-bold text-ink-950 hover:bg-amp-400 disabled:opacity-50 cursor-pointer">
-              {isConnecting ? 'Conectando...' : 'Conectar / tentar novamente'}
+              {isConnecting ? 'Conectando…' : audioError ? 'Tentar novamente' : 'Conectar guitarra'}
             </button>
           )}
 
@@ -147,7 +147,7 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
                     Ambos / Mono
                   </button>
                 </div>
-                <p className="text-[11px] text-ink-400 mt-1.5">
+                <p className="text-[0.6875rem] text-ink-400 mt-1.5">
                   {isDuoMode
                     ? 'Modo dupla: guitarra 1 no Canal 1 e guitarra 2 no Canal 2. Saia da dupla para trocar o canal.'
                     : 'A guitarra costuma chegar no Canal 1 ou no Canal 2. Se o nível não subir, troque aqui.'}
@@ -167,7 +167,7 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
                       <span className="text-sm font-bold text-ink-100 block">
                         Ouvir som da guitarra
                       </span>
-                      <span className="text-[11px] text-ink-300">
+                      <span className="text-[0.6875rem] text-ink-300">
                         O PRGB Amp nos fones ou nas caixas
                       </span>
                     </div>
@@ -189,7 +189,7 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
 
                 {/* Quick Amp Presets */}
                 <div>
-                  <div className="text-[11px] font-bold text-ink-300 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                  <div className="text-[0.6875rem] font-bold text-ink-300 uppercase tracking-wider mb-1.5 flex items-center justify-between">
                     <span>Timbre</span>
                     {onOpenAmpRack && (
                       <button
@@ -198,7 +198,7 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({
                           onClose();
                           onOpenAmpRack();
                         }}
-                        className="min-h-8 text-[11px] text-amp-400 hover:underline flex items-center gap-1 font-semibold normal-case tracking-normal cursor-pointer"
+                        className="min-h-8 text-[0.6875rem] text-amp-400 hover:underline flex items-center gap-1 font-semibold normal-case tracking-normal cursor-pointer"
                       >
                         <Sliders size={12} />
                         Abrir rack completo
@@ -285,7 +285,7 @@ const AudioInputMeter: React.FC = () => {
       {/* Live Tuner Pitch Display */}
       <div className="flex items-center justify-between">
         <div>
-          <span className="text-[11px] uppercase tracking-wider text-ink-300 font-bold block">
+          <span className="text-[0.6875rem] uppercase tracking-wider text-ink-300 font-bold block">
             Afinador
           </span>
           <div className="flex items-baseline gap-2 mt-0.5">

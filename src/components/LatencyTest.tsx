@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Check, Timer, X } from 'lucide-react';
 import { InputLevelMeter } from './AudioRouting';
 import { ModalFrame } from './ModalFrame';
-import { HIT_LINE_X, PIXELS_PER_MS, readPalette } from './practiceLanes';
+import { basePixelsPerMs } from './noteSpacing';
+import { hitLineX, readPalette, readRootFontPx } from './practiceLanes';
 import { useAudioSession } from '../context/AudioSessionContext';
 import { recordLatencyTestSaved } from '../context/progressStore';
 import {
@@ -21,13 +22,14 @@ import {
 } from '../services/latencyTest';
 
 const TITLE_ID = 'latency-test-title';
-const LANE_HEIGHT = 150;
+// The strip is 9.375 rem tall (CSS) and everything in it is a share of that height: the numbers below are for the
+// 150 px it has at a 16 px root, used only as ratios, so it follows the root font size and the screen.
+const REFERENCE_LANE_HEIGHT = 150;
 // The note of the game: same speed, same shape, and the fret number is what reaches the line. Anything else would
 // train a different habit, and the number measured here would not be the one that applies in the game.
 const NOTE_WIDTH = 70;
 const NOTE_HEIGHT = 46;
 const NOTE_LEFT = -19; // from the fret number
-const NARROWEST_LINE_SHARE = 0.2; // keeps the line in view on a phone
 // The line sits at 30% of the strip: 150 of these 500 ms come before it
 const STRIP_MIN_MS = -150;
 const STRIP_MAX_MS = 350;
@@ -48,7 +50,7 @@ const HitStrip: React.FC<{ offsets: (number | null)[]; resultMs?: number }> = ({
         <span key={index} className={`absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full ${index < WARM_UP_NOTES ? 'bg-ink-400' : 'bg-hit'}`} style={{ left: `${stripShare(offset)}%` }} />
       )))}
     </div>
-    <div className="mt-1 flex justify-between font-mono text-[10px] text-ink-300">
+    <div className="mt-1 flex justify-between font-mono text-[0.625rem] text-ink-300">
       <span>antes da linha</span><span>depois da linha</span>
     </div>
   </div>
@@ -82,33 +84,39 @@ const LatencyRun: React.FC<LatencyRunProps> = ({ startedAt, onDone, onAbort }) =
     let shown = emptyOffsets();
     let shownPassed = 0;
 
+    const rootPx = readRootFontPx();
     const draw = (clock: number) => {
       const width = canvas.clientWidth;
+      const laneHeight = canvas.clientHeight;
+      const k = laneHeight / REFERENCE_LANE_HEIGHT; // 1 at a 16 px root: every size below is a share of the strip
       const dpr = window.devicePixelRatio || 1;
-      if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(LANE_HEIGHT * dpr)) {
+      if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(laneHeight * dpr)) {
         canvas.width = Math.round(width * dpr);
-        canvas.height = Math.round(LANE_HEIGHT * dpr);
+        canvas.height = Math.round(laneHeight * dpr);
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.fillStyle = palette.background;
-      ctx.fillRect(0, 0, width, LANE_HEIGHT);
-      const middle = LANE_HEIGHT / 2;
-      const lineX = Math.min(HIT_LINE_X, width * NARROWEST_LINE_SHARE);
+      ctx.fillRect(0, 0, width, laneHeight);
+      const middle = laneHeight / 2;
+      const lineX = hitLineX(width, rootPx); // the same place as in the game: the player anticipates by it
+      const pixelsPerMs = basePixelsPerMs(width, lineX); // and the same scroll: a window of music across the track
       ctx.fillStyle = palette.rail;
-      ctx.fillRect(0, middle - 2, width, 4);
+      ctx.fillRect(0, middle - 2 * k, width, 4 * k);
       ctx.fillStyle = palette.signal;
-      ctx.fillRect(lineX - 2, 8, 4, LANE_HEIGHT - 16);
+      ctx.fillRect(lineX - 2 * k, 8 * k, 4 * k, laneHeight - 16 * k);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = '900 23px Inter, sans-serif';
+      ctx.font = `900 ${23 * k}px Inter, sans-serif`;
+      const noteWidth = NOTE_WIDTH * k;
+      const noteHeight = NOTE_HEIGHT * k;
       for (let index = 0; index < TEST_NOTE_COUNT; index += 1) {
-        const x = lineX + (testNoteTime(index) - clock) * PIXELS_PER_MS;
-        if (x < -NOTE_WIDTH || x > width + NOTE_WIDTH) continue;
+        const x = lineX + (testNoteTime(index) - clock) * pixelsPerMs;
+        if (x < -noteWidth || x > width + noteWidth) continue;
         const wasPlayed = shown[index] !== null;
-        ctx.globalAlpha = !wasPlayed && x < lineX - NOTE_WIDTH ? 0.35 : 1;
+        ctx.globalAlpha = !wasPlayed && x < lineX - noteWidth ? 0.35 : 1;
         ctx.fillStyle = wasPlayed ? palette.hit : noteColor;
         ctx.beginPath();
-        ctx.roundRect(x + NOTE_LEFT, middle - NOTE_HEIGHT / 2, NOTE_WIDTH, NOTE_HEIGHT, NOTE_HEIGHT / 2);
+        ctx.roundRect(x + NOTE_LEFT * k, middle - noteHeight / 2, noteWidth, noteHeight, noteHeight / 2);
         ctx.fill();
         ctx.fillStyle = palette.ink;
         ctx.fillText('0', x, middle);
@@ -158,7 +166,7 @@ const LatencyRun: React.FC<LatencyRunProps> = ({ startedAt, onDone, onAbort }) =
   return (
     <div>
       <p className="text-center font-display text-lg font-bold">Toque quando o 0 chegar na linha</p>
-      <canvas ref={canvasRef} aria-label="Pista do teste: as notas andam até a linha, sempre no mesmo ritmo" height={LANE_HEIGHT} className="mt-3 block h-[150px] w-full rounded-xl" />
+      <canvas ref={canvasRef} aria-label="Pista do teste: as notas andam até a linha, sempre no mesmo ritmo" className="mt-3 block h-[9.375rem] w-full rounded-xl" />
       <div className="mt-3 flex items-center justify-between font-mono text-sm">
         <span role="status" className="text-ink-300">Nota {Math.min(passed + 1, TEST_NOTE_COUNT)} de {TEST_NOTE_COUNT}</span>
         <span className="text-hit">{lastHit !== undefined && lastHit !== null ? formatOffset(lastHit) : ''}</span>

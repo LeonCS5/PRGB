@@ -27,6 +27,7 @@ export interface EffectArea {
   height: number;
   top: number;    // vertical extent of the hit line
   bottom: number;
+  unit?: number;  // the size of a note over the size the effects were drawn for (noteScaleOf); 1 when left out
 }
 
 const factor = (intensity: 1 | 2 | 3): number => (intensity === 1 ? 0.6 : intensity === 2 ? 1 : 1.5);
@@ -37,14 +38,14 @@ export const anyEffectOn = (settings: EffectSettings): boolean =>
 // 0..1, rising with the streak up to a cap
 export const comboGlowTarget = (combo: number): number => Math.max(0, Math.min(1, combo / COMBO_GLOW_FULL_AT));
 
-// Ring on the hit line: grows from the line to a radius and fades; shared with the preview
-export const drawPulseRing = (ctx: Ctx2D, x: number, y: number, progress: number, color: string, intensity: 1 | 2 | 3): void => {
+// Ring on the hit line: grows from the line to a radius and fades; shared with the preview. `unit` scales it with the note.
+export const drawPulseRing = (ctx: Ctx2D, x: number, y: number, progress: number, color: string, intensity: 1 | 2 | 3, unit = 1): void => {
   const k = factor(intensity);
   ctx.globalAlpha = (1 - progress) * 0.85 * Math.min(1, k);
   ctx.strokeStyle = color;
-  ctx.lineWidth = 3 * k * (1 - progress * 0.6);
+  ctx.lineWidth = 3 * k * unit * (1 - progress * 0.6);
   ctx.beginPath();
-  ctx.arc(x, y, 8 + progress * 30 * k, 0, Math.PI * 2);
+  ctx.arc(x, y, (8 + progress * 30 * k) * unit, 0, Math.PI * 2);
   ctx.stroke();
   ctx.globalAlpha = 1;
 };
@@ -57,6 +58,7 @@ export class GameEffects {
   private drive = 0;    // what it is heading to; decays by itself
   private lastNow = -1;
   private hitLineX = 0;
+  private unit = 1;
 
   get aliveSparks(): number {
     let count = 0;
@@ -80,9 +82,10 @@ export class GameEffects {
   }
 
   // A note was judged at (hitLineX, y). A miss never spawns anything.
-  onJudgement(judgement: 'perfect' | 'good' | 'miss', hitLineX: number, y: number, now: number, settings: EffectSettings, hitColor: string, nearColor: string): void {
+  onJudgement(judgement: 'perfect' | 'good' | 'miss', hitLineX: number, y: number, now: number, settings: EffectSettings, hitColor: string, nearColor: string, unit = 1): void {
     if (judgement === 'miss') return;
     this.hitLineX = hitLineX;
+    this.unit = unit;
     const color = judgement === 'perfect' ? hitColor : nearColor;
     if (settings.hitPulse) {
       const slot = this.pulses.find((pulse) => !pulse.alive);
@@ -100,7 +103,7 @@ export class GameEffects {
         if (spark.alive) continue;
         // Fan to the right of the line, spread evenly: no randomness, so a frame can be reproduced
         const angle = -Math.PI * 0.45 + (Math.PI * 0.9 * spawned) / (SPARKS_PER_PERFECT - 1);
-        const speed = (0.12 + (spawned % 3) * 0.04) * factor(settings.intensity);
+        const speed = (0.12 + (spawned % 3) * 0.04) * factor(settings.intensity) * unit;
         spark.alive = true;
         spark.x = hitLineX;
         spark.y = y;
@@ -143,10 +146,11 @@ export class GameEffects {
         ctx.beginPath();
         ctx.moveTo(area.hitLineX, area.top);
         ctx.lineTo(area.hitLineX, area.top + height);
-        ctx.lineWidth = 22 * k;
+        const unit = area.unit ?? 1;
+        ctx.lineWidth = 22 * k * unit;
         ctx.globalAlpha = alpha * 0.35;
         ctx.stroke();
-        ctx.lineWidth = 10 * k;
+        ctx.lineWidth = 10 * k * unit;
         ctx.globalAlpha = alpha;
         ctx.stroke();
         ctx.globalAlpha = 1;
@@ -164,7 +168,7 @@ export class GameEffects {
         pulse.alive = false;
         continue;
       }
-      drawPulseRing(ctx, this.hitLineX, pulse.y, age / PULSE_LIFE_MS, pulse.color, settings.intensity);
+      drawPulseRing(ctx, this.hitLineX, pulse.y, age / PULSE_LIFE_MS, pulse.color, settings.intensity, this.unit);
     }
     const k = factor(settings.intensity);
     for (const spark of this.sparks) {
@@ -177,7 +181,7 @@ export class GameEffects {
       const progress = age / SPARK_LIFE_MS;
       ctx.globalAlpha = (1 - progress) * 0.9;
       ctx.fillStyle = spark.color;
-      const size = (3.5 - progress * 2) * Math.min(1.3, k);
+      const size = (3.5 - progress * 2) * Math.min(1.3, k) * this.unit;
       ctx.fillRect(spark.x + spark.vx * age - size / 2, spark.y + spark.vy * age - size / 2, size, size);
     }
     ctx.globalAlpha = 1;

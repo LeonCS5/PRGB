@@ -155,9 +155,10 @@ const ConnectStep: React.FC<{ onCancel: () => void; onNext: () => void }> = ({ o
         </>
       )}
 
-      <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+      {!hasTwoChannels && <p id="duo-continue-hint" className="mt-5 text-xs leading-5 text-ink-300">Escolha a interface de áudio e toque em Conectar para continuar.</p>}
+      <div className={(hasTwoChannels ? 'mt-6' : 'mt-3') + ' flex flex-col-reverse gap-3 sm:flex-row sm:justify-end'}>
         <button type="button" onClick={onCancel} className={secondaryButton}>Cancelar</button>
-        <button type="button" onClick={onNext} disabled={!canContinue} className={primaryButton}>Continuar</button>
+        <button type="button" onClick={onNext} disabled={!canContinue} aria-describedby={hasTwoChannels ? undefined : 'duo-continue-hint'} className={primaryButton}>Continuar</button>
       </div>
     </>
   );

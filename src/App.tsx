@@ -114,18 +114,18 @@ const PracticePreview: React.FC = () => (
         {[65, 150, 235, 320, 405, 490].map((x) => <path key={x} d={`M${x} 40V268`} className="stroke-ink-700" strokeDasharray="3 7" />)}
         {[60, 98, 136, 174, 212, 250].map((y, index) => (
           <g key={y}>
-            <text x="26" y={y + 4} className="fill-ink-300 font-mono text-[12px]">{['e', 'B', 'G', 'D', 'A', 'E'][index]}</text>
+            <text x="26" y={y + 4} className="fill-ink-300 font-mono text-[0.75rem]">{['e', 'B', 'G', 'D', 'A', 'E'][index]}</text>
             <path d={`M52 ${y}H540`} className="stroke-signal-500/30" strokeWidth={1 + index * 0.25} />
           </g>
         ))}
         {[[104, 212, '5'], [104, 250, '0'], [203, 250, '0'], [271, 250, '0'], [339, 212, '7'], [339, 174, '9'], [437, 250, '0'], [505, 212, '5']].map(([x, y, fret], index) => (
           <g key={index}>
             <rect x={Number(x) - 16} y={Number(y) - 13} width="32" height="26" rx="6" className={index < 2 ? 'fill-amp-400' : 'fill-signal-300'} />
-            <text x={x} y={Number(y) + 5} textAnchor="middle" className="fill-ink-950 font-mono text-[14px] font-bold">{fret}</text>
+            <text x={x} y={Number(y) + 5} textAnchor="middle" className="fill-ink-950 font-mono text-[0.875rem] font-bold">{fret}</text>
           </g>
         ))}
-        <text x="104" y="22" textAnchor="middle" className="fill-amp-300 font-mono text-[12px]">TOQUE AQUI</text>
-        <text x="206" y="194" className="fill-hit font-display text-[17px] font-bold">Perfeito!</text>
+        <text x="104" y="22" textAnchor="middle" className="fill-amp-300 font-mono text-[0.75rem]">TOQUE AQUI</text>
+        <text x="206" y="194" className="fill-hit font-display text-[1.0625rem] font-bold">Perfeito!</text>
       </svg>
       <div className="flex items-center justify-between gap-3 border-t border-ink-700 px-4 py-4 text-xs text-ink-300 sm:px-6">
         <span className="flex items-center gap-2"><AudioLines size={16} className="text-signal-400" /> Sua guitarra. Suas notas.</span>
@@ -892,14 +892,14 @@ const AppContent: React.FC = () => {
               <p className="max-w-3xl text-xs leading-6 text-ink-300">Tablaturas e metadados vêm de um provedor externo. O PRGB não é afiliado a esse provedor, a artistas ou a gravadoras; todas as marcas pertencem aos seus donos.</p>
               <div className="flex flex-wrap items-center justify-between gap-4 border-t border-ink-700 pt-5 text-xs text-ink-300">
                 <span>© {currentYear} PRGB</span>
-                <nav aria-label="Documentos legais" className="flex gap-5">
-                  <a href="#privacidade" className="rounded py-2 hover:text-amp-300">Privacidade</a>
-                  <a href="#termos" className="rounded py-2 hover:text-amp-300">Termos</a>
-                  <a href="/licencas-terceiros.md" target="_blank" rel="noopener noreferrer" className="rounded py-2 hover:text-amp-300">Licenças</a>
-                  <a href={`mailto:${LEGAL_CONTACT.email}`} className="rounded py-2 hover:text-amp-300">Contato</a>
+                <nav aria-label="Documentos legais" className="flex flex-wrap gap-x-4">
+                  <a href="#privacidade" className="flex min-h-11 items-center rounded px-1 hover:text-amp-300">Privacidade</a>
+                  <a href="#termos" className="flex min-h-11 items-center rounded px-1 hover:text-amp-300">Termos</a>
+                  <a href="/licencas-terceiros.md" target="_blank" rel="noopener noreferrer" className="flex min-h-11 items-center rounded px-1 hover:text-amp-300">Licenças</a>
+                  <a href={`mailto:${LEGAL_CONTACT.email}`} className="flex min-h-11 items-center rounded px-1 hover:text-amp-300">Contato</a>
                 </nav>
-                <button type="button" onClick={() => setIsFeedbackOpen(true)} className="flex cursor-pointer items-center gap-2 rounded py-2 hover:text-amp-300"><MessageSquareWarning size={15} aria-hidden="true" /> Reportar problema</button>
-                <a href={supportHref} target="_blank" rel="noopener noreferrer" className="rounded py-2 hover:text-amp-300">{supportLabel} ↗</a>
+                <button type="button" onClick={() => setIsFeedbackOpen(true)} className="flex min-h-11 cursor-pointer items-center gap-2 rounded px-1 hover:text-amp-300"><MessageSquareWarning size={15} aria-hidden="true" /> Reportar problema</button>
+                <a href={supportHref} target="_blank" rel="noopener noreferrer" className="flex min-h-11 items-center rounded px-1 hover:text-amp-300">{supportLabel} ↗</a>
               </div>
             </div>
           </footer>

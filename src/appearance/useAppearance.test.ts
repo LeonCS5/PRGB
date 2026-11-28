@@ -179,6 +179,28 @@ describe('toGameplayAppearance', () => {
     expect(result.noteStyle).toBe('neon');
   });
 
+  it('passes the guide and the hit sounds through, and says whether motion is reduced', async () => {
+    const { store } = await load();
+    const settings = { ...getPreset('refined'), guide: { ...getPreset('refined').guide, enabled: false, intensity: 3 as const, style: 'hologram' as const }, hitSounds: false };
+    const normal = store.toGameplayAppearance(settings, false);
+    expect(normal.guide).toEqual({ ...getPreset('refined').guide, enabled: false, intensity: 3, style: 'hologram' });
+    expect(normal.hitSounds).toBe(false);
+    expect(normal.reducedMotion).toBe(false);
+    const reduced = store.toGameplayAppearance({ ...settings, guide: { ...settings.guide, enabled: true, intensity: 2, style: 'shadow' } }, true);
+    expect(reduced.guide.enabled).toBe(true); // the guide is information, not decoration
+    expect(reduced.reducedMotion).toBe(true);
+    expect(store.toGameplayAppearance({ ...settings, reduceEffects: true }, false).reducedMotion).toBe(true);
+  });
+
+  it('patches the guide and keeps it and the hit sounds across presets', async () => {
+    const { store } = await load();
+    store.setAppearance({ guide: { enabled: false }, hitSounds: false });
+    expect(store.getAppearance().guide).toMatchObject({ enabled: false, intensity: 2, style: 'shadow' });
+    store.applyPreset('midnight-arcade');
+    expect(store.getAppearance().hitSounds).toBe(false);
+    expect(store.getAppearance().guide.enabled).toBe(false);
+  });
+
   it('does the same for reduced motion and leaves everything alone otherwise', async () => {
     const { store } = await load();
     const settings = getPreset('midnight-arcade');

@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useRef, useState, useEffectEvent, useMemo } from 'react';
+import React, { useEffect, useId, useRef, useState, useEffectEvent, useMemo, useCallback } from 'react';
 import {
   ArrowLeft,
   Play,
@@ -16,14 +16,23 @@ import {
   MessageSquareWarning,
   Repeat,
   SkipForward,
-  X,
-  Minus,
-  Plus,
-  ZoomIn
+  Palette,
+  X
 } from 'lucide-react';
 import { BrandMark } from './BrandMark';
-import { AudioRouteNotice } from './AudioRouting';
+import { GameScaleControls, ScaleToast, type ScaleToastData } from './GameScaleControls';
+import { formatScale } from './gameScaleKit';
+import { buildScaleMap, formatZoomLabel, trackPixelsPerMs, type ScaleMap } from './noteSpacing';
+import { analyzeTechniques, type PalmMuteRun, type TechniqueLink } from './techniques';
+import { AudioRouteBadge } from './AudioRouting';
 import { GameMoreSheet } from './GameMoreSheet';
+import { ToolButton, ToolGroup } from './GameToolbar';
+import { SHORTCUT_KEYS, shortcutFor, stepOption, toolClass } from './gameToolbarKit';
+import { resumeOpacity, useResumeCountdown } from './resumeCountdown';
+import { LazyScreen } from './OnDemand';
+import { lazyWithRetry } from './lazyLoad';
+import { TechniqueLegend } from './appearance/TechniqueLegend';
+import { QuickAppearancePanel } from './QuickAppearancePanel';
 import { ModalFrame } from './ModalFrame';
 import { DuoHud, LiveTuner, SoloHud } from './GameHud';
 import { ResultPanel } from './ResultPanel';
@@ -34,19 +43,29 @@ import {
   drawLaneBackground,
   layoutLanes,
   createLayer,
-  noteHeightFor,
+  noteDiameterFor,
+  noteScaleOf,
+  remScale,
+  readRootFontPx,
+  DEFAULT_ROOT_PX,
+  FRET_FONT_FLOOR_REM,
+  NOTE_READABLE_REM,
+  MAX_NOTE_HEIGHT,
   playHitFeedback,
   stringY,
-  perspectiveX,
-  HIT_LINE_X,
+  depthAlphaAt,
+  beatLineColor,
+  hitLineX,
   PIXELS_PER_MS,
   type HitEffects,
-  type LaneLayout,
-  type NoteGraphic
+  type LaneLayout
 } from './practiceLanes';
 import { useGameplayLook } from './useGameplayLook';
+import { computeGuide, createGuideFrame, drawGuide, type GuideDrawExtras, type GuideFrame } from './guideShadow';
 import { GameEffects, type EffectArea } from './gameEffects';
-import { drawNoteGraphic, trailFor, type NoteState } from './noteStyles';
+import { createBlockDraw, drawAloneSlide, drawPalmMuteBracket, trailFor, type BlockDraw, type NoteState } from './noteStyles';
+import { clearPlayed, createSynthLane, dueNotes, unmarkAfter, unmarkPlayed } from './synthSchedule';
+import { beginLane, beginLaneFrame, createLaneDrawEnv, drawBlockInLane, drawNoteInLane, type LaneTechniques } from './laneDraw';
 import { useModals } from '../context/ModalsContext';
 import type { NoteEvent } from '../services/tabsApi';
 import type { DetectedPitch, PlayerSlot } from '../services/audioEngine';
@@ -56,20 +75,25 @@ import { DEFAULT_PLAYER_NAMES, type GamePart, type PersonalBestOutcome, type Ran
 import { useRanking } from '../context/ranking';
 import type { RankedPhase } from '../context/rankedRun';
 import { useRankedRun } from '../context/useRankedRun';
-import { getSessionSettings, isLegendSeen, markLegendSeen, saveSessionSettings, SPEED_OPTIONS, ZOOM_OPTIONS } from '../context/sessionSettings';
+import { getSessionSettings, isLegendSeen, markLegendSeen, saveSessionSettings, SPEED_OPTIONS, ZOOM_AUTO } from '../context/sessionSettings';
+import { countInOpacity, countInRemainingMs, countInStartPositionMs, COUNT_IN_MS } from './countIn';
+import { clockViewOf, formatClock, positionValueText, sameClockView, type ClockView } from './clockView';
 import { buildCountIn, MetronomeScheduler, SoundFX } from '../services/synthAudio';
 import { isExerciseSongId } from '../services/exerciseIds';
 import { isRankableSongId } from '../services/rankable';
 import {
   accuracyPercent,
   applyJudgement,
+  buildJudgeContexts,
   consumeAttack,
   createAttackLedger,
   createScoreState,
   judgeNote,
+  noteTimeDiffMs,
   HIT_EARLY_MS,
   HIT_LATE_MS,
   type AttackLedger,
+  type JudgeContext,
   type ScoreState
 } from '../services/scoring';
 import { getPersonalBest, recordRun } from '../services/records';
@@ -129,22 +153,19 @@ const freshPlayers = (): PlayerRun[] => [
 ];
 
 // The lap is part of the key: in training mode the tail of one lap and the head of the next overlap in time
-const synthKey = (laneIndex: number, noteId: string, lapNumber: number) => `${lapNumber}:${laneIndex}:${noteId}`;
 
 // Safari before 16.4 has no OffscreenCanvas: a canvas that is never attached to the page does the same job
-const formatSpeedLabel = (value: number) => value.toLocaleString('pt-BR') + '×';
 
 // A longer gap between frames (a stall, a slow device) only moves the song this far, so it never jumps
 // past notes nobody could play; a hidden tab pauses instead (visibilitychange)
 const MAX_FRAME_GAP_MS = 100;
 
-// A run from the very start begins this long before the first note, whatever the speed, so the player sees the
-// opening notes coming and hears the tempo
-const LEAD_IN_MS = 5000;
+// The full Appearance screen opens over the game (which stays paused underneath), so it loads on demand
+const AppearanceScreen = lazyWithRetry(() => import('./AppearanceScreen'), (module) => module.AppearanceScreen);
+
+const SYNTH_LOOKAHEAD_MS = 120; // real time the guide notes are scheduled ahead of the line
+const SYNTH_GRACE_MS = 60; // a frame that ran late still plays a note it just passed
 const SESSION_TAIL_MS = 800; // past the last note: the late hit window (260 ms) plus room for the latency compensation
-// During the count the opening notes wait on screen to be read, and only start moving this long before the first one
-const LEAD_IN_MOVING_MS = 2000;
-const LEAD_IN_RIGHT_MARGIN = 60;
 
 const isSamePart = (a: GamePart, b: GamePart) => a.tab.songId === b.tab.songId && a.partId === b.partId;
 
@@ -177,13 +198,19 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   const { isConfigured: isRankingOn, hasAccount, openAccount } = useRanking();
   const { look, appearance } = useGameplayLook();
   const { palette, kit, strings } = look;
+  // What the guide needs besides the frame; rebuilt only when the look changes, never per frame
+  const guideExtras = useMemo<GuideDrawExtras>(
+    () => ({ shadow: appearance.guide.shadow, stringColors: palette.strings, noteStyle: look.noteStyle }),
+    [appearance.guide.shadow, palette.strings, look.noteStyle]
+  );
   // The canvas loop reads the settings from refs: changing them never restarts the loop or the audio
   const effectSettingsRef = useRef(appearance.effects);
+  const guideFramesRef = useRef<GuideFrame[]>([]); // one per lane, reused every frame
   useEffect(() => {
     effectSettingsRef.current = appearance.effects;
   });
   const gameEffects = useMemo(() => new GameEffects(), []);
-  const effectAreaRef = useRef<EffectArea>({ hitLineX: HIT_LINE_X, width: 0, height: 0, top: 0, bottom: 0 });
+  const effectAreaRef = useRef<EffectArea>({ hitLineX: hitLineX(0), width: 0, height: 0, top: 0, bottom: 0 });
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const canvasContainerRef = useRef<HTMLElement | null>(null);
 
@@ -231,14 +258,44 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     return ampEngine.subscribe((s) => setToneSettings(s));
   }, [ampEngine]);
 
-  // Playback state. positionRef is the song clock; currentTimeMs mirrors it for the slider and the synth
+  // Playback state. positionRef is the song clock: the canvas, the judging and the synth read it every frame, and no
+  // render depends on it. React renders again only when what the screen shows of it (clockView) changes.
   const [isPlaying, setIsPlaying] = useState(() => devPreset?.playing ?? false);
-  const [currentTimeMs, setCurrentTimeMs] = useState(() => devPreset?.positionMs ?? 0);
-  const positionRef = useRef(currentTimeMs);
+  const [initialPositionMs] = useState(() => devPreset?.positionMs ?? 0);
+  const positionRef = useRef(initialPositionMs);
+  const sliderRef = useRef<HTMLInputElement | null>(null);
+  const countInOverlayRef = useRef<HTMLDivElement | null>(null);
+  const autoMapRef = useRef<ScaleMap | null>(null); // the Auto scale of the song, read by the clock to say what is under the line
   // Each exercise of a practice session remounts the game: the choices made in the session come back as the start
   const [startSettings] = useState(() => getSessionSettings(session?.queue.id));
   const [speed, setSpeed] = useState(startSettings.speed);
-  const [zoom, setZoom] = useState(startSettings.zoom ?? 1);
+  const [zoom, setZoom] = useState(startSettings.zoom);
+  const countTotalMs = session?.leadInMs ?? COUNT_IN_MS;
+  const [clockView, setClockView] = useState<ClockView>(() => clockViewOf(initialPositionMs, startSettings.speed, countTotalMs));
+  const clockViewRef = useRef(clockView);
+  // Every move of the song clock goes through here: the clock, the seek bar and the count's fade follow it at once
+  // (written on their elements, outside React), and React hears of it only when a shown value changes
+  const commitClock = (positionMs: number, rate: number = speed) => {
+    positionRef.current = positionMs;
+    const slider = sliderRef.current;
+    if (slider) {
+      const shown = String(Math.max(0, Math.round(positionMs)));
+      if (slider.value !== shown) slider.value = shown;
+    }
+    const overlay = countInOverlayRef.current;
+    if (overlay) overlay.style.opacity = String(countInOpacity(countInRemainingMs(positionMs, rate), countTotalMs));
+    const view = clockViewOf(positionMs, rate, countTotalMs, autoMapRef.current?.factorAt(positionMs) ?? 1);
+    if (sameClockView(view, clockViewRef.current)) return;
+    clockViewRef.current = view;
+    setClockView(view);
+  };
+  // The bar starts where the clock does (a dev preset can start it elsewhere); after that commitClock moves it
+  useEffect(() => {
+    if (sliderRef.current) sliderRef.current.value = String(Math.max(0, Math.round(positionRef.current)));
+  }, []);
+  const [scaleToast, setScaleToast] = useState<ScaleToastData | null>(null);
+  const announceScale = (text: string) => setScaleToast((previous) => ({ id: (previous?.id ?? 0) + 1, text }));
+  const clearScaleToast = useCallback(() => setScaleToast(null), []);
   const [synthAudioEnabled, setSynthAudioEnabled] = useState(startSettings.synth);
   const [metronomeEnabled, setMetronomeEnabled] = useState(startSettings.metronome);
   // Training mode loops an exercise for as long as the player wants: each lap starts as the last one ends
@@ -247,6 +304,10 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   useEffect(() => {
     if (queueId !== null) saveSessionSettings(queueId, { speed, metronome: metronomeEnabled, synth: synthAudioEnabled, training: isTraining, zoom });
   }, [queueId, speed, metronomeEnabled, synthAudioEnabled, isTraining, zoom]);
+  // "Aparência rápida" (a side panel) and the full screen both stop the song; closing them brings it back after a short count
+  const [appearanceLayer, setAppearanceLayer] = useState<'quick' | 'full' | null>(null);
+  const resumeAfterAppearanceRef = useRef(false);
+  const resume = useResumeCountdown(() => setIsPlaying(true));
   const [lap, setLap] = useState(1);
   const lapRef = useRef(1);
   // The clock turns a little before the lap ends, so the old lap's last notes and the new lap's first ones are both
@@ -277,7 +338,19 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   const [metronome] = useState(() => new MetronomeScheduler());
   const [countIn] = useState(() => new MetronomeScheduler());
   const countInBeats = useMemo(() => buildCountIn(clockTab.beatGrid, clockTab.initialBpm), [clockTab]);
-  const synthPlayedNotesRef = useRef<Set<string>>(new Set());
+  // The guide notes of each lane, sorted by time once, with which of them went to the audio clock (synthSchedule.ts)
+  const synthLanes = useMemo(() => lanes.map((lane) => createSynthLane(lane.part.tab.notes)), [lanes]);
+  // One set of drawing parameters, refilled every frame (laneDraw.ts): no closures or objects per lane per frame
+  const [laneEnv] = useState(createLaneDrawEnv);
+  // Guide notes handed to the audio clock but not yet due: a pause or a seek has to take them back
+  const synthPendingRef = useRef<{ laneIndex: number; noteIndex: number; lap: number; cancelIfPending: () => boolean }[]>([]);
+  const cancelPendingSynth = () => {
+    // A note taken back before it sounded is not played yet: it can be scheduled again on resume
+    for (const note of synthPendingRef.current) {
+      if (note.cancelIfPending()) unmarkPlayed(synthLanes[note.laneIndex], note.noteIndex, note.lap);
+    }
+    synthPendingRef.current = [];
+  };
 
   const sceneRef = useRef<{
     width: number;
@@ -288,7 +361,16 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   } | null>(null);
 
   const syncCanvasSizeRef = useRef<(() => void) | null>(null);
-  const [noteHeights, setNoteHeights] = useState<number[]>(() => lanes.map(() => 46));
+  // What the notes are sized from: the distance between strings of each lane and the root font size (rem), measured when
+  // the canvas is resized. The note size choice multiplies it; nothing here is a fixed number of pixels.
+  const [laneGeometry, setLaneGeometry] = useState<{ spacings: number[]; rootPx: number } | null>(null);
+  const [trackWidth, setTrackWidth] = useState(0); // canvas width: the window of music across the track follows it
+  const rootPx = laneGeometry?.rootPx ?? DEFAULT_ROOT_PX;
+  const noteScale = appearance.noteSize / 100;
+  const noteHeights = useMemo(
+    () => laneGeometry ? laneGeometry.spacings.map((spacing) => noteDiameterFor(spacing, noteScale, laneGeometry.rootPx)) : lanes.map(() => MAX_NOTE_HEIGHT),
+    [laneGeometry, noteScale, lanes]
+  );
 
   // Rebuild static rails/playhead only when geometry or pixel density changes.
   useEffect(() => {
@@ -315,9 +397,11 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
       ctx.fillStyle = palette.background;
       ctx.fillRect(0, 0, width, height);
 
-      const layouts = layoutLanes(height, lanes.map((lane) => lane.part.tab.stringCount));
-      const heights = layouts.map(noteHeightFor);
-      setNoteHeights((current) => current.every((value, index) => value === heights[index]) ? current : heights);
+      const root = readRootFontPx();
+      const layouts = layoutLanes(height, lanes.map((lane) => lane.part.tab.stringCount), root);
+      const spacings = layouts.map((layout) => layout.stringSpacing);
+      setTrackWidth(width);
+      setLaneGeometry((current) => current && current.rootPx === root && current.spacings.length === spacings.length && current.spacings.every((value, index) => value === spacings[index]) ? current : { spacings, rootPx: root });
       layouts.forEach((layout, index) => {
         const label = isDuo
           ? {
@@ -325,7 +409,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
             color: palette.players[index]
           }
           : null;
-        drawLaneBackground(ctx, layout, width, palette, label, HIT_LINE_X, strings);
+        drawLaneBackground(ctx, layout, width, palette, label, hitLineX(width, root), strings, root);
       });
       if (isDuo) {
         ctx.fillStyle = palette.divider;
@@ -364,27 +448,76 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   // The judging does not need the canvas: with no scene (a 0x0 container) it uses a nominal height
   const fallbackLayouts = useMemo(() => layoutLanes(400, lanes.map((lane) => lane.part.tab.stringCount)), [lanes]);
 
-  const laneGraphics = useMemo(
-    () => lanes.map((lane, index) => buildNoteGraphics(lane.part.tab.notes, speed, noteHeights[index], look.noteStyle, zoom)),
-    [lanes, speed, noteHeights, look.noteStyle, zoom]
+  // How the song is spread along the track. The base scale is a window of music across the canvas, so the scroll feels
+  // the same on every screen; on top of it the scale follows how busy the song is (noteSpacing.ts): it falls where the
+  // notes come fast and rises, up to 1.5x, where they are slow. A fixed zoom is that scale all through. The scale
+  // depends on the song alone, so both players of a duo online agree.
+  const showTechniques = appearance.techniques.show;
+  // On a narrow screen the window of music is shorter than that: a note needs its place (trackPixelsPerMs)
+  const noteWidthPx = noteHeights.reduce((widest, height) => Math.max(widest, height), 0);
+  const baseScale = trackWidth > 0 ? trackPixelsPerMs(trackWidth, hitLineX(trackWidth, rootPx), noteWidthPx) : PIXELS_PER_MS;
+  const laneNotes = useMemo(() => lanes.map((lane) => lane.part.tab.notes), [lanes]);
+  const autoMap = useMemo(
+    () => buildScaleMap(laneNotes, ZOOM_AUTO, { noteWidthPx, pixelsPerMs: baseScale }, isOnline || showTechniques),
+    [laneNotes, noteWidthPx, baseScale, isOnline, showTechniques]
   );
+  const scaleMap = useMemo(
+    () => zoom === ZOOM_AUTO ? autoMap : buildScaleMap(laneNotes, zoom, { noteWidthPx, pixelsPerMs: baseScale }, showTechniques),
+    [autoMap, laneNotes, zoom, noteWidthPx, baseScale, showTechniques]
+  );
+  const refreshClock = useEffectEvent(() => commitClock(positionRef.current));
+  useEffect(() => {
+    autoMapRef.current = autoMap;
+    refreshClock(); // what the Zoom card shows follows the new map even while paused
+  }, [autoMap]);
+  const autoZoom = clockView.autoTenths / 10;
+  const changeZoom = (value: number) => {
+    setZoom(value);
+    announceScale(`Espaçamento ${formatZoomLabel(value, autoZoom)}`);
+  };
+
+  const laneGraphics = useMemo(
+    () => lanes.map((lane, index) => buildNoteGraphics(lane.part.tab.notes, noteHeights[index], look.noteStyle, scaleMap.noteScale, 1, appearance.guide.shadow.preserveNote ? NOTE_READABLE_REM * rootPx : 0, FRET_FONT_FLOOR_REM * rootPx, showTechniques)),
+    [lanes, noteHeights, look.noteStyle, scaleMap, appearance.guide.shadow.preserveNote, rootPx, showTechniques]
+  );
+  // The techniques by lane, from the notes (indexes are those of laneGraphics): the blocks of notes joined by a hammer-on, a
+  // pull-off or a slide (drawn as one piece each), the slides that only enter or leave a note, and the palm mute stretches
+  const laneTechniques = useMemo(() => lanes.map((lane, laneIndex): LaneTechniques | null => {
+    if (!showTechniques) return null;
+    const analysis = analyzeTechniques(lane.part.tab.notes);
+    const graphics = laneGraphics[laneIndex];
+    const blockAt = new Int32Array(graphics.length).fill(-1); // the block a note starts, drawn when the loop reaches it
+    const inBlock = new Uint8Array(graphics.length);
+    const draws: BlockDraw[] = [];
+    analysis.blocks.forEach((block, blockNumber) => {
+      draws.push(createBlockDraw(block.indexes.map((index) => graphics[index]), block.links));
+      blockAt[block.indexes[0]] = blockNumber;
+      for (const index of block.indexes) inBlock[index] = 1;
+    });
+    return { draws, indexes: analysis.blocks.map((block) => block.indexes), blockAt, inBlock, alone: analysis.alone as TechniqueLink[], runs: analysis.palmMuteRuns as PalmMuteRun[] };
+  }), [lanes, laneGraphics, showTechniques]);
+
+  // What each note needs from the hand (a pick, or only a change of note for a hammer-on, pull-off or slide), by lane
+  const judgeContexts = useMemo(() => lanes.map((lane) => buildJudgeContexts(lane.part.tab.notes)), [lanes]);
 
   // Every judgement of a pending note goes through here, with the full pitch of the note's player
-  const judgePendingNote = (player: PlayerSlot, note: NoteEvent, timeDiffMs: number, pitch: DetectedPitch | null, y: number): NoteState => {
+  const judgePendingNote = (player: PlayerSlot, note: NoteEvent, timeDiffMs: number, pitch: DetectedPitch | null, y: number, context?: JudgeContext): NoteState => {
     const run = playersRef.current[player];
-    const outcome = judgeNote(note, timeDiffMs, pitch, run.attacks);
+    const outcome = judgeNote(note, timeDiffMs, pitch, run.attacks, context);
     if (outcome === null) return 'pending';
     if (outcome === 'skip') return 'skipped';
     const players = playersRef.current.slice();
     players[player] = {
       score: applyJudgement(run.score, outcome),
       // A hit spends the attack, so a held note can't also hit the repeated notes after it
-      attacks: outcome !== 'miss' && pitch ? consumeAttack(run.attacks, pitch.attackId, note.timeMs) : run.attacks
+      attacks: outcome !== 'miss' && pitch ? consumeAttack(run.attacks, pitch.attackId, note.timeMs, pitch.changeId) : run.attacks
     };
     playersRef.current = players;
     setScores(players.map((run) => run.score));
-    playHitFeedback(outcome, note, y, palette, effectsRef.current);
-    gameEffects.onJudgement(outcome, HIT_LINE_X, y, performance.now(), effectSettingsRef.current, palette.hit, palette.near);
+    const lineX = hitLineX(sceneRef.current?.width ?? 0, rootPx);
+    const fxUnit = noteScaleOf(noteHeights[Math.max(0, lanes.findIndex((lane) => lane.player === player))] ?? noteHeights[0] ?? MAX_NOTE_HEIGHT);
+    playHitFeedback(outcome, note, lineX, y, palette, effectsRef.current, appearance.hitSounds, fxUnit);
+    gameEffects.onJudgement(outcome, lineX, y, performance.now(), effectSettingsRef.current, palette.hit, palette.near, fxUnit);
     return outcome;
   };
 
@@ -530,7 +663,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   }, [isPlaying, metronomeEnabled, speed, clockTab, metronome]);
 
   // A negative clock in a later training lap is the overlap with the lap before, not a count-in
-  const isCountingIn = currentTimeMs < 0 && lap === 1;
+  const isCountingIn = clockView.before && lap === 1;
   const startCountIn = useEffectEvent(() => {
     countIn.start(countInBeats, positionRef.current, speed);
   });
@@ -541,28 +674,41 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     return () => countIn.stop();
   }, [isPlaying, isCountingIn, speed, countIn]);
 
-  // Synth preview of song notes
+  // Notes already queued ahead of the line must not sound over a pause or after the sound is turned off
+  const dropPendingSynth = useEffectEvent(() => cancelPendingSynth());
   useEffect(() => {
+    if (!isPlaying || !synthAudioEnabled) dropPendingSynth();
+  }, [isPlaying, synthAudioEnabled]);
+
+  // Synth preview of song notes: every frame, against the song clock itself (where the song is now)
+  const scheduleSynth = () => {
     if (!isPlaying || !synthAudioEnabled) return;
-    // Right after a lap turns, the old lap's last notes are still ahead on the old clock
-    const passes = lap > 1 && currentTimeMs < HIT_LATE_MS
-      ? [{ lapNumber: lap, at: currentTimeMs }, { lapNumber: lap - 1, at: currentTimeMs + durationMs }]
-      : [{ lapNumber: lap, at: currentTimeMs }];
-    lanes.forEach((lane, laneIndex) => {
+    const position = positionRef.current;
+    // The output delay is part of the lead, so a note due inside it is still handed over before it is late
+    const lookaheadMs = (SYNTH_LOOKAHEAD_MS + SoundFX.outputLatencySec() * 1000) * speed;
+    const graceMs = SYNTH_GRACE_MS * speed;
+    // Right after a lap turns, the old lap's last notes are still ahead on the old clock: a second pass for them
+    const passes = lap > 1 && position < HIT_LATE_MS ? 2 : 1;
+    for (let laneIndex = 0; laneIndex < lanes.length; laneIndex++) {
       // Both players on the same part: play it once
-      if (laneIndex > 0 && isSamePart(lane.part, lanes[0].part)) return;
-      for (const note of lane.part.tab.notes) {
-        if (note.dead) continue;
-        for (const { lapNumber, at } of passes) {
-          const key = synthKey(laneIndex, note.id, lapNumber);
-          if (note.timeMs <= at && note.timeMs >= at - 60 && !synthPlayedNotesRef.current.has(key)) {
-            synthPlayedNotesRef.current.add(key);
-            SoundFX.playGuitarNote(note.freqHz, note.durationMs, 0.25);
-          }
+      if (laneIndex > 0 && isSamePart(lanes[laneIndex].part, lanes[0].part)) continue;
+      const synthLane = synthLanes[laneIndex];
+      const notes = lanes[laneIndex].part.tab.notes;
+      for (let pass = 0; pass < passes; pass++) {
+        const passLap = pass === 0 ? lap : lap - 1;
+        const at = pass === 0 ? position : position + durationMs;
+        // Notes about to cross the line are scheduled on the audio clock, so the sound lands on the line
+        // instead of on the next frame; the delay is real time, the note's distance is song time
+        const count = dueNotes(synthLane, at, passLap, lookaheadMs, graceMs);
+        for (let due = 0; due < count; due++) {
+          const noteIndex = synthLane.due[due];
+          const note = notes[noteIndex];
+          const handle = SoundFX.playGuitarNote(note.freqHz, note.durationMs, 0.25, Math.max(0, note.timeMs - at) / speed / 1000);
+          if (handle) synthPendingRef.current = [...synthPendingRef.current.slice(-31), { laneIndex, noteIndex, lap: passLap, ...handle }];
         }
       }
-    });
-  }, [isPlaying, synthAudioEnabled, currentTimeMs, lanes, lap, durationMs]);
+    }
+  };
 
   // Judges the pending notes against what the player is playing now. It runs every frame whether or not there is
   // a canvas to draw on: a scene that does not exist yet (a hidden or 0x0 container) must not stop the scoring.
@@ -573,13 +719,13 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     lanes.forEach((lane, laneIndex) => {
       const { player } = lane;
       const latestPitch = getLatestPitch(player);
-      const compensation = audioEngine.getLatencyCompensationMs() * speed;
+      const latencyMs = audioEngine.getLatencyCompensationMs();
       const judgeLap = (noteStates: Map<string, NoteState>, lapPosition: number) => {
         for (const graphic of laneGraphics[laneIndex]) {
           const { note } = graphic;
           if ((noteStates.get(note.id) ?? 'pending') !== 'pending') continue;
           // The delay is real time and the position is song time, which runs slower at a lower speed
-          const state = judgePendingNote(player, note, note.timeMs - lapPosition + compensation, latestPitch, stringY(layouts[laneIndex], note.string));
+          const state = judgePendingNote(player, note, noteTimeDiffMs(note.timeMs, lapPosition, latencyMs, speed), latestPitch, stringY(layouts[laneIndex], note.string), judgeContexts[laneIndex].get(note.id));
           if (state === 'pending') continue;
           noteStates.set(note.id, state);
           // A chord is judged once: the rest of it shows the same result
@@ -605,36 +751,46 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     ctx.drawImage(background, 0, 0, background.width / dpr, background.height / dpr);
     const effectSettings = effectSettingsRef.current;
     const area = effectAreaRef.current;
+    const lineX = hitLineX(width, rootPx);
+    // Sizes written for a 16 px root follow the root of this screen (u); what belongs to the note follows the note (fxUnit)
+    const u = remScale(rootPx);
+    const fxUnit = noteScaleOf(noteWidthPx);
+    const depthRange = width - lineX;
+    area.hitLineX = lineX;
     area.width = width;
     area.height = scene.height;
-    area.top = layouts[0].top + layouts[0].topMargin - 20;
-    area.bottom = layouts[layouts.length - 1].top + layouts[layouts.length - 1].height - layouts[layouts.length - 1].topMargin + 20;
+    area.unit = fxUnit;
+    area.top = layouts[0].top + layouts[0].topMargin - 20 * u;
+    area.bottom = layouts[layouts.length - 1].top + layouts[layouts.length - 1].height - layouts[layouts.length - 1].topMargin + 20 * u;
     let combo = 0;
     for (const run of playersRef.current) combo = Math.max(combo, run.score.combo);
     gameEffects.drawUnder(ctx, now, effectSettings, area, combo, getLatestPitch(0)?.volume ?? 0, palette.signal);
     const trail = effectSettings.noteTrail ? trailFor(effectSettings.intensity) : null;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.font = 'bold 13px Inter, sans-serif';
+    ctx.font = `bold ${13 * u}px Inter, sans-serif`;
     const position = positionRef.current;
-    const pixelsPerMs = PIXELS_PER_MS * speed * zoom;
-    const shownPosition = Math.max(position, -Math.min(LEAD_IN_MOVING_MS * speed, (width - HIT_LINE_X - LEAD_IN_RIGHT_MARGIN) / pixelsPerMs));
+    // Everything along the track sits at lineX + S(t) - S(shown position), S being the integral of the scale
+    // Before a run from the very start the clock rests at 0, but the lane shows the state the count begins with: empty
+    // at the line, the first note a whole count away. Every frame of the count then scrolls it in from far away.
+    const atRest = !online && !isPlaying && !runStartedRef.current && position === 0;
+    const shownPosition = atRest ? countInStartPositionMs(session?.leadInMs ?? COUNT_IN_MS, speed) : position;
+    const trackBase = scaleMap.xOf(shownPosition);
+    beginLaneFrame(laneEnv, { ctx, width, lineX, u, depthRange, kit, trail, signal: palette.signal });
 
-    // 2.5 Draw subtle 3D-tilted scrolling beat/measure lines across the fretboard
+    // 2.5 Bar and beat lines scroll with the notes and fade out into the distance
     for (let laneIndex = 0; laneIndex < lanes.length; laneIndex++) {
       const layout = layouts[laneIndex];
-      const boardTop = layout.top + layout.topMargin - 16;
-      const boardBottom = layout.top + layout.height - layout.topMargin + 16;
+      const boardTop = Math.max(layout.top, layout.top + layout.topMargin - 16 * u);
+      const boardBottom = Math.min(layout.top + layout.height, layout.top + layout.height - layout.topMargin + 16 * u);
       for (const beat of clockTab.beatGrid) {
-        const beatX = HIT_LINE_X + (beat.timeMs - shownPosition) * pixelsPerMs;
-        if (beatX < -60 || beatX > width + 60) continue;
-        const xTop = perspectiveX(beatX, boardTop, layout);
-        const xBottom = perspectiveX(beatX, boardBottom, layout);
+        const beatX = lineX + scaleMap.xOf(beat.timeMs) - trackBase;
+        if (beatX < lineX - 60 * u || beatX > width + 60 * u) continue;
         ctx.beginPath();
-        ctx.strokeStyle = beat.accent ? 'rgba(255, 255, 255, 0.14)' : 'rgba(255, 255, 255, 0.05)';
+        ctx.strokeStyle = beatLineColor(beat.accent, depthAlphaAt(beatX, lineX, depthRange));
         ctx.lineWidth = beat.accent ? 1.5 : 1;
-        ctx.moveTo(xTop, boardTop);
-        ctx.lineTo(xBottom, boardBottom);
+        ctx.moveTo(beatX, boardTop);
+        ctx.lineTo(beatX, boardBottom);
         ctx.stroke();
       }
     }
@@ -644,38 +800,80 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
       const layout = layouts[laneIndex];
       const noteHeight = noteHeights[laneIndex];
       const noteStates = noteStatesRef.current[laneIndex];
+      const laneUnit = noteScaleOf(noteHeight);
+      // The chord name above its notes: a share of the note, never under 0.75 rem
+      const chordFont = `bold ${Math.max(0.75 * rootPx, 15 * laneUnit)}px Inter, sans-serif`;
+      const chordY = layout.top + Math.max(11 * u, layout.topMargin * 0.3);
 
-      // Draws one note pill, culled off screen
-      const drawNote = (graphic: NoteGraphic, noteX: number, noteY: number, state: NoteState) => {
-        const { note } = graphic;
-        if (noteX < -100 || noteX > width + 100 || !noteHeight) return;
-        const tiltedX = perspectiveX(noteX, noteY, layout);
-        if (note.chord) {
-          ctx.font = 'bold 15px Inter, sans-serif';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillStyle = palette.signal;
-          const chordY = layout.top + Math.max(11, layout.topMargin * 0.3);
-          ctx.fillText(note.chord.label, perspectiveX(noteX, chordY, layout), chordY);
+      // The guide shadow goes under the notes: it marks the string of the next note on the hit line. It only reads
+      // the song clock and the notes' states, so it never touches the judging.
+      if (appearance.guide.enabled) {
+        const guideFrames = guideFramesRef.current;
+        const frame = guideFrames[laneIndex] ?? (guideFrames[laneIndex] = createGuideFrame());
+        if (computeGuide(lanes[laneIndex].part.tab.notes, noteStates, position, speed, appearance.reducedMotion, frame, appearance.guide.shadow)) {
+          const distancePx = scaleMap.xOf(position + frame.aheadMs) - trackBase;
+          drawGuide(ctx, frame, layout, lineX, distancePx, palette.signal, appearance.guide.intensity, noteHeight, appearance.reducedMotion, appearance.guide.style, guideExtras);
         }
-        drawNoteGraphic(ctx, graphic, kit, tiltedX, noteY, state, noteHeight, trail);
-      };
+      }
 
-      for (const graphic of laneGraphics[laneIndex]) {
+      const graphics = laneGraphics[laneIndex];
+      const tech = laneTechniques[laneIndex];
+      const lapShift = isTraining ? scaleMap.xOf(durationMs) - scaleMap.xOf(0) : 0;
+      const labelPx = Math.max(0.7 * FRET_FONT_FLOOR_REM * rootPx, 0.3 * noteHeight);
+      const previousStates = previousLapStatesRef.current?.[laneIndex];
+
+      beginLane(laneEnv, noteHeight, chordFont, chordY, labelPx);
+
+      // Slides that only enter or leave a note: a short wedge beside it
+      if (tech && noteHeight) {
+        for (const link of tech.alone) {
+          const graphic = graphics[link.from];
+          const x = lineX + scaleMap.xOf(graphic.note.timeMs) - trackBase;
+          if (x < -100 * u || x > width + 100 * u) continue;
+          drawAloneSlide(ctx, link, kit, graphic.note.string, x, stringY(layout, graphic.note.string), graphic.height, labelPx, noteStates.get(graphic.note.id) || 'pending');
+        }
+      }
+
+      // From the far notes to the near ones: where two overlap in a busy stretch, the one about to be played is on top
+      for (let graphicIndex = graphics.length - 1; graphicIndex >= 0; graphicIndex--) {
+        if (tech) {
+          const blockNumber = tech.blockAt[graphicIndex];
+          if (blockNumber >= 0) {
+            drawBlockInLane(laneEnv, tech, graphics, noteStates, previousStates, layout, scaleMap, trackBase, blockNumber, 0, 0);
+            if (isTraining) {
+              drawBlockInLane(laneEnv, tech, graphics, noteStates, previousStates, layout, scaleMap, trackBase, blockNumber, lapShift, 1);
+              drawBlockInLane(laneEnv, tech, graphics, noteStates, previousStates, layout, scaleMap, trackBase, blockNumber, -lapShift, -1);
+            }
+            continue;
+          }
+          if (tech.inBlock[graphicIndex]) continue; // a segment of a block, drawn with it
+        }
+        const graphic = graphics[graphicIndex];
         const { note } = graphic;
-        const noteX = HIT_LINE_X + (note.timeMs - shownPosition) * pixelsPerMs;
+        const noteX = lineX + scaleMap.xOf(note.timeMs) - trackBase;
 
         const noteY = stringY(layout, note.string);
 
         const state = noteStates.get(note.id) || 'pending';
 
-        drawNote(graphic, noteX, noteY, state);
+        drawNoteInLane(laneEnv, graphic, noteX, noteY, state);
         if (isTraining) {
           // The laps join up: the next one comes in behind this one, and the last one scrolls away ahead of it
-          const lapWidth = durationMs * pixelsPerMs;
-          drawNote(graphic, noteX + lapWidth, noteY, 'pending');
-          const previous = previousLapStatesRef.current?.[laneIndex].get(note.id);
-          if (previous) drawNote(graphic, noteX - lapWidth, noteY, previous);
+          drawNoteInLane(laneEnv, graphic, noteX + lapShift, noteY, 'pending');
+          const previous = previousStates?.get(note.id);
+          if (previous) drawNoteInLane(laneEnv, graphic, noteX - lapShift, noteY, previous);
+        }
+      }
+
+      // A palm mute is one bracket over its whole stretch of notes, with one PM label: never a tag on each note
+      if (tech && noteHeight) {
+        for (const run of tech.runs) {
+          const first = graphics[run.first];
+          const last = graphics[run.last];
+          const x0 = lineX + scaleMap.xOf(first.note.timeMs) - trackBase - noteHeight / 2;
+          const x1 = lineX + scaleMap.xOf(last.note.timeMs) - trackBase + Math.max(last.tailPx, noteHeight * 0.7);
+          if (x1 < -100 * u || x0 > width + 100 * u) continue;
+          drawPalmMuteBracket(ctx, kit, first.note.string, x0, x1, stringY(layout, run.topString) - noteHeight * 0.78, noteHeight, labelPx, 0);
         }
       }
     }
@@ -705,7 +903,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     // 5. Draw & Update Floating Hit Text
     for (let i = texts.length - 1; i >= 0; i--) {
       const ft = texts[i];
-      ft.y -= 1.2;
+      ft.y -= 1.2 * fxUnit;
       ft.alpha -= 0.025;
 
       if (ft.alpha <= 0) {
@@ -715,10 +913,10 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
 
       ctx.save();
       ctx.globalAlpha = ft.alpha;
-      ctx.font = '900 20px Inter, sans-serif';
+      ctx.font = `900 ${Math.max(0.875 * rootPx, 20 * fxUnit)}px Inter, sans-serif`;
       ctx.fillStyle = ft.color;
       ctx.shadowColor = ft.color;
-      ctx.shadowBlur = 10;
+      ctx.shadowBlur = 10 * fxUnit;
       ctx.fillText(ft.text, ft.x, ft.y);
       ctx.restore();
     }
@@ -754,8 +952,8 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
       if (online && delta > MAX_FRAME_GAP_MS) skipNotesBefore(next);
       // Real time actually played: not paused, not the count-in (position still negative), not a hidden tab
       if (positionRef.current >= 0) playedMsRef.current += Math.min(elapsed, MAX_FRAME_GAP_MS);
-      positionRef.current = next;
-      setCurrentTimeMs(next);
+      commitClock(next);
+      scheduleSynth();
       if (metronomeEnabled) metronome.update(next);
       if (next < 0) countIn.update(next);
       if (next >= endMs) {
@@ -797,18 +995,10 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     return () => cancelAnimationFrame(animId);
   }, []);
 
-  const formatTime = (ms: number) => {
-    const totalSec = Math.floor(Math.max(0, ms) / 1000);
-    const mins = Math.floor(totalSec / 60);
-    const secs = totalSec % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
   // Only a run from the very start counts in: resuming, or starting after a seek, goes straight on
   const startPlaying = (rate = speed) => {
     if (!runStartedRef.current && positionRef.current === 0) {
-      positionRef.current = -(session?.leadInMs ?? LEAD_IN_MS) * rate;
-      setCurrentTimeMs(positionRef.current);
+      commitClock(countInStartPositionMs(countTotalMs, rate), rate);
     }
     setIsPlaying(true);
   };
@@ -821,15 +1011,14 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   }, []);
 
   const skipLeadIn = () => {
-    positionRef.current = 0;
-    setCurrentTimeMs(0);
+    commitClock(0);
     setIsPlaying(true);
   };
 
   // A reset zeroes the score, so the run that follows is a new, clean one
   const resetRun = (play: boolean) => {
-    positionRef.current = 0;
-    setCurrentTimeMs(0);
+    resume.cancel();
+    commitClock(0);
     playersRef.current = freshPlayers();
     setScores(playersRef.current.map((run) => run.score));
     runStartedRef.current = false;
@@ -838,7 +1027,8 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     playedMsRef.current = 0;
     setRunSummary(null);
     for (const noteStates of noteStatesRef.current) noteStates.clear();
-    synthPlayedNotesRef.current.clear();
+    for (const synthLane of synthLanes) clearPlayed(synthLane);
+    cancelPendingSynth();
     effectsRef.current = { particles: [], texts: [] };
     lapRef.current = 1;
     setLap(1);
@@ -867,7 +1057,10 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   };
 
   const togglePlay = () => {
-    if (currentTimeMs >= durationMs) restartRun();
+    if (resume.secondsLeft !== null) {
+      resume.cancel();
+      setIsPlaying(true);
+    } else if (positionRef.current >= durationMs) restartRun();
     else if (isPlaying) setIsPlaying(false);
     else if (ranked.phase === 'preparing' && ranked.automatic) {
       ranked.controller.abandonAutomatic();
@@ -906,12 +1099,10 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   const seekTo = (target: number) => {
     const previous = positionRef.current;
     lapOverlapRef.current = false;
-    positionRef.current = target;
-    setCurrentTimeMs(target);
-    // Notes ahead sound again in the synth
-    forEachNote((note, _noteStates, laneIndex) => {
-      if (note.timeMs > target) synthPlayedNotesRef.current.delete(synthKey(laneIndex, note.id, lapRef.current));
-    });
+    commitClock(target);
+    // Notes ahead sound again in the synth, and the ones already queued for the old position are taken back
+    cancelPendingSynth();
+    for (const synthLane of synthLanes) unmarkAfter(synthLane, target, lapRef.current);
     // Before the run starts, seeking only moves the start point (renderFrame checks it when playback begins)
     if (!runStartedRef.current) return;
 
@@ -937,8 +1128,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
     // An early hit scores while the count still runs, so a run can have begun before the clock reaches zero
     if (runStartedRef.current || noteStatesRef.current.some((states) => states.size > 0)) integrityRef.current.speedChanged = true;
     if (positionRef.current < 0) {
-      positionRef.current *= value / speed; // the count stays in real time
-      setCurrentTimeMs(positionRef.current);
+      commitClock(positionRef.current * (value / speed), value); // the count stays in real time
     }
     setSpeed(value);
   };
@@ -946,6 +1136,7 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   // Leaving a run in progress loses it: ask first. A run that has not started or already ended leaves at once.
   const runInProgress = () => runStartedRef.current && !runFinishedRef.current;
   const askToLeave = (kind: 'exit' | 'end') => {
+    resume.cancel();
     const leave = kind === 'exit' ? onExit : session?.onEnd;
     if (!runInProgress()) {
       leave?.();
@@ -962,14 +1153,63 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
   };
 
   // The legend (how to read the lanes) shows before the first run of a player who has not dismissed it
-  const showLegend = !legendSeen && !isOnline && !devPreset && !runSummary && currentTimeMs <= 0;
+  // It lies over the bottom of the lane, so it only shows before the run: once the count starts it would hide the low string
+  const showLegend = !legendSeen && !isOnline && !devPreset && !runSummary && !isPlaying && clockView.atStart;
   const dismissLegend = () => {
     markLegendSeen();
     setLegendSeen(true);
   };
 
   const { setFeedbackOpen } = useModals();
-  const toolClass = 'flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl border border-ink-700 bg-ink-800 px-3 text-xs font-semibold text-ink-200 transition hover:border-ink-500 disabled:cursor-not-allowed disabled:opacity-50';
+
+  // The song waits while the player looks at the options (a duo online cannot wait: it follows the shared clock)
+  const openAppearance = () => {
+    if (appearanceLayer) return;
+    const wasResuming = resume.secondsLeft !== null;
+    resume.cancel();
+    if (!isOnline && (isPlaying || wasResuming)) {
+      resumeAfterAppearanceRef.current = true;
+      setIsPlaying(false);
+    } else {
+      resumeAfterAppearanceRef.current = false;
+    }
+    setAppearanceLayer('quick');
+  };
+  const closeAppearance = () => {
+    setAppearanceLayer(null);
+    if (!resumeAfterAppearanceRef.current) return;
+    resumeAfterAppearanceRef.current = false;
+    resume.begin();
+  };
+
+  const onShortcut = useEffectEvent((event: KeyboardEvent) => {
+    const action = shortcutFor(event);
+    if (!action || appearanceLayer || pendingLeave || runSummary) return;
+    if (action === 'play') {
+      if (isOnline || ranked.isBusy) return;
+      event.preventDefault();
+      togglePlay();
+    } else if (action === 'metronome') {
+      setMetronomeEnabled(!metronomeEnabled);
+      announceScale(`Metrônomo ${metronomeEnabled ? 'desligado' : 'ligado'}`);
+    } else if (action === 'notes') {
+      setSynthAudioEnabled(!synthAudioEnabled);
+      announceScale(`Som das notas ${synthAudioEnabled ? 'desligado' : 'ligado'}`);
+    } else if (action === 'appearance') {
+      event.preventDefault();
+      openAppearance();
+    } else if (!isOnline && !ranked.isOn) {
+      event.preventDefault();
+      const next = stepOption(SPEED_OPTIONS, speed, action === 'speed-up' ? 1 : -1);
+      if (next === speed) return;
+      changeSpeed(next);
+      announceScale(`Velocidade ${formatScale(next)}`);
+    }
+  });
+  useEffect(() => {
+    window.addEventListener('keydown', onShortcut);
+    return () => window.removeEventListener('keydown', onShortcut);
+  }, []);
   const lockedHint = isOnline ? 'Na dupla online a música segue sem pausa, em 1×.' : ranked.isOn ? 'Partidas ranqueadas valem só em 1× e sem saltos.' : undefined;
   const lockedHelp = ranked.isOn ? rankedHelpId : undefined;
   const duoParts = isDuo
@@ -978,13 +1218,14 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
 
   return (
     <div className="flex h-dvh w-full flex-col overflow-hidden bg-ink-950 text-ink-100 select-none">
-      <header className="shrink-0 border-b border-ink-700 bg-ink-900 px-4 py-3 sm:px-6 [@media(max-height:500px)]:py-1">
-        <div className="flex items-center justify-between gap-3">
+      <header className="shrink-0 border-b border-ink-700 bg-ink-900 px-4 py-3 sm:px-6 [@media(max-height:45rem)]:py-1.5 short:flex short:items-center short:gap-4 short:py-1!">
+        <div className="flex items-center justify-between gap-3 short:min-w-0 short:flex-1">
           <button onClick={() => askToLeave('exit')} aria-label="PRGB: voltar ao início" className="flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-lg"><ArrowLeft size={18} aria-hidden="true" /><BrandMark size={26} className="[&>span]:hidden sm:[&>span]:inline [&>span]:text-lg" /></button>
           <div className="min-w-0 flex-1 font-display">
             <h1 className="truncate text-base font-bold sm:text-xl">{mainTab.title}</h1>
             <p className="truncate text-xs text-ink-300">{isDuo ? `Dupla · ${duoParts}` : `${mainTab.artist} · ${mainTab.trackName}`}</p>
           </div>
+          <AudioRouteBadge />
           {isDuo
             ? <div className="hidden shrink-0 gap-2 sm:flex"><LiveTuner player={0} label="J1" /><LiveTuner player={1} label="J2" /></div>
             : <LiveTuner />}
@@ -1002,42 +1243,64 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
           )}
         </div>
         {isDuo ? <DuoHud scores={scores} names={names} /> : <SoloHud score={scores[0]} goal={challenge?.score} />}
-        <div className="mt-2 empty:hidden"><AudioRouteNotice /></div>
       </header>
-      {showLegend && (
-        <div role="note" className="mx-3 mt-2 flex shrink-0 items-start gap-3 rounded-2xl border border-signal-500/30 bg-ink-900 py-2 pl-4 pr-2 sm:mx-6 [@media(max-height:500px)]:hidden">
-          <p className="min-w-0 flex-1 text-xs leading-5 text-ink-200">{LEGEND_TEXT}</p>
-          <button type="button" onClick={dismissLegend} className="min-h-11 shrink-0 cursor-pointer rounded-xl border border-ink-700 bg-ink-800 px-3 text-xs font-semibold text-ink-200 transition hover:border-ink-500">Entendi</button>
-        </div>
-      )}
       <main ref={canvasContainerRef} aria-label="Pista de prática de guitarra" className="relative min-h-0 w-full flex-1 overflow-hidden">
         <canvas ref={canvasRef} aria-label={isDuo ? 'Notas das duas partes: jogador 1 em cima, jogador 2 embaixo' : 'Notas da tablatura nas seis cordas'} className="absolute inset-0 block size-full" />
+        <ScaleToast toast={scaleToast} onDone={clearScaleToast} />
         {/* A duo game also needs the input in duo mode: otherwise player 2 is never heard */}
         {isCountingIn && (
-          <div className="absolute left-3 top-2 z-10 flex items-center gap-3 rounded-2xl border border-amp-500/40 bg-ink-900/95 py-1.5 pl-4 pr-1.5 shadow-panel">
-            <p role="status" className="flex items-center gap-3 text-sm font-semibold text-ink-200">Prepare-se <span className="w-6 text-center font-display text-3xl font-bold text-amp-300">{Math.ceil(-currentTimeMs / speed / 1000)}</span></p>
-            <button type="button" onClick={skipLeadIn} className="min-h-11 cursor-pointer rounded-xl border border-ink-700 bg-ink-800 px-3 text-xs font-semibold text-ink-200 transition hover:border-ink-500">Pular contagem</button>
-          </div>
+          <>
+            {/* Over the lane, in the middle, taking no room: the lane has its final size from the first frame */}
+            <div ref={countInOverlayRef} aria-hidden="true" className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center text-amp-300" style={{ opacity: clockView.countOpacity }}>
+              <span className="text-sm font-semibold uppercase tracking-widest">Prepare-se</span>
+              <span className="font-display text-[clamp(4rem,24vh,11rem)] font-bold leading-none">{clockView.countSecondsLeft}</span>
+            </div>
+            <p role="status" className="sr-only">Começa em {clockView.countSecondsLeft}</p>
+            <button type="button" onClick={skipLeadIn} className="absolute left-3 top-2 z-10 min-h-11 cursor-pointer rounded-xl border border-ink-700 bg-ink-900/90 px-3 text-xs font-semibold text-ink-200 transition hover:border-ink-500">Pular contagem</button>
+          </>
+        )}
+        {resume.secondsLeft !== null && !isCountingIn && (
+          <>
+            {/* Back from the options panel: a short count over the lane, taking no room, before the notes move again */}
+            <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center text-amp-300" style={{ opacity: resumeOpacity(resume.secondsLeft) }}>
+              <span className="text-sm font-semibold uppercase tracking-widest">Voltando</span>
+              <span className="font-display text-[clamp(3rem,18vh,8rem)] font-bold leading-none">{resume.secondsLeft}</span>
+            </div>
+            <p role="status" className="sr-only">A música volta em {resume.secondsLeft}</p>
+            <button type="button" onClick={() => { resume.cancel(); setIsPlaying(true); }} className="absolute left-3 top-2 z-10 min-h-11 cursor-pointer rounded-xl border border-ink-700 bg-ink-900/90 px-3 text-xs font-semibold text-ink-200 transition hover:border-ink-500">Continuar agora</button>
+          </>
         )}
         {(!isAudioRunning || (isDuo && channelMode !== 'duo')) && <button onClick={() => void startAudio(undefined, isDuo ? 'duo' : undefined)} className="absolute right-3 top-2 min-h-11 cursor-pointer rounded-xl border border-signal-500/30 bg-ink-900/90 px-3 text-xs font-semibold text-signal-300">Conectar guitarra{isDuo ? 's' : ''}</button>}
+        {/* Notices over the bottom of the lane: they come and go without moving it */}
+        <div className="pointer-events-none absolute inset-x-3 bottom-2 z-10 flex flex-col gap-2 empty:hidden sm:inset-x-6">
+          {showLegend && (
+            <div role="note" className="pointer-events-auto flex items-start gap-3 rounded-2xl border border-signal-500/30 bg-ink-900/95 py-2 pl-4 pr-2 shadow-panel [@media(max-height:40rem)]:hidden">
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <p className="text-xs leading-5 text-ink-200">{LEGEND_TEXT}</p>
+                {appearance.techniques.show && appearance.techniques.legend && <TechniqueLegend compact />}
+              </div>
+              <button type="button" onClick={dismissLegend} className="min-h-11 shrink-0 cursor-pointer rounded-xl border border-ink-700 bg-ink-800 px-3 text-xs font-semibold text-ink-200 transition hover:border-ink-500">Entendi</button>
+            </div>
+          )}
+        </div>
       </main>
       {online && <div className="shrink-0 px-3 sm:px-6">{online.hud}</div>}
-      <footer className="shrink-0 border-t border-ink-700 bg-ink-900 px-3 py-3 sm:px-6 [@media(max-height:500px)]:py-1">
-        <div className="flex items-center gap-3">
-          <button onClick={togglePlay} disabled={isOnline || ranked.isBusy} aria-busy={ranked.isBusy} aria-label={isPlaying ? 'Pausar' : 'Tocar'} title={lockedHint} className={'flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-amp-400 text-ink-950 transition hover:bg-amp-300 ' + (isOnline ? 'disabled:cursor-not-allowed disabled:opacity-50' : 'disabled:cursor-wait disabled:opacity-70')}>{ranked.isBusy ? <Loader2 size={22} className="animate-spin" /> : isPlaying ? <Pause size={22} /> : <Play size={22} />}</button>
+      <footer className="shrink-0 border-t border-ink-700 bg-ink-900 px-3 py-3 sm:px-6 [@media(max-height:45rem)]:py-1.5 short:flex short:items-center short:gap-3 short:py-1!">
+        <div className="flex items-center gap-3 short:w-[42%] short:shrink-0">
+          <button onClick={togglePlay} disabled={isOnline || ranked.isBusy} aria-busy={ranked.isBusy} aria-label={isPlaying ? 'Pausar' : 'Tocar'} aria-keyshortcuts="Space" title={lockedHint ?? (isPlaying ? 'Pausar (Espaço)' : 'Tocar (Espaço)')} className={'flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-amp-400 text-ink-950 transition hover:bg-amp-300 ' + (isOnline ? 'disabled:cursor-not-allowed disabled:opacity-50' : 'disabled:cursor-wait disabled:opacity-70')}>{ranked.isBusy ? <Loader2 size={22} className="animate-spin" /> : isPlaying ? <Pause size={22} /> : <Play size={22} />}</button>
           <button onClick={restartRun} disabled={isOnline || ranked.isBusy} aria-label="Reiniciar música" title={lockedHint} className={toolClass}><RotateCcw size={18} /></button>
-          <span className="font-mono text-xs text-ink-300">{formatTime(currentTimeMs)}</span>
-          <input aria-label="Posição da música" type="range" min={0} max={durationMs} value={Math.max(0, currentTimeMs)} disabled={isOnline || ranked.isOn} title={lockedHint} aria-describedby={lockedHelp}
+          <span className="font-mono text-xs text-ink-300">{formatClock(clockView.second * 1000)}</span>
+          <input ref={sliderRef} aria-label="Posição da música" aria-valuetext={positionValueText(clockView.second, durationMs)} type="range" min={0} max={durationMs} defaultValue={0} disabled={isOnline || ranked.isOn} title={lockedHint} aria-describedby={lockedHelp}
             onChange={(event) => seekTo(Number(event.target.value))} className="h-11 min-w-0 flex-1 cursor-pointer accent-amp-400 disabled:cursor-not-allowed disabled:opacity-50" />
-          <span className="font-mono text-xs text-ink-300">{formatTime(durationMs)}</span>
+          <span className="font-mono text-xs text-ink-300">{formatClock(durationMs)}</span>
         </div>
-        <div className="mt-2 flex flex-wrap items-center gap-2 pb-1">
+        <div className="mt-2 flex flex-wrap items-center gap-2 pb-1 [@media(max-height:45rem)]:mt-1 [@media(max-height:45rem)]:pb-0 short:relative short:[scrollbar-width:thin] short:mt-0! short:min-w-0 short:flex-1 short:flex-nowrap short:overflow-x-auto">
           {!isOnline && ranked.isAvailable && (ranked.phase === 'preparing'
-            ? <span className={toolClass + ' max-sm:px-2'}><Loader2 size={16} className="animate-spin" aria-hidden="true" /><span>Conferindo o ranking…</span></span>
+            ? <span className={toolClass + ' max-sm:px-2'}><Loader2 size={16} className="animate-spin" aria-hidden="true" /><span>Conferindo<span className="max-2xl:sr-only"> o ranking</span>…</span></span>
             : ranked.isOn
-              ? <span aria-describedby={lockedHelp} className={toolClass + ' max-sm:gap-1.5 max-sm:px-2 border-amp-400! text-amp-300!'}><Trophy size={16} aria-hidden="true" /><span>Valendo para o ranking</span></span>
+              ? <span aria-describedby={lockedHelp} className={toolClass + ' max-sm:gap-1.5 max-sm:px-2 border-amp-400! text-amp-300!'}><Trophy size={16} aria-hidden="true" /><span>Valendo<span className="max-2xl:sr-only"> para o ranking</span></span></span>
               : <button onClick={() => hasAccount ? void toggleRanked() : openRankingAccount()} className={toolClass + ' max-sm:gap-1.5 max-sm:px-2'}>
-                <Trophy size={16} aria-hidden="true" /><span>{!hasAccount ? 'Entrar no ranking' : ranked.notice?.tone === 'error' ? 'Tentar de novo' : 'Ligar o ranking'}</span>
+                <Trophy size={16} aria-hidden="true" /><span>{!hasAccount ? <>Ranking<span className="max-2xl:sr-only">: entrar</span></> : ranked.notice?.tone === 'error' ? 'Tentar de novo' : <>Ranking<span className="max-2xl:sr-only">: ligar</span></>}</span>
               </button>)}
           {!isOnline && ranked.isAvailable && ranked.phase === 'ready' && ranked.notice?.tone === 'error' && (
             <button onClick={() => { ranked.controller.turnOff(); startPlaying(); }} className={toolClass}>Tocar sem ranking</button>
@@ -1047,65 +1310,27 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
               <Repeat size={16} aria-hidden="true" /><span>Modo treino</span>{isTraining && <span className="font-mono">· volta {lap}</span>}
             </button>
           )}
-          <div title={lockedHint} className={'inline-flex min-h-11 shrink-0 items-center rounded-xl border border-ink-700 bg-ink-800 text-xs font-semibold text-ink-200 transition hover:border-ink-500' + ((isOnline || ranked.isOn) ? ' cursor-not-allowed opacity-50' : '')}>
-            <button
-              type="button"
-              aria-label="Diminuir velocidade"
-              disabled={isOnline || ranked.isOn || SPEED_OPTIONS.indexOf(speed) <= 0}
-              onClick={() => {
-                const idx = SPEED_OPTIONS.indexOf(speed);
-                if (idx > 0) changeSpeed(SPEED_OPTIONS[idx - 1]);
-              }}
-              className="flex min-h-11 min-w-10 cursor-pointer items-center justify-center rounded-l-xl text-ink-300 transition hover:bg-ink-700/60 hover:text-ink-100 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Minus size={14} aria-hidden="true" />
-            </button>
-            <label className="flex min-h-11 items-center">
-              <span className="sr-only">Velocidade</span>
-              <select
-                aria-label="Velocidade"
-                value={speed}
-                disabled={isOnline || ranked.isOn}
-                aria-describedby={lockedHelp}
-                onChange={event => changeSpeed(Number(event.target.value))}
-                className="min-h-11 cursor-pointer bg-transparent px-1.5 text-center font-mono focus:outline-none disabled:cursor-not-allowed"
-              >
-                {SPEED_OPTIONS.map(value => <option key={value} value={value} className="bg-ink-800">{formatSpeedLabel(value)}</option>)}
-              </select>
-            </label>
-            <button
-              type="button"
-              aria-label="Aumentar velocidade"
-              disabled={isOnline || ranked.isOn || SPEED_OPTIONS.indexOf(speed) >= SPEED_OPTIONS.length - 1}
-              onClick={() => {
-                const idx = SPEED_OPTIONS.indexOf(speed);
-                if (idx >= 0 && idx < SPEED_OPTIONS.length - 1) changeSpeed(SPEED_OPTIONS[idx + 1]);
-              }}
-              className="flex min-h-11 min-w-10 cursor-pointer items-center justify-center rounded-r-xl text-ink-300 transition hover:bg-ink-700/60 hover:text-ink-100 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Plus size={14} aria-hidden="true" />
-            </button>
-          </div>
-          <label title="Quantas notas aparecem na pista (menor = mais notas visíveis)" className={toolClass + ' max-sm:px-2'}>
-            <ZoomIn size={15} aria-hidden="true" />
-            <span className="sr-only">Zoom da pista</span>
-            <select
-              aria-label="Zoom da pista"
-              value={zoom}
-              onChange={event => setZoom(Number(event.target.value))}
-              className="min-h-11 cursor-pointer bg-ink-800 font-mono"
-            >
-              {ZOOM_OPTIONS.map(value => <option key={value} value={value}>{formatSpeedLabel(value)}</option>)}
-            </select>
-          </label>
+          <GameScaleControls speed={speed} zoom={zoom} autoZoom={autoZoom} speedLocked={isOnline || ranked.isOn} lockedHint={lockedHint} lockedHelpId={lockedHelp}
+            onSpeedChange={(value) => { changeSpeed(value); announceScale(`Velocidade ${formatScale(value)}`); }}
+            onZoomChange={changeZoom} />
+          <ToolButton label="Aparência" title={`Aparência rápida (${SHORTCUT_KEYS.appearance})`} icon={<Palette size={16} />} shortcut="appearance" hideLabelBelow="sm"
+            disabled={!!runSummary} onClick={openAppearance} className="sm:ml-1" />
           <GameMoreSheet>{(close) => <>
-            <button aria-label="Metrônomo" aria-pressed={metronomeEnabled} onClick={() => setMetronomeEnabled(!metronomeEnabled)} className={toolClass + (metronomeEnabled ? ' border-amp-400! text-amp-300!' : '')}><Clock size={16} /><span>Metrônomo</span></button>
-            <button aria-label="Ouvir as notas da tab" aria-pressed={synthAudioEnabled} onClick={() => setSynthAudioEnabled(!synthAudioEnabled)} className={toolClass + (synthAudioEnabled ? ' border-signal-500 text-signal-300' : '')}>{synthAudioEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}<span>Ouvir as notas da tab</span></button>
-            <button aria-label="Configurações de áudio" onClick={() => { close(); onOpenAudioSettings(); }} className={toolClass}><Sliders size={16} /><span>Áudio</span></button>
-            <button aria-label={`${toneSettings ? AMP_PRESETS[toneSettings.preset]?.badge : 'Amp'}: abrir PRGB Amp`} onClick={() => { close(); onOpenAmpRack?.(); }} className={toolClass + ' text-amp-300!'}><Zap size={16} /><span className="sm:hidden">Amp</span><span className="hidden sm:inline">{toneSettings ? AMP_PRESETS[toneSettings.preset]?.badge : 'Amp'}</span></button>
-            <button aria-label="Ouvir minha guitarra" aria-pressed={toneSettings?.isMonitoringEnabled ?? false} onClick={() => { if (ampEngine && toneSettings) ampEngine.setMonitoringEnabled(!toneSettings.isMonitoringEnabled); }} className={toolClass}>{toneSettings?.isMonitoringEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}<span className="sm:hidden xl:inline">Ouvir minha guitarra</span></button>
-            <button aria-label="Reportar problema" title="Reportar problema" onClick={() => { close(); setFeedbackOpen(true); }} className={toolClass}><MessageSquareWarning size={16} /><span className="sm:hidden xl:inline">Reportar problema</span></button>
-            {!isOnline && isRankingOn && <button aria-label="Minha conta do ranking" onClick={() => { close(); openRankingAccount(); }} className={toolClass}><UserRound size={16} /><span className="sm:hidden lg:inline">Minha conta</span></button>}
+            <ToolGroup label="Prática">
+              <ToolButton label="Metrônomo" icon={<Clock size={16} />} pressed={metronomeEnabled} shortcut="metronome" onClick={() => setMetronomeEnabled(!metronomeEnabled)} />
+              <ToolButton label="Som das notas" title={`Ouvir as notas da tab (${SHORTCUT_KEYS.notes})`} icon={synthAudioEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />} pressed={synthAudioEnabled} tone="signal" shortcut="notes"
+                onClick={() => setSynthAudioEnabled(!synthAudioEnabled)} />
+            </ToolGroup>
+            <ToolGroup label="Som e guitarra">
+              <ToolButton label="Áudio" title="Configurações de áudio" icon={<Sliders size={16} />} onClick={() => { close(); onOpenAudioSettings(); }} />
+              <button aria-label={`${toneSettings ? AMP_PRESETS[toneSettings.preset]?.badge : 'Amp'}: abrir PRGB Amp`} onClick={() => { close(); onOpenAmpRack?.(); }} className={toolClass + ' text-amp-300!'}><Zap size={16} aria-hidden="true" /><span className="sm:hidden">Amp</span><span className="hidden max-w-28 truncate sm:inline">{toneSettings ? AMP_PRESETS[toneSettings.preset]?.badge : 'Amp'}</span></button>
+              <ToolButton label="Ouvir minha guitarra" icon={toneSettings?.isMonitoringEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />} pressed={toneSettings?.isMonitoringEnabled ?? false} tone="signal" hideLabelBelow="2xl"
+                onClick={() => { if (ampEngine && toneSettings) ampEngine.setMonitoringEnabled(!toneSettings.isMonitoringEnabled); }} />
+            </ToolGroup>
+            <ToolGroup label="Ajuda e conta">
+              <ToolButton label="Reportar problema" icon={<MessageSquareWarning size={16} />} hideLabelBelow="2xl" onClick={() => { close(); setFeedbackOpen(true); }} />
+              {!isOnline && isRankingOn && <ToolButton label="Minha conta" title="Minha conta do ranking" icon={<UserRound size={16} />} hideLabelBelow="2xl" onClick={() => { close(); openRankingAccount(); }} />}
+            </ToolGroup>
           </>}</GameMoreSheet>
         </div>
         {isTraining && <p id={trainingHelpId} className="text-xs leading-5 text-signal-200">O exercício recomeça sozinho. Desligue o modo treino para terminar no fim desta volta. Não conta como recorde.</p>}
@@ -1116,6 +1341,18 @@ export const PracticeGame: React.FC<PracticeGameProps> = ({
           </div>
         )}
       </footer>
+      {appearanceLayer === 'quick' && (
+        <QuickAppearancePanel onClose={closeAppearance} onOpenAll={() => setAppearanceLayer('full')} zoom={zoom} autoZoom={autoZoom} paused={!isOnline}
+          onZoomChange={changeZoom} />
+      )}
+      {appearanceLayer === 'full' && (
+        <ModalFrame titleId="game-appearance-title" onClose={closeAppearance}
+          className="m-0! h-dvh max-h-none! w-full! max-w-none! overflow-hidden rounded-none! border-0! p-0! sm:p-0!">
+          <LazyScreen label="a aparência" overlay onClose={closeAppearance}>
+            <AppearanceScreen onExit={closeAppearance} exitLabel="Voltar à música" titleId="game-appearance-title" />
+          </LazyScreen>
+        </ModalFrame>
+      )}
       {pendingLeave && (
         <ModalFrame titleId={leaveTitleId} onClose={() => setPendingLeave(null)} className="max-w-sm">
           <h2 id={leaveTitleId} className="font-display text-xl font-bold">{pendingLeave === 'end' ? 'Encerrar a sessão?' : 'Sair da partida?'}</h2>
