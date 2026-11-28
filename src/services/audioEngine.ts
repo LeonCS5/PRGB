@@ -13,8 +13,16 @@ export interface DetectedPitch {
   // Grows on each new attack (pick or change of note), stays the same while a note rings. Monotonic per
   // player and never reused by the engine, so holding one note can't hit the repeated notes after it.
   attackId: number;
+  // Grows on every change of the stable note (hammer-on, pull-off, slide, or a pick on another note), whether or not
+  // the change also got an attack: the attack debounce can swallow a change that comes right after a pick, a change
+  // of note cannot be swallowed. Monotonic across players and reconnections, like attackId.
+  changeId?: number;
+  // How many detections in a row, this one included, read this same note. The frames in between two notes read as
+  // passing pitches that rarely hold for long, and a note reached without a pick may not be judged on them.
+  heldFrames?: number;
 }
 
+import { FixedCadence, type Cadence } from './fixedCadence';
 import {
   DEFAULT_AUDIO_OPTIONS,
   LOOPBACK_BURSTS,
@@ -108,6 +116,8 @@ interface PlayerInput {
   framesSinceAttack: number;
   lastMidi: number; // note of the last detection, -1 = none yet
   stableMidi: number; // last note found by two detections in a row, -1 = none yet
+  changeId: number; // see DetectedPitch.changeId
+  heldFrames: number; // see DetectedPitch.heldFrames; 0 = no pitch in the last frame
 }
 
 export class AudioEngine {
@@ -130,6 +140,7 @@ export class AudioEngine {
   private pending: Promise<void> = Promise.resolve();
   // Shared by both players and kept across reconnections, so an attack id is never handed out twice
   private lastAttackId = 0;
+  private lastChangeId = 0;
   // Duo mode: ring of the last frames in which both channels played, 1 = they carried the same signal
   private mirrorHistory: Uint8Array<ArrayBuffer>;
   private mirrorFrames = 0; // frames recorded since start, up to MIRROR_FRAMES
@@ -190,10 +201,14 @@ export class AudioEngine {
   // Low power mode analyses one frame in this many
   private static readonly LOW_POWER_FRAMES = 3;
 
-  constructor(options: AudioOptions = DEFAULT_AUDIO_OPTIONS) {
+  // Which frames of the loop are analysed: a steady ~60 a second on the audio clock, not as many as the screen paints
+  private readonly cadence: Cadence;
+
+  constructor(options: AudioOptions = DEFAULT_AUDIO_OPTIONS, cadence: Cadence = new FixedCadence()) {
     // Audio engine initialized in idle state
     this.mirrorHistory = new Uint8Array(AudioEngine.MIRROR_FRAMES);
     this.options = options;
+    this.cadence = cadence;
   }
 
   /**
@@ -702,6 +717,7 @@ export class AudioEngine {
     this.mergerNode.connect(this.monitorGain);
 
     this.isRunning = true;
+    this.cadence.reset(); // the first frame of a start is analysed
     this.loopDetection();
     this.feedbackWatch = setInterval(this.watchForFeedback, AudioEngine.FEEDBACK_WATCH_MS);
     await this.openMonitor();
@@ -730,7 +746,9 @@ export class AudioEngine {
       attackId: this.lastAttackId,
       framesSinceAttack: AudioEngine.ATTACK_DEBOUNCE_FRAMES,
       lastMidi: -1,
-      stableMidi: -1
+      stableMidi: -1,
+      changeId: this.lastChangeId,
+      heldFrames: 0
     };
   }
 
@@ -835,12 +853,17 @@ export class AudioEngine {
   }
 
   /**
-   * Continuous pitch detection loop, one detection per player
+   * Continuous pitch detection loop, one detection per player. It wakes on every screen frame but only analyses
+   * at the cadence's rate (about 60 a second): the attack, legato and mirror counts are in analyses, so they must
+   * last the same time on a 60 Hz screen and on a 144 Hz one. What follows the live sound (the level and the amp's
+   * noise gate) still runs on every frame, so the gate opens as fast as the screen allows.
    */
   private loopDetection = () => {
     if (!this.isRunning || this.playerInputs.length === 0 || !this.audioContext) return;
 
-    if (this.options.lowPower && ++this.framesSinceDetection < AudioEngine.LOW_POWER_FRAMES) {
+    const due = this.cadence.shouldRun(this.audioContext.currentTime);
+    // Low power mode analyses one in LOW_POWER_FRAMES of the cadence's steps, and reads the level just as seldom
+    if (this.options.lowPower && (!due || ++this.framesSinceDetection < AudioEngine.LOW_POWER_FRAMES)) {
       this.animationFrameId = requestAnimationFrame(this.loopDetection);
       return;
     }
@@ -868,13 +891,19 @@ export class AudioEngine {
     }
     this.inputRms = loudest;
     this.inputPeak = peak;
-    if (this.channelMode === 'duo' && this.playerInputs.length === 2) {
+    if (due && this.channelMode === 'duo' && this.playerInputs.length === 2) {
       this.trackMirroring(this.playerInputs[0], this.playerInputs[1]);
     }
 
     // Real-time PRGB Amp noise gate processing; the amp is shared, so the louder guitar opens it
     if (this.ampEngine) {
       this.ampEngine.processGate(loudest);
+    }
+
+    // A frame between two analyses: the level and the gate are up to date, nothing else is counted
+    if (!due) {
+      this.animationFrameId = requestAnimationFrame(this.loopDetection);
+      return;
     }
 
     for (const input of this.playerInputs) {
@@ -904,20 +933,27 @@ export class AudioEngine {
     let noteChanged = false;
     if (pitch) {
       const midi = pitch.midiNote;
+      input.heldFrames = midi === input.lastMidi ? Math.min(input.heldFrames + 1, 255) : 1;
       if (midi === input.lastMidi && midi !== input.stableMidi) {
         // The first note ever is not a change: its level jump is its attack
         noteChanged = input.stableMidi !== -1;
+        if (noteChanged) input.changeId = ++this.lastChangeId;
         input.stableMidi = midi;
       }
       input.lastMidi = midi;
     }
+    if (!pitch) input.heldFrames = 0;
     input.previousRms = rms;
     input.framesSinceAttack = Math.min(input.framesSinceAttack + 1, AudioEngine.ATTACK_DEBOUNCE_FRAMES);
     if ((levelJump || noteChanged) && input.framesSinceAttack >= AudioEngine.ATTACK_DEBOUNCE_FRAMES) {
       input.attackId = ++this.lastAttackId;
       input.framesSinceAttack = 0;
     }
-    if (pitch) pitch.attackId = input.attackId;
+    if (pitch) {
+      pitch.attackId = input.attackId;
+      pitch.changeId = input.changeId;
+      pitch.heldFrames = input.heldFrames;
+    }
   }
 
   /**

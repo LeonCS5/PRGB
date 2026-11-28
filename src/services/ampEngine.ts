@@ -42,7 +42,7 @@ export const AMP_PRESETS: Record<AmpPresetId, {
   settings: Partial<AmpSettings>;
 }> = {
   metal: {
-    name: 'PRGB Amp Modern Metal',
+    name: 'Metal moderno',
     tagline: 'Alto ganho agressivo, graves potentes e médios focados para riffs pesados',
     badge: '⚡ Metal High-Gain',
     settings: {
@@ -87,7 +87,7 @@ export const AMP_PRESETS: Record<AmpPresetId, {
     }
   },
   lead: {
-    name: 'Liquid Solo Lead',
+    name: 'Solo cantante',
     tagline: 'Muito sustain, compressão suave e harmônicos cantantes para solos',
     badge: '🚀 Solo Lead',
     settings: {
@@ -102,7 +102,7 @@ export const AMP_PRESETS: Record<AmpPresetId, {
     }
   },
   acoustic: {
-    name: 'Acoustic Simulator',
+    name: 'Simulador acústico',
     tagline: 'Simulação de ressonância acústica para violão ou captadores piezo',
     badge: '🌿 Acústico / Piezo',
     settings: {
@@ -117,7 +117,7 @@ export const AMP_PRESETS: Record<AmpPresetId, {
     }
   },
   direct_di: {
-    name: 'Direct Monitor (Raw DI)',
+    name: 'Entrada direta, sem amp',
     tagline: 'Sinal 100% puro e sem processamento direto da interface de áudio',
     badge: '🔌 Direct Clean (DI)',
     settings: {

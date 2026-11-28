@@ -13,6 +13,7 @@ class FakeAudioContext {
   state: AudioContextState = 'running';
   currentTime = 0;
   destination = {};
+  outputLatency = 0;
   oscillators: FakeOscillator[] = [];
 
   createOscillator() {
@@ -27,7 +28,7 @@ class FakeAudioContext {
     };
   }
   createGain() {
-    return { gain: { setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() }, connect: vi.fn() };
+    return { gain: { setValueAtTime: vi.fn(), linearRampToValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() }, connect: vi.fn() };
   }
   async resume() {}
 }
@@ -132,6 +133,67 @@ describe('MetronomeScheduler', () => {
     expect(live().filter((o) => o.startAt > ctx.currentTime)).toHaveLength(0);
     metronome.update(50);
     expect(ctx.oscillators).toHaveLength(queued);
+  });
+});
+
+describe('output latency', () => {
+  let ctx: FakeAudioContext;
+  const live = () => ctx.oscillators.filter((o) => !o.stopped);
+
+  beforeEach(() => {
+    vi.stubGlobal('window', { AudioContext: FakeAudioContext });
+    ctx = SoundFX.getContext() as unknown as FakeAudioContext;
+    ctx.oscillators = [];
+    ctx.currentTime = 10;
+    ctx.outputLatency = 0.05;
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('hands a metronome click over early by the output delay, so it is heard on the beat', () => {
+    const metronome = new MetronomeScheduler();
+    metronome.start(grid(8, 500), 0, 1);
+    ctx.currentTime = 10.4;
+    metronome.update(400);
+    // The 500 ms beat is due at 10.5 on the clock and must be started 50 ms before that
+    const starts = live().map((o) => o.startAt);
+    expect(starts).toHaveLength(2);
+    expect(starts[0]).toBe(10);
+    expect(starts[1]).toBeCloseTo(10.45, 9);
+  });
+
+  it('looks ahead by the output delay too, so a click is not already late when it is handed over', () => {
+    const metronome = new MetronomeScheduler();
+    metronome.start(grid(8, 500), 0, 1);
+    ctx.currentTime = 10.35; // 150 ms to the beat: inside lookahead (120 ms) only because of the 50 ms delay
+    metronome.update(350);
+    expect(live().some((o) => Math.abs(o.startAt - 10.45) < 1e-9)).toBe(true);
+  });
+
+  it('schedules a guide note on the audio clock at its delay minus the output delay', () => {
+    SoundFX.playGuitarNote(440, 500, 0.25, 0.1);
+    expect(live()[0].startAt).toBeCloseTo(10.05, 9);
+  });
+
+  it('plays a guide note that is already late right away', () => {
+    SoundFX.playGuitarNote(440, 500, 0.25, 0.02);
+    expect(live().map((o) => o.startAt)).toEqual([10]);
+  });
+
+  it('drops a guide note that has not started yet when asked', () => {
+    const note = SoundFX.playGuitarNote(440, 500, 0.25, 0.1); // starts at 10.05
+    ctx.currentTime = 10.02;
+    expect(note?.cancelIfPending()).toBe(true);
+    expect(ctx.oscillators[0].stopped).toBe(true);
+  });
+
+  it('keeps a guide note that is already sounding when asked to drop pending ones', () => {
+    const note = SoundFX.playGuitarNote(440, 500, 0.25, 0.1);
+    ctx.currentTime = 10.06;
+    expect(note?.cancelIfPending()).toBe(false);
+    expect(ctx.oscillators[0].stopped).toBe(false);
   });
 });
 

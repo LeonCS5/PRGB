@@ -35,7 +35,22 @@ export class SoundFX {
   /**
    * Play guitar note synthesis with realistic pluck envelope
    */
-  static playGuitarNote(freqHz: number, durationMs = 800, volume = 0.3): void {
+  /** Delay between handing a sound to the audio clock and hearing it (0 where the browser does not report it). */
+  static outputLatencySec(ctx: AudioContext = this.getContext()): number {
+    const latency = ctx.outputLatency;
+    return Number.isFinite(latency) ? Math.min(Math.max(latency, 0), 0.3) : 0;
+  }
+
+  /**
+   * Time to hand to start() so a sound due at `when` (audio-clock seconds) leaves the speaker at `when`: the output
+   * delay is taken off, and what is already late sounds now.
+   */
+  private static startTimeFor(ctx: AudioContext, when: number): number {
+    return Math.max(when - this.outputLatencySec(ctx), ctx.currentTime);
+  }
+
+  /** Returns a handle that drops the note if it has not started yet (a pause or a seek before it was due); true if it did. */
+  static playGuitarNote(freqHz: number, durationMs = 800, volume = 0.3, delaySec = 0): { cancelIfPending: () => boolean } | null {
     try {
       const ctx = this.getContext();
       const osc = ctx.createOscillator();
@@ -45,7 +60,8 @@ export class SoundFX {
       osc.type = 'triangle';
       osc.frequency.setValueAtTime(freqHz, ctx.currentTime);
 
-      const now = ctx.currentTime;
+      // Scheduled on the audio clock, due `delaySec` from now
+      const now = this.startTimeFor(ctx, ctx.currentTime + Math.max(0, delaySec));
       const durSec = Math.max(0.1, durationMs / 1000);
 
       // Fast pluck attack + exponential decay
@@ -58,8 +74,15 @@ export class SoundFX {
 
       osc.start(now);
       osc.stop(now + durSec);
+      return {
+        cancelIfPending: () => {
+          if (ctx.currentTime >= now) return false;
+          try { osc.stop(); } catch { /* already stopped */ }
+          return true;
+        }
+      };
     } catch {
-      // AudioContext unavailable
+      return null; // AudioContext unavailable
     }
   }
 
@@ -123,7 +146,7 @@ export class SoundFX {
   static playClick(accent = false, when?: number): OscillatorNode | null {
     try {
       const ctx = this.getContext();
-      const now = Math.max(when ?? ctx.currentTime, ctx.currentTime);
+      const now = this.startTimeFor(ctx, when ?? ctx.currentTime);
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
 
@@ -220,14 +243,16 @@ export class MetronomeScheduler {
   private schedule(): void {
     const ctx = this.getContext();
     if (ctx.state !== 'running') return;
-    const horizonMs = this.songMsAt(ctx.currentTime + MetronomeScheduler.LOOKAHEAD_SEC);
+    // The output delay is part of the lead: a click due inside it would already be late when handed over
+    const latencySec = SoundFX.outputLatencySec(ctx);
+    const horizonMs = this.songMsAt(ctx.currentTime + MetronomeScheduler.LOOKAHEAD_SEC + latencySec);
     while (this.nextBeat < this.beats.length && this.beats[this.nextBeat].timeMs <= horizonMs) {
       const beat = this.beats[this.nextBeat++];
       const at = this.audioTimeAt(beat.timeMs);
       // Slightly late beats (one frame) still sound now; older ones were skipped by a seek or stall
       if (at < ctx.currentTime - MetronomeScheduler.LATE_TOLERANCE_SEC) continue;
       const osc = SoundFX.playClick(beat.accent, at);
-      if (osc) this.scheduled.push({ osc, at: Math.max(at, ctx.currentTime) });
+      if (osc) this.scheduled.push({ osc, at: Math.max(at - latencySec, ctx.currentTime) });
     }
     this.scheduled = this.scheduled.filter((click) => click.at >= ctx.currentTime);
   }

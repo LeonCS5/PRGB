@@ -20,6 +20,7 @@ import {
   createScoreState,
   isScorable,
   judgeNote,
+  noteTimeDiffMs,
   maxPossibleScore,
   type AttackLedger,
   type Judgement,
@@ -436,5 +437,32 @@ describe('arpeggio notes', () => {
 
   it('leaves every other note as strict as before', () => {
     expect(judgeNote(note({ midiNote: 60 }), 0, heard(36))).toBeNull();
+  });
+});
+
+describe('noteTimeDiffMs', () => {
+  it('reads 0 for a note played exactly on time, at any speed, once the delay is compensated', () => {
+    for (const speed of [0.25, 0.5, 1, 1.5]) {
+      const latencyMs = 80;
+      const noteMs = 2000;
+      // Played on the line, the pitch reaches the judge latencyMs of real time later: latencyMs * speed of song time
+      const positionWhenHeard = noteMs + latencyMs * speed;
+      expect(noteTimeDiffMs(noteMs, positionWhenHeard, latencyMs, speed)).toBeCloseTo(0, 9);
+    }
+  });
+
+  it('judges a note played on time as Perfect at a slow speed, which a delay not scaled by the speed would not', () => {
+    const speed = 0.25;
+    const latencyMs = 200; // 50 ms of song time
+    const positionWhenHeard = 1000 + latencyMs * speed;
+    const diff = noteTimeDiffMs(1000, positionWhenHeard, latencyMs, speed);
+    expect(judgeNote(note({ timeMs: 1000 }), diff, heard(note().midiNote))).toBe('perfect');
+    // Compensating the full 200 ms as song time reads 150 ms early: outside the Perfect window
+    expect(judgeNote(note({ timeMs: 1000 }), 1000 - positionWhenHeard + latencyMs, heard(note().midiNote))).not.toBe('perfect');
+  });
+
+  it('is negative for a note already past the line and positive for one still coming', () => {
+    expect(noteTimeDiffMs(1000, 1100, 0, 1)).toBe(-100);
+    expect(noteTimeDiffMs(1000, 900, 0, 1)).toBe(100);
   });
 });

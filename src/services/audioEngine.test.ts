@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AudioEngine, STANDARD_TUNING, computeNsdf, estimateStringAndFret, type InputChannelMode } from './audioEngine';
+import { AudioEngine, STANDARD_TUNING, computeNsdf, estimateStringAndFret, type DetectedPitch, type InputChannelMode } from './audioEngine';
+import { ANALYSIS_HZ, EVERY_FRAME, type Cadence } from './fixedCadence';
+import { buildJudgeContexts, consumeAttack, createAttackLedger, judgeNote } from './scoring';
+import type { NoteEvent } from './tabsApi';
 import { DEFAULT_AUDIO_OPTIONS, LOOPBACK_TONE_HZ, dbToGain } from './audioDevices';
 import { SoundFX } from './synthAudio';
 
@@ -202,7 +205,11 @@ describe('AudioEngine lifecycle', () => {
   let trackGroup: string | undefined;
   let getUserMedia: ReturnType<typeof vi.fn>;
   let nextFrame: FrameRequestCallback | null;
-  const runFrame = () => nextFrame?.(0);
+  // A frame of a 60 Hz screen: the audio clock moves one step first, as the cadence of the analysis follows it
+  const runFrame = (stepSec = 1 / 60) => {
+    for (const context of contexts) context.currentTime += stepSec;
+    nextFrame?.(0);
+  };
 
   beforeEach(() => {
     contexts = [];
@@ -763,7 +770,7 @@ describe('AudioEngine lifecycle', () => {
   });
 
   describe('attack tracking', () => {
-    interface Heard { midiNote: number; attackId: number }
+    interface Heard { midiNote: number; attackId: number; changeId?: number; heldFrames?: number }
 
     // Plays one signal per frame on channel 1 and returns what was heard in each frame
     const playFrames = async (signals: (Float32Array | null)[]) => {
@@ -815,6 +822,27 @@ describe('AudioEngine lifecycle', () => {
       expect(ids[7]).toBe(ids[6]);
     });
 
+    it('counts every change of the stable note, also one the attack debounce swallows', async () => {
+      const heard = await playFrames([
+        ...Array(6).fill(sine(E2, 0.2)),
+        sine(A2, 0.6), // picked on another note: a level jump, so an attack
+        sine(A2, 0.6), // the note is stable one frame later, 1 frame after that attack: no second attack
+        sine(A2, 0.6)
+      ]);
+      const attacks = heard.map((pitch) => pitch?.attackId);
+      const changes = heard.map((pitch) => pitch?.changeId);
+      expect(attacks[6]).toBeGreaterThan(attacks[5] ?? Infinity);
+      expect(attacks[7]).toBe(attacks[6]);
+      expect(changes[6]).toBe(changes[5]);
+      expect(changes[7]).toBeGreaterThan(changes[6] ?? Infinity);
+      expect(changes[8]).toBe(changes[7]);
+    });
+
+    it('counts how many detections in a row read the same note', async () => {
+      const heard = await playFrames([sine(E2, 0.3), sine(E2, 0.3), sine(E2, 0.3), sine(A2, 0.3), sine(A2, 0.3), null, sine(A2, 0.3)]);
+      expect(heard.map((pitch) => pitch?.heldFrames ?? 0)).toEqual([1, 2, 3, 1, 2, 0, 1]);
+    });
+
     it('ignores a single stray detection of another note', async () => {
       const heard = await playFrames([sine(E2, 0.3), sine(E2, 0.3), sine(E2, 0.3), sine(A2, 0.3), sine(E2, 0.3),
         sine(E2, 0.3)]);
@@ -854,6 +882,273 @@ describe('AudioEngine lifecycle', () => {
       expect(new Set([...player1.slice(0, 6), ...player2]).size).toBe(4);
       // After reconnecting, the first attack is newer than every id before it
       expect(player1[6]).toBeGreaterThan(Math.max(...player1.slice(0, 6), ...player2));
+    });
+  });
+
+  describe('analysis cadence', () => {
+    // How many analyses the engine makes in `seconds` of frames of a screen of `hz`, one pitched signal throughout
+    const analysesOver = async (hz: number, seconds: number, cadence?: Cadence) => {
+      let count = 0;
+      const engine = new AudioEngine(DEFAULT_AUDIO_OPTIONS, cadence);
+      await engine.start('a', 'ch1', () => { count++; });
+      count = 0;
+      contexts[contexts.length - 1].analysers[0].signal = sine(110, 0.4);
+      for (let frame = 0; frame < hz * seconds; frame++) runFrame(1 / hz);
+      return count;
+    };
+
+    it.each([60, 75, 120, 144, 165, 240])('analyses about 60 times a second on a %i Hz screen', async (hz) => {
+      const count = await analysesOver(hz, 5);
+      expect(count / 5).toBeGreaterThan(ANALYSIS_HZ * 0.98);
+      expect(count / 5).toBeLessThan(ANALYSIS_HZ * 1.02);
+    });
+
+    it('analyses every frame of a 30 Hz screen: it cannot do more', async () => {
+      expect(await analysesOver(30, 5)).toBe(150);
+    });
+
+    it('before the cadence a 144 Hz screen analysed 144 times a second', async () => {
+      expect(await analysesOver(144, 5, EVERY_FRAME)).toBe(720);
+    });
+
+    it('keeps the amp gate on every frame, and only the analysis on the cadence', async () => {
+      let analyses = 0;
+      const engine = new AudioEngine();
+      await engine.start('a', 'ch1', () => { analyses++; });
+      const gate = vi.mocked(engine.getAmp()!.processGate);
+      gate.mockClear();
+      analyses = 0;
+      contexts[0].analysers[0].signal = sine(110, 0.4);
+      for (let frame = 0; frame < 144; frame++) runFrame(1 / 144);
+      expect(gate.mock.calls.length).toBe(144);
+      expect(analyses).toBeGreaterThan(55);
+      expect(analyses).toBeLessThan(65);
+    });
+
+    it('analyses the first frame after a start, and again after a restart', async () => {
+      let count = 0;
+      const engine = new AudioEngine();
+      await engine.start('a', 'ch1', () => { count++; });
+      expect(count).toBe(1); // the frame that starts the loop is not held back by the cadence
+      runFrame(1 / 144);
+      expect(count).toBe(1); // the next one, 7 ms later, is
+      await engine.start('b', 'ch1', () => { count++; });
+      expect(count).toBe(2);
+    });
+
+    it('clears a stuck pitch when the audio clock is frozen, as before', async () => {
+      const seen: (number | null)[] = [];
+      const engine = new AudioEngine();
+      await engine.start('a', 'ch1', (pitch) => seen.push(pitch?.midiNote ?? null));
+      seen.length = 0;
+      contexts[0].analysers[0].signal = sine(110, 0.4);
+      runFrame(0); // the context is suspended: its clock does not move
+      contexts[0].analysers[0].signal = null;
+      for (let frame = 0; frame < 20; frame++) runFrame(0);
+      expect(seen.at(-1)).toBeNull();
+    });
+  });
+
+  describe('judging notes reached without a pick (engine and scoring together)', () => {
+    const WINDOW_S = 2048 / 48000;
+    const hzOf = (midi: number) => 440 * 2 ** ((midi - 69) / 12);
+
+    interface Move { timeMs: number; midi: number; pick: boolean }
+
+    // What the analyser hears 43 ms up to `endMs`: the string rings the note of each move, a pick restarts the level
+    // and a change of note without one (hammer-on, pull-off) carries on the level it had, as a finger does
+    const renderWindow = (moves: readonly Move[], endMs: number): Float32Array => {
+      const out = new Float32Array(2048);
+      let lastPickMs = -Infinity;
+      let current = -1;
+      let from = 0;
+      const startMs = endMs - WINDOW_S * 1000;
+      for (let i = 0; i < 2048; i++) {
+        const timeMs = startMs + (i / 48000) * 1000;
+        while (current + 1 < moves.length && moves[current + 1].timeMs <= timeMs) {
+          current++;
+          if (moves[current].pick) lastPickMs = moves[current].timeMs;
+          from = moves[current].timeMs;
+        }
+        if (current < 0) continue;
+        const level = 0.45 * Math.exp(-(timeMs - lastPickMs) / 450) + 0.03;
+        out[i] = level * Math.sin(2 * Math.PI * hzOf(moves[current].midi) * ((timeMs - from) / 1000));
+      }
+      return out;
+    };
+
+    // `count` notes on one string, `gapMs` apart, groups of `group`: the first is picked, the others are linked
+    const tabOf = (midis: readonly number[], gapMs: number, group: number): NoteEvent[] => midis.map((midi, index) => ({
+      id: `n${index}`,
+      timeMs: 1000 + index * gapMs,
+      durationMs: gapMs,
+      string: 3,
+      fret: midi - 55,
+      midiNote: midi,
+      freqHz: hzOf(midi),
+      noteName: 'X',
+      hammerOnOrPullOff: index % group !== 0
+    }));
+
+    type Player = 'correct' | 'holds' | 'semitoneOff' | 'picksAll';
+
+    const perform = (notes: readonly NoteEvent[], player: Player, jitterMs: number): Move[] => {
+      const moves: Move[] = [];
+      notes.forEach((note) => {
+        const linked = !!note.hammerOnOrPullOff;
+        const timeMs = note.timeMs + jitterMs;
+        if (player === 'holds') {
+          if (!linked) moves.push({ timeMs, midi: note.midiNote, pick: true }); // never plays the linked ones
+        } else if (player === 'semitoneOff') {
+          moves.push({ timeMs, midi: linked ? note.midiNote - 1 : note.midiNote, pick: !linked });
+        } else if (player === 'picksAll') {
+          moves.push({ timeMs, midi: note.midiNote, pick: true });
+        } else {
+          moves.push({ timeMs, midi: note.midiNote, pick: !linked });
+        }
+      });
+      return moves;
+    };
+
+    // The game's judge loop, frame by frame, with or without what it knows about linked notes
+    // `refreshHz` is the screen the loop runs on (a frame every 1/refreshHz s of audio time); `cadence` picks which of
+    // those frames are analysed: the engine's own (about 60 a second) or every one, as before the cadence
+    const run = async (notes: NoteEvent[], moves: Move[], linkedRules: boolean, latencyMs = 0, refreshHz = ANALYSIS_HZ, cadence?: Cadence) => {
+      const heard: { pitch: DetectedPitch | null; time: number }[] = [];
+      let now = 0;
+      const engine = new AudioEngine(DEFAULT_AUDIO_OPTIONS, cadence);
+      await engine.start('a', 'ch1', (pitch) => heard.push({ pitch, time: now }));
+      heard.length = 0;
+      const context = contexts[contexts.length - 1]; // each run starts its own engine, and with it a fresh context
+      const end = notes[notes.length - 1].timeMs + 600;
+      const frameMs = 1000 / refreshHz;
+      for (let time = 0; time < end; time += frameMs) {
+        now = time;
+        context.analysers[0].signal = time < moves[0].timeMs - 100 ? null : renderWindow(moves, time);
+        runFrame(frameMs / 1000);
+      }
+      const contextsById = buildJudgeContexts(notes);
+      const outcomes = new Map<string, string>();
+      let ledger = createAttackLedger();
+      heard.forEach(({ pitch, time }) => {
+        for (const note of notes) {
+          if (outcomes.has(note.id)) continue;
+          const outcome = judgeNote(note, note.timeMs - time + latencyMs, pitch, ledger, linkedRules ? contextsById.get(note.id) : undefined);
+          if (outcome === null) continue;
+          outcomes.set(note.id, outcome);
+          if (outcome !== 'miss' && pitch) ledger = consumeAttack(ledger, pitch.attackId, note.timeMs, linkedRules ? pitch.changeId : undefined);
+        }
+      });
+      for (const note of notes) if (!outcomes.has(note.id)) outcomes.set(note.id, 'miss');
+      return { outcomes, heard, linkedIds: notes.filter((note) => note.hammerOnOrPullOff).map((note) => note.id) };
+    };
+
+    const rate = (result: Awaited<ReturnType<typeof run>>, ids: string[]) =>
+      ids.filter((id) => result.outcomes.get(id) !== 'miss').length / Math.max(1, ids.length);
+
+    // One fret apart (the case a tolerance of a semitone can't tell from the note still ringing) and two frets
+    const TRILL_ONE = [60, 61, 60, 61, 60, 61, 60, 61, 60, 61, 60, 61, 60, 61, 60, 61];
+    const TRILL_TWO = [60, 62, 60, 62, 60, 62, 60, 62, 60, 62, 60, 62, 60, 62, 60, 62];
+
+    const table: string[] = [];
+
+    for (const [name, midis] of [['one fret', TRILL_ONE], ['two frets', TRILL_TWO]] as const) {
+      for (const gapMs of [125, 83, 62.5, 50]) {
+        it(`plays a chain of linked notes ${name} apart, ${(1000 / gapMs).toFixed(0)} per second`, async () => {
+          const notes = tabOf(midis, gapMs, 4);
+          const moves = perform(notes, 'correct', 25);
+          const before = await run(notes, moves, false);
+          const after = await run(notes, moves, true);
+          const linked = after.linkedIds;
+          table.push(`${name} ${(1000 / gapMs).toFixed(0)}/s correct: linked ${(100 * rate(before, linked)).toFixed(0)}% -> ${(100 * rate(after, linked)).toFixed(0)}%, all ${(100 * rate(before, notes.map((note) => note.id))).toFixed(0)}% -> ${(100 * rate(after, notes.map((note) => note.id))).toFixed(0)}%`);
+          // Playing it right is never worse than before, and the linked notes are found
+          expect(rate(after, linked)).toBeGreaterThanOrEqual(rate(before, linked));
+          if (gapMs >= 62.5) expect(rate(after, linked)).toBeGreaterThanOrEqual(0.9);
+        });
+      }
+    }
+
+    it('does not score linked notes that are never played (the first note held)', async () => {
+      const notes = tabOf(TRILL_ONE, 125, 4);
+      const moves = perform(notes, 'holds', 0);
+      const before = await run(notes, moves, false);
+      const after = await run(notes, moves, true);
+      expect(rate(after, after.linkedIds)).toBeLessThanOrEqual(0.1);
+      table.push(`holds the first note: linked ${(100 * rate(before, before.linkedIds)).toFixed(0)}% -> ${(100 * rate(after, after.linkedIds)).toFixed(0)}%`);
+    });
+
+    it('does not score linked notes played a fret off', async () => {
+      // Climbing two frets at a time, so the wrong note (a fret under the right one) is never the right note of a
+      // neighbour: the test is about the note still ringing from before, not about a run that is shifted as a whole
+      const notes = tabOf(Array.from({ length: 16 }, (_, index) => 50 + 2 * index), 125, 4);
+      const moves = perform(notes, 'semitoneOff', 0);
+      const before = await run(notes, moves, false);
+      const after = await run(notes, moves, true);
+      expect(rate(after, after.linkedIds)).toBeLessThanOrEqual(0.1);
+      table.push(`a fret off: linked ${(100 * rate(before, before.linkedIds)).toFixed(0)}% -> ${(100 * rate(after, after.linkedIds)).toFixed(0)}%`);
+    });
+
+    it('still scores linked notes that are picked anyway', async () => {
+      const notes = tabOf(TRILL_TWO, 125, 4);
+      const moves = perform(notes, 'picksAll', 0);
+      const after = await run(notes, moves, true);
+      expect(rate(after, notes.map((note) => note.id))).toBeGreaterThanOrEqual(0.9);
+    });
+
+    // The same performances on a 60 Hz screen and on faster ones. Before the cadence every frame was analysed, so a
+    // 144 Hz screen counted the attack debounce and the legato hold in shorter time than the 60 Hz they were set for.
+    describe('on screens of different refresh rates', () => {
+      const SCREENS = [60, 120, 144, 165] as const;
+
+      for (const gapMs of [125, 83, 62.5]) {
+        it(`finds the linked notes alike on every screen, ${(1000 / gapMs).toFixed(0)} per second`, async () => {
+          const notes = tabOf(TRILL_ONE, gapMs, 4);
+          const moves = perform(notes, 'correct', 25);
+          const linked = notes.filter((note) => note.hammerOnOrPullOff).map((note) => note.id);
+          const withCadence: number[] = [];
+          const everyFrame: number[] = [];
+          for (const hz of SCREENS) {
+            withCadence.push(rate(await run(notes, moves, true, 0, hz), linked));
+            everyFrame.push(rate(await run(notes, moves, true, 0, hz, EVERY_FRAME), linked));
+          }
+          table.push(`${(1000 / gapMs).toFixed(0)}/s correct, linked found on ${SCREENS.join('/')} Hz: every frame ${everyFrame.map((r) => (100 * r).toFixed(0)).join('/')}% -> cadence ${withCadence.map((r) => (100 * r).toFixed(0)).join('/')}%`);
+          // With the cadence a faster screen scores like the 60 Hz one
+          // (a note more or less: the frames of the screens fall at other points of each note)
+          for (const result of withCadence) expect(Math.abs(result - withCadence[0])).toBeLessThanOrEqual(1 / linked.length + 0.001);
+          if (gapMs >= 62.5) for (const result of withCadence) expect(result).toBeGreaterThanOrEqual(0.9);
+        }, 30_000);
+      }
+
+      it('counts the attacks of a picked line alike on every screen', async () => {
+        // Slow notes, all picked: each pick should be one attack. The level of a pick fills the 43 ms window over a few
+        // frames, and how many frames that is depends on the screen unless the analyses are the same in number.
+        const notes = tabOf(TRILL_TWO, 250, 4);
+        const moves = perform(notes, 'picksAll', 0);
+        const attacksOf = (result: Awaited<ReturnType<typeof run>>) =>
+          new Set(result.heard.map(({ pitch }) => pitch?.attackId).filter((id) => id !== undefined)).size;
+        const withCadence: number[] = [];
+        const everyFrame: number[] = [];
+        for (const hz of SCREENS) {
+          withCadence.push(attacksOf(await run(notes, moves, true, 0, hz)));
+          everyFrame.push(attacksOf(await run(notes, moves, true, 0, hz, EVERY_FRAME)));
+        }
+        table.push(`attacks counted for ${notes.length} picks on ${SCREENS.join('/')} Hz: every frame ${everyFrame.join('/')} -> cadence ${withCadence.join('/')}`);
+        for (const count of withCadence) expect(count).toBe(withCadence[0]);
+      }, 30_000);
+
+      it.each(SCREENS)('still scores nothing for a first note held, or a fret off, on a %i Hz screen', async (hz) => {
+        const held = tabOf(TRILL_ONE, 125, 4);
+        const heldResult = await run(held, perform(held, 'holds', 0), true, 0, hz);
+        expect(rate(heldResult, heldResult.linkedIds)).toBeLessThanOrEqual(0.1);
+        const climb = tabOf(Array.from({ length: 16 }, (_, index) => 50 + 2 * index), 125, 4);
+        const offResult = await run(climb, perform(climb, 'semitoneOff', 0), true, 0, hz);
+        expect(rate(offResult, offResult.linkedIds)).toBeLessThanOrEqual(0.1);
+      });
+    });
+
+    it('reports the table', () => {
+      // Printed once so the run shows the before/after of each case
+      console.log(`\n${table.join('\n')}`);
     });
   });
 
